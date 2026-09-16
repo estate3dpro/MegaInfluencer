@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STORE_OWNER
+  INFLUENCER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum StorePlatform {
+  SHOPIFY
+  WOOCOMMERCE
+  CUSTOM
+}
+
+enum StoreConnectionStatus {
+  PENDING
+  CONNECTED
+  DISABLED
+}
+
+enum ShopifyConnectionMethod {
+  CLI_APP
+  ADMIN_API
+}
+
+enum InstagramConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum InstagramOAuthFlow {
+  LOGIN
+  CONNECT
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  email                 String?                @unique
+  passwordHash          String?
+  displayName           String
+  role                  UserRole
+  status                UserStatus             @default(ACTIVE)
+  ownedOrganizations    Organization[]         @relation("OrganizationOwner")
+  storeAssignments      StoreInfluencerAssignment[] @relation("AssignedInfluencer")
+  instagramConnection   InstagramConnection?
+  instagramOAuthStates  InstagramOAuthState[]  @relation("InstagramOAuthStateInfluencer")
+  instagramLoginTickets InstagramLoginTicket[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+}
+
+model InstagramConnection {
+  id                   String                    @id @default(cuid())
+  influencerId         String                    @unique
+  influencer           User                      @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  instagramUserId      String                    @unique
+  username             String
+  displayName          String?
+  encryptedAccessToken String
+  tokenExpiresAt       DateTime?
+  status               InstagramConnectionStatus @default(ACTIVE)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+}
+
+model InstagramOAuthState {
+  id           String             @id @default(cuid())
+  stateHash    String             @unique
+  flow         InstagramOAuthFlow
+  influencerId String?
+  influencer   User?              @relation("InstagramOAuthStateInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime           @default(now())
+
+  @@index([expiresAt])
+}
+
+model InstagramLoginTicket {
+  id         String    @id @default(cuid())
+  codeHash   String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+model InstagramWebhookDelivery {
+  id          String   @id @default(cuid())
+  payloadHash String   @unique
+  payload     Json
+  receivedAt  DateTime @default(now())
+}
+
+model Organization {
+  id        String             @id @default(cuid())
+  name      String
+  slug      String             @unique
+  status    OrganizationStatus @default(ACTIVE)
+  platform  StorePlatform @default(SHOPIFY)
+  connectionStatus StoreConnectionStatus @default(PENDING)
+  category  String?
+  logoUrl   String?
+  shopDomain String?
+  appUrl    String?
+  apiUrl    String?
+  shopifyConnectionMethod ShopifyConnectionMethod?
+  encryptedShopifyAccessToken String?
+  shopifyProducts ShopifyProduct[]
+  shopifyOrders   ShopifyOrder[]
+  assignments StoreInfluencerAssignment[]
+  ownerId   String
+  owner     User               @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([ownerId])
+}
+
+model ShopifyProduct {
+  id             String       @id @default(cuid())
+  organizationId String
+  shopifyId      String
+  title          String
+  handle         String?
+  status         String?
+  vendor         String?
+  productType    String?
+  descriptionHtml String?
+  imageUrl       String?
+  inventoryTotal Int          @default(0)
+  price          String?
+  currency       String?
+  payload        Json
+  syncedAt       DateTime     @updatedAt
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, shopifyId])
+  @@index([organizationId, syncedAt])
+}
+
+model ShopifyOrder {
+  id             String       @id @default(cuid())
+  organizationId String
+  shopifyId      String
+  name           String
+  email          String?
+  currency       String?
+  total          String?
+  financialStatus String?
+  fulfillmentStatus String?
+  processedAt    DateTime?
+  payload        Json
+  syncedAt       DateTime     @updatedAt
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@unique([organizationId, shopifyId])
+  @@index([organizationId, syncedAt])
+}
+
+model StoreInfluencerAssignment {
+  id             String       @id @default(cuid())
+  organizationId String
+  influencerId   String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  influencer     User         @relation("AssignedInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, influencerId])
+  @@index([influencerId])
+}

@@ -1,0 +1,10 @@
+import type { FastifyPluginAsync } from 'fastify';
+import { requireRole } from '../../shared/auth/authorization.js';
+import { AppError } from '../../shared/errors/app-error.js';
+import { decryptToken } from '../instagram/instagram.crypto.js';
+import { getInstagramProfile } from '../instagram/instagram.client.js';
+export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
+  async function organization(userId:string){const org=await app.prisma.organization.findFirst({where:{ownerId:userId},select:{id:true}});if(!org)throw new AppError('STORE_NOT_FOUND','Store not found.',404);return org;}
+  app.get('/store/creators',async req=>{const actor=requireRole(req,['STORE_OWNER']);const org=await organization(actor.userId);const rows=await app.prisma.storeInfluencerAssignment.findMany({where:{organizationId:org.id},orderBy:{createdAt:'desc'},include:{influencer:{select:{id:true,displayName:true,email:true,status:true,createdAt:true,instagramConnection:{select:{username:true,displayName:true,status:true}}}}}});return {creators:rows.map(row=>({...row.influencer,assignedAt:row.createdAt,instagramUsername:row.influencer.instagramConnection?.username??null,instagramStatus:row.influencer.instagramConnection?.status??null}))};});
+  app.get('/store/creators/:creatorId',async req=>{const actor=requireRole(req,['STORE_OWNER']);const org=await organization(actor.userId);const {creatorId}=req.params as {creatorId:string};const assignment=await app.prisma.storeInfluencerAssignment.findFirst({where:{organizationId:org.id,influencerId:creatorId},include:{influencer:{include:{instagramConnection:true}}}});if(!assignment)throw new AppError('CREATOR_NOT_FOUND','Creator is not assigned to this store.',404);let instagramStatistics=null;if(assignment.influencer.instagramConnection?.status==='ACTIVE'){try{instagramStatistics=await getInstagramProfile(decryptToken(assignment.influencer.instagramConnection.encryptedAccessToken));}catch{/* profile remains available when Meta stats cannot be fetched */}}return {creator:assignment.influencer,assignedAt:assignment.createdAt,instagramStatistics};});
+};
