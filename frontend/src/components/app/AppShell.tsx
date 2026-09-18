@@ -102,7 +102,9 @@ export function AppShell({ role, children }: { role: Role; children?: ReactNode 
 
   function handleSignOut() {
     signOut();
-    void navigate({ to: "/login", replace: true });
+    const loginPath =
+      role === "admin" ? "/admin/login" : role === "store-admin" ? "/store/login" : "/login";
+    void navigate({ to: loginPath, replace: true });
   }
 
   return (

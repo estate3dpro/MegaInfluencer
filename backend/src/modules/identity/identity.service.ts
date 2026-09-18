@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { UserRole } from '@prisma/client';
 
 import { AppError, ForbiddenError } from '../../shared/errors/app-error.js';
-import { createSession } from '../../shared/auth/session.js';
+import { createSession, hashRefreshToken } from '../../shared/auth/session.js';
 
 const passwordOptions = {
   type: argon2.argon2id,
@@ -49,15 +49,18 @@ export async function loginUser(app: FastifyInstance, input: { email: string; pa
 }
 
 export async function refreshUserSession(app: FastifyInstance, refreshToken: string) {
-  let payload: { sub: string; role: UserRole; type?: string };
-  try {
-    payload = await app.jwt.verify<{ sub: string; role: UserRole; type?: string }>(refreshToken);
-  } catch {
+  const session = await app.prisma.authSession.findUnique({
+    where: { tokenHash: hashRefreshToken(refreshToken) },
+    include: { user: true },
+  });
+  if (!session || session.expiresAt <= new Date() || session.user.status !== 'ACTIVE') {
     throw new AppError('INVALID_REFRESH_TOKEN', 'Your session has expired. Please sign in again.', 401);
   }
-  if (payload.type !== 'refresh') throw new AppError('INVALID_REFRESH_TOKEN', 'Your session has expired. Please sign in again.', 401);
-  const user = await app.prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user || user.status !== 'ACTIVE') throw new AppError('INVALID_REFRESH_TOKEN', 'Your session is no longer available.', 401);
+
+  // Rotate tokens to make a stolen or replayed refresh token single-use.
+  const consumed = await app.prisma.authSession.deleteMany({ where: { id: session.id, tokenHash: hashRefreshToken(refreshToken) } });
+  if (consumed.count !== 1) throw new AppError('INVALID_REFRESH_TOKEN', 'Your session has expired. Please sign in again.', 401);
+  const user = session.user;
   return { ...(await createSession(app, user)), user: toUserResponse(user) };
 }
 

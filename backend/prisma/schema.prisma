@@ -51,6 +51,26 @@ enum InstagramOAuthFlow {
   CONNECT
 }
 
+enum InstagramAutomationStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum CampaignStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+  ARCHIVED
+}
+
+enum CampaignApplicationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
 model User {
   id                    String                 @id @default(cuid())
   email                 String?                @unique
@@ -61,10 +81,27 @@ model User {
   ownedOrganizations    Organization[]         @relation("OrganizationOwner")
   storeAssignments      StoreInfluencerAssignment[] @relation("AssignedInfluencer")
   instagramConnection   InstagramConnection?
+  instagramAutomations  InstagramAutomation[]
   instagramOAuthStates  InstagramOAuthState[]  @relation("InstagramOAuthStateInfluencer")
   instagramLoginTickets InstagramLoginTicket[]
+  authSessions          AuthSession[]
+  campaignApplications  CampaignApplication[]
+  campaignAssignments   CampaignAssignment[] @relation("CampaignAssignedInfluencer")
+  notifications         Notification[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model InstagramConnection {
@@ -113,6 +150,25 @@ model InstagramWebhookDelivery {
   receivedAt  DateTime @default(now())
 }
 
+model InstagramAutomation {
+  id             String                    @id @default(cuid())
+  influencerId   String
+  influencer     User                      @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  name           String
+  instagramPostId String
+  postUrl        String?
+  postLabel      String?
+  keywords       String[]
+  dmMessage      String
+  wholeWordMatch Boolean                   @default(true)
+  status         InstagramAutomationStatus @default(ACTIVE)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@index([influencerId, createdAt])
+  @@index([influencerId, instagramPostId])
+}
+
 model Organization {
   id        String             @id @default(cuid())
   name      String
@@ -130,12 +186,92 @@ model Organization {
   shopifyProducts ShopifyProduct[]
   shopifyOrders   ShopifyOrder[]
   assignments StoreInfluencerAssignment[]
+  campaigns Campaign[]
   ownerId   String
   owner     User               @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
   @@index([ownerId])
+}
+
+model Campaign {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title String
+  brief String
+  category String
+  imageUrl String @default("https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80")
+  campaignType String
+  objective String
+  deliverables String
+  deliverableDetails Json?
+  compensationType String @default("FIXED")
+  compensationDetails Json?
+  minimumFollowers Int?
+  applicationType String @default("OPEN")
+  budgetMin Int?
+  budgetMax Int?
+  currency String @default("INR")
+  applicationDeadline DateTime
+  contentDeadline DateTime?
+  campaignEndDate DateTime?
+  status CampaignStatus @default(DRAFT)
+  publishedAt DateTime?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  applications CampaignApplication[]
+  assignments CampaignAssignment[]
+  @@index([organizationId, status])
+  @@index([organizationId, deletedAt])
+  @@index([status, applicationDeadline])
+}
+
+model CampaignApplication {
+  id String @id @default(cuid())
+  campaignId String
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  influencerId String
+  influencer User @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  pitch String
+  proposedRate Int?
+  status CampaignApplicationStatus @default(PENDING)
+  decidedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([campaignId, influencerId])
+  @@index([campaignId, status])
+  @@index([influencerId, createdAt])
+}
+
+model CampaignAssignment {
+  id           String   @id @default(cuid())
+  campaignId   String
+  influencerId String
+  status       String   @default("ASSIGNED")
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  influencer   User     @relation("CampaignAssignedInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([campaignId, influencerId])
+  @@index([influencerId, status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  kind      String   @default("CAMPAIGN")
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
 }
 
 model ShopifyProduct {

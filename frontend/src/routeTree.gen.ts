@@ -73,6 +73,9 @@ import { Route as AdminInfluencersInfluencerIdRouteImport } from './routes/admin
 import { Route as InfluencerCampaignsIndexRouteImport } from './routes/influencer/campaigns/index'
 import { Route as InfluencerCampaignsCampaignIdRouteImport } from './routes/influencer/campaigns/$campaignId'
 import { Route as InfluencerInstagramAutomationIndexRouteImport } from './routes/influencer/instagram-automation/index'
+import { Route as InfluencerInstagramAutomationNewRouteImport } from './routes/influencer/instagram-automation/new'
+import { Route as StoreAdminCampaignsIndexRouteImport } from './routes/store-admin/campaigns/index'
+import { Route as StoreAdminCampaignsNewRouteImport } from './routes/store-admin/campaigns/new'
 import { Route as StoreAdminCreatorsIndexRouteImport } from './routes/store-admin/creators/index'
 import { Route as StoreAdminCreatorsCreatorIdRouteImport } from './routes/store-admin/creators/$creatorId'
 import { Route as StoreAdminOrdersIndexRouteImport } from './routes/store-admin/orders/index'
@@ -80,6 +83,7 @@ import { Route as StoreAdminOrdersOrderIdRouteImport } from './routes/store-admi
 import { Route as StoreAdminProductsIndexRouteImport } from './routes/store-admin/products/index'
 import { Route as StoreAdminProductsProductIdRouteImport } from './routes/store-admin/products/$productId'
 import { Route as InfluencerInstagramAutomationRulesRuleIdRouteImport } from './routes/influencer/instagram-automation/rules/$ruleId'
+import { Route as StoreAdminCampaignsCampaignIdEditRouteImport } from './routes/store-admin/campaigns/$campaignId/edit'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -406,6 +410,23 @@ const InfluencerInstagramAutomationIndexRoute =
     path: '/',
     getParentRoute: () => InfluencerInstagramAutomationRoute,
   } as any)
+const InfluencerInstagramAutomationNewRoute =
+  InfluencerInstagramAutomationNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => InfluencerInstagramAutomationRoute,
+  } as any)
+const StoreAdminCampaignsIndexRoute =
+  StoreAdminCampaignsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => StoreAdminCampaignsRoute,
+  } as any)
+const StoreAdminCampaignsNewRoute = StoreAdminCampaignsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => StoreAdminCampaignsRoute,
+} as any)
 const StoreAdminCreatorsIndexRoute = StoreAdminCreatorsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -443,6 +464,12 @@ const InfluencerInstagramAutomationRulesRuleIdRoute =
     id: '/rules/$ruleId',
     path: '/rules/$ruleId',
     getParentRoute: () => InfluencerInstagramAutomationRoute,
+  } as any)
+const StoreAdminCampaignsCampaignIdEditRoute =
+  StoreAdminCampaignsCampaignIdEditRouteImport.update({
+    id: '/$campaignId/edit',
+    path: '/$campaignId/edit',
+    getParentRoute: () => StoreAdminCampaignsRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -489,7 +516,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/$page': typeof StoreAdminPageRoute
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
-  '/store-admin/campaigns': typeof StoreAdminCampaignsRoute
+  '/store-admin/campaigns': typeof StoreAdminCampaignsRouteWithChildren
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
   '/store-admin/customers': typeof StoreAdminCustomersRoute
@@ -507,16 +534,20 @@ export interface FileRoutesByFullPath {
   '/store-admin/': typeof StoreAdminIndexRoute
   '/admin/influencers/$influencerId': typeof AdminInfluencersInfluencerIdRoute
   '/influencer/campaigns/$campaignId': typeof InfluencerCampaignsCampaignIdRoute
+  '/influencer/instagram-automation/new': typeof InfluencerInstagramAutomationNewRoute
+  '/store-admin/campaigns/new': typeof StoreAdminCampaignsNewRoute
   '/store-admin/creators/$creatorId': typeof StoreAdminCreatorsCreatorIdRoute
   '/store-admin/orders/$orderId': typeof StoreAdminOrdersOrderIdRoute
   '/store-admin/products/$productId': typeof StoreAdminProductsProductIdRoute
   '/admin/influencers/': typeof AdminInfluencersIndexRoute
   '/influencer/campaigns/': typeof InfluencerCampaignsIndexRoute
   '/influencer/instagram-automation/': typeof InfluencerInstagramAutomationIndexRoute
+  '/store-admin/campaigns/': typeof StoreAdminCampaignsIndexRoute
   '/store-admin/creators/': typeof StoreAdminCreatorsIndexRoute
   '/store-admin/orders/': typeof StoreAdminOrdersIndexRoute
   '/store-admin/products/': typeof StoreAdminProductsIndexRoute
   '/influencer/instagram-automation/rules/$ruleId': typeof InfluencerInstagramAutomationRulesRuleIdRoute
+  '/store-admin/campaigns/$campaignId/edit': typeof StoreAdminCampaignsCampaignIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -556,7 +587,6 @@ export interface FileRoutesByTo {
   '/store-admin/$page': typeof StoreAdminPageRoute
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
-  '/store-admin/campaigns': typeof StoreAdminCampaignsRoute
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
@@ -571,16 +601,20 @@ export interface FileRoutesByTo {
   '/store-admin': typeof StoreAdminIndexRoute
   '/admin/influencers/$influencerId': typeof AdminInfluencersInfluencerIdRoute
   '/influencer/campaigns/$campaignId': typeof InfluencerCampaignsCampaignIdRoute
+  '/influencer/instagram-automation/new': typeof InfluencerInstagramAutomationNewRoute
+  '/store-admin/campaigns/new': typeof StoreAdminCampaignsNewRoute
   '/store-admin/creators/$creatorId': typeof StoreAdminCreatorsCreatorIdRoute
   '/store-admin/orders/$orderId': typeof StoreAdminOrdersOrderIdRoute
   '/store-admin/products/$productId': typeof StoreAdminProductsProductIdRoute
   '/admin/influencers': typeof AdminInfluencersIndexRoute
   '/influencer/campaigns': typeof InfluencerCampaignsIndexRoute
   '/influencer/instagram-automation': typeof InfluencerInstagramAutomationIndexRoute
+  '/store-admin/campaigns': typeof StoreAdminCampaignsIndexRoute
   '/store-admin/creators': typeof StoreAdminCreatorsIndexRoute
   '/store-admin/orders': typeof StoreAdminOrdersIndexRoute
   '/store-admin/products': typeof StoreAdminProductsIndexRoute
   '/influencer/instagram-automation/rules/$ruleId': typeof InfluencerInstagramAutomationRulesRuleIdRoute
+  '/store-admin/campaigns/$campaignId/edit': typeof StoreAdminCampaignsCampaignIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -627,7 +661,7 @@ export interface FileRoutesById {
   '/store-admin/$page': typeof StoreAdminPageRoute
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
-  '/store-admin/campaigns': typeof StoreAdminCampaignsRoute
+  '/store-admin/campaigns': typeof StoreAdminCampaignsRouteWithChildren
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
   '/store-admin/customers': typeof StoreAdminCustomersRoute
@@ -645,16 +679,20 @@ export interface FileRoutesById {
   '/store-admin/': typeof StoreAdminIndexRoute
   '/admin/influencers/$influencerId': typeof AdminInfluencersInfluencerIdRoute
   '/influencer/campaigns/$campaignId': typeof InfluencerCampaignsCampaignIdRoute
+  '/influencer/instagram-automation/new': typeof InfluencerInstagramAutomationNewRoute
+  '/store-admin/campaigns/new': typeof StoreAdminCampaignsNewRoute
   '/store-admin/creators/$creatorId': typeof StoreAdminCreatorsCreatorIdRoute
   '/store-admin/orders/$orderId': typeof StoreAdminOrdersOrderIdRoute
   '/store-admin/products/$productId': typeof StoreAdminProductsProductIdRoute
   '/admin/influencers/': typeof AdminInfluencersIndexRoute
   '/influencer/campaigns/': typeof InfluencerCampaignsIndexRoute
   '/influencer/instagram-automation/': typeof InfluencerInstagramAutomationIndexRoute
+  '/store-admin/campaigns/': typeof StoreAdminCampaignsIndexRoute
   '/store-admin/creators/': typeof StoreAdminCreatorsIndexRoute
   '/store-admin/orders/': typeof StoreAdminOrdersIndexRoute
   '/store-admin/products/': typeof StoreAdminProductsIndexRoute
   '/influencer/instagram-automation/rules/$ruleId': typeof InfluencerInstagramAutomationRulesRuleIdRoute
+  '/store-admin/campaigns/$campaignId/edit': typeof StoreAdminCampaignsCampaignIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -720,16 +758,20 @@ export interface FileRouteTypes {
     | '/store-admin/'
     | '/admin/influencers/$influencerId'
     | '/influencer/campaigns/$campaignId'
+    | '/influencer/instagram-automation/new'
+    | '/store-admin/campaigns/new'
     | '/store-admin/creators/$creatorId'
     | '/store-admin/orders/$orderId'
     | '/store-admin/products/$productId'
     | '/admin/influencers/'
     | '/influencer/campaigns/'
     | '/influencer/instagram-automation/'
+    | '/store-admin/campaigns/'
     | '/store-admin/creators/'
     | '/store-admin/orders/'
     | '/store-admin/products/'
     | '/influencer/instagram-automation/rules/$ruleId'
+    | '/store-admin/campaigns/$campaignId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -769,7 +811,6 @@ export interface FileRouteTypes {
     | '/store-admin/$page'
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
-    | '/store-admin/campaigns'
     | '/store-admin/commissions'
     | '/store-admin/customers'
     | '/store-admin/dashboard'
@@ -784,16 +825,20 @@ export interface FileRouteTypes {
     | '/store-admin'
     | '/admin/influencers/$influencerId'
     | '/influencer/campaigns/$campaignId'
+    | '/influencer/instagram-automation/new'
+    | '/store-admin/campaigns/new'
     | '/store-admin/creators/$creatorId'
     | '/store-admin/orders/$orderId'
     | '/store-admin/products/$productId'
     | '/admin/influencers'
     | '/influencer/campaigns'
     | '/influencer/instagram-automation'
+    | '/store-admin/campaigns'
     | '/store-admin/creators'
     | '/store-admin/orders'
     | '/store-admin/products'
     | '/influencer/instagram-automation/rules/$ruleId'
+    | '/store-admin/campaigns/$campaignId/edit'
   id:
     | '__root__'
     | '/'
@@ -857,16 +902,20 @@ export interface FileRouteTypes {
     | '/store-admin/'
     | '/admin/influencers/$influencerId'
     | '/influencer/campaigns/$campaignId'
+    | '/influencer/instagram-automation/new'
+    | '/store-admin/campaigns/new'
     | '/store-admin/creators/$creatorId'
     | '/store-admin/orders/$orderId'
     | '/store-admin/products/$productId'
     | '/admin/influencers/'
     | '/influencer/campaigns/'
     | '/influencer/instagram-automation/'
+    | '/store-admin/campaigns/'
     | '/store-admin/creators/'
     | '/store-admin/orders/'
     | '/store-admin/products/'
     | '/influencer/instagram-automation/rules/$ruleId'
+    | '/store-admin/campaigns/$campaignId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1328,6 +1377,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InfluencerInstagramAutomationIndexRouteImport
       parentRoute: typeof InfluencerInstagramAutomationRoute
     }
+    '/influencer/instagram-automation/new': {
+      id: '/influencer/instagram-automation/new'
+      path: '/new'
+      fullPath: '/influencer/instagram-automation/new'
+      preLoaderRoute: typeof InfluencerInstagramAutomationNewRouteImport
+      parentRoute: typeof InfluencerInstagramAutomationRoute
+    }
+    '/store-admin/campaigns/': {
+      id: '/store-admin/campaigns/'
+      path: '/'
+      fullPath: '/store-admin/campaigns/'
+      preLoaderRoute: typeof StoreAdminCampaignsIndexRouteImport
+      parentRoute: typeof StoreAdminCampaignsRoute
+    }
+    '/store-admin/campaigns/new': {
+      id: '/store-admin/campaigns/new'
+      path: '/new'
+      fullPath: '/store-admin/campaigns/new'
+      preLoaderRoute: typeof StoreAdminCampaignsNewRouteImport
+      parentRoute: typeof StoreAdminCampaignsRoute
+    }
     '/store-admin/creators/': {
       id: '/store-admin/creators/'
       path: '/'
@@ -1376,6 +1446,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/influencer/instagram-automation/rules/$ruleId'
       preLoaderRoute: typeof InfluencerInstagramAutomationRulesRuleIdRouteImport
       parentRoute: typeof InfluencerInstagramAutomationRoute
+    }
+    '/store-admin/campaigns/$campaignId/edit': {
+      id: '/store-admin/campaigns/$campaignId/edit'
+      path: '/$campaignId/edit'
+      fullPath: '/store-admin/campaigns/$campaignId/edit'
+      preLoaderRoute: typeof StoreAdminCampaignsCampaignIdEditRouteImport
+      parentRoute: typeof StoreAdminCampaignsRoute
     }
   }
 }
@@ -1459,12 +1536,15 @@ const InfluencerCampaignsRouteWithChildren =
   InfluencerCampaignsRoute._addFileChildren(InfluencerCampaignsRouteChildren)
 
 interface InfluencerInstagramAutomationRouteChildren {
+  InfluencerInstagramAutomationNewRoute: typeof InfluencerInstagramAutomationNewRoute
   InfluencerInstagramAutomationIndexRoute: typeof InfluencerInstagramAutomationIndexRoute
   InfluencerInstagramAutomationRulesRuleIdRoute: typeof InfluencerInstagramAutomationRulesRuleIdRoute
 }
 
 const InfluencerInstagramAutomationRouteChildren: InfluencerInstagramAutomationRouteChildren =
   {
+    InfluencerInstagramAutomationNewRoute:
+      InfluencerInstagramAutomationNewRoute,
     InfluencerInstagramAutomationIndexRoute:
       InfluencerInstagramAutomationIndexRoute,
     InfluencerInstagramAutomationRulesRuleIdRoute:
@@ -1517,6 +1597,22 @@ const InfluencerRouteWithChildren = InfluencerRoute._addFileChildren(
   InfluencerRouteChildren,
 )
 
+interface StoreAdminCampaignsRouteChildren {
+  StoreAdminCampaignsNewRoute: typeof StoreAdminCampaignsNewRoute
+  StoreAdminCampaignsIndexRoute: typeof StoreAdminCampaignsIndexRoute
+  StoreAdminCampaignsCampaignIdEditRoute: typeof StoreAdminCampaignsCampaignIdEditRoute
+}
+
+const StoreAdminCampaignsRouteChildren: StoreAdminCampaignsRouteChildren = {
+  StoreAdminCampaignsNewRoute: StoreAdminCampaignsNewRoute,
+  StoreAdminCampaignsIndexRoute: StoreAdminCampaignsIndexRoute,
+  StoreAdminCampaignsCampaignIdEditRoute:
+    StoreAdminCampaignsCampaignIdEditRoute,
+}
+
+const StoreAdminCampaignsRouteWithChildren =
+  StoreAdminCampaignsRoute._addFileChildren(StoreAdminCampaignsRouteChildren)
+
 interface StoreAdminCreatorsRouteChildren {
   StoreAdminCreatorsCreatorIdRoute: typeof StoreAdminCreatorsCreatorIdRoute
   StoreAdminCreatorsIndexRoute: typeof StoreAdminCreatorsIndexRoute
@@ -1560,7 +1656,7 @@ interface StoreAdminRouteChildren {
   StoreAdminPageRoute: typeof StoreAdminPageRoute
   StoreAdminAffiliateRoute: typeof StoreAdminAffiliateRoute
   StoreAdminAnalyticsRoute: typeof StoreAdminAnalyticsRoute
-  StoreAdminCampaignsRoute: typeof StoreAdminCampaignsRoute
+  StoreAdminCampaignsRoute: typeof StoreAdminCampaignsRouteWithChildren
   StoreAdminCommissionsRoute: typeof StoreAdminCommissionsRoute
   StoreAdminCreatorsRoute: typeof StoreAdminCreatorsRouteWithChildren
   StoreAdminCustomersRoute: typeof StoreAdminCustomersRoute
@@ -1579,7 +1675,7 @@ const StoreAdminRouteChildren: StoreAdminRouteChildren = {
   StoreAdminPageRoute: StoreAdminPageRoute,
   StoreAdminAffiliateRoute: StoreAdminAffiliateRoute,
   StoreAdminAnalyticsRoute: StoreAdminAnalyticsRoute,
-  StoreAdminCampaignsRoute: StoreAdminCampaignsRoute,
+  StoreAdminCampaignsRoute: StoreAdminCampaignsRouteWithChildren,
   StoreAdminCommissionsRoute: StoreAdminCommissionsRoute,
   StoreAdminCreatorsRoute: StoreAdminCreatorsRouteWithChildren,
   StoreAdminCustomersRoute: StoreAdminCustomersRoute,

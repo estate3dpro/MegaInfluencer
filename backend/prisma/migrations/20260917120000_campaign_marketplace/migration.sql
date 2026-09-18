@@ -1,0 +1,12 @@
+CREATE TYPE "CampaignStatus" AS ENUM ('DRAFT','PUBLISHED','PAUSED','CLOSED','ARCHIVED');
+CREATE TYPE "CampaignApplicationStatus" AS ENUM ('PENDING','ACCEPTED','DECLINED','WITHDRAWN');
+CREATE TABLE "Campaign" ("id" TEXT NOT NULL,"organizationId" TEXT NOT NULL,"title" TEXT NOT NULL,"brief" TEXT NOT NULL,"category" TEXT NOT NULL,"deliverables" TEXT NOT NULL,"budgetMin" INTEGER,"budgetMax" INTEGER,"currency" TEXT NOT NULL DEFAULT 'INR',"applicationDeadline" TIMESTAMP(3) NOT NULL,"status" "CampaignStatus" NOT NULL DEFAULT 'DRAFT',"publishedAt" TIMESTAMP(3),"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Campaign_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "CampaignApplication" ("id" TEXT NOT NULL,"campaignId" TEXT NOT NULL,"influencerId" TEXT NOT NULL,"pitch" TEXT NOT NULL,"proposedRate" INTEGER,"status" "CampaignApplicationStatus" NOT NULL DEFAULT 'PENDING',"decidedAt" TIMESTAMP(3),"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "CampaignApplication_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "Campaign_organizationId_status_idx" ON "Campaign"("organizationId","status");
+CREATE INDEX "Campaign_status_applicationDeadline_idx" ON "Campaign"("status","applicationDeadline");
+CREATE UNIQUE INDEX "CampaignApplication_campaignId_influencerId_key" ON "CampaignApplication"("campaignId","influencerId");
+CREATE INDEX "CampaignApplication_campaignId_status_idx" ON "CampaignApplication"("campaignId","status");
+CREATE INDEX "CampaignApplication_influencerId_createdAt_idx" ON "CampaignApplication"("influencerId","createdAt");
+ALTER TABLE "Campaign" ADD CONSTRAINT "Campaign_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CampaignApplication" ADD CONSTRAINT "CampaignApplication_campaignId_fkey" FOREIGN KEY ("campaignId") REFERENCES "Campaign"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CampaignApplication" ADD CONSTRAINT "CampaignApplication_influencerId_fkey" FOREIGN KEY ("influencerId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

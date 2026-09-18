@@ -1,33 +1,81 @@
-import { ArrowUpRight, Bookmark, CheckCircle2, Clock3, MapPin, Search, Sparkles, Users } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowUpRight, CalendarDays, Eye, Search, Sparkles } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/app/PageHeader";
+import { applyCampaign, getDiscoverCampaigns, type Campaign } from "@/features/campaigns/api/campaigns.api";
 
-const opportunities = [
-  { brand: "Glow Theory", campaign: "Everyday Radiance", category: "Beauty & skincare", payment: "₹18,000 – ₹25,000", deliverables: "1 Reel + 3 Stories", applicants: 14, deadline: "Apply by Sep 22", match: 96, tone: "from-rose-500 via-orange-400 to-amber-300", logo: "GT", featured: true },
-  { brand: "Urban Threads", campaign: "Winter Layers Edit", category: "Fashion", payment: "₹22,000 – ₹30,000", deliverables: "2 Reels + 1 Post", applicants: 21, deadline: "Apply by Sep 24", match: 92, tone: "from-violet-600 via-indigo-500 to-sky-400", logo: "UT", featured: true },
-  { brand: "Kind Kitchen", campaign: "Mindful Mornings", category: "Food & wellness", payment: "₹12,000 – ₹16,000", deliverables: "1 Reel + 2 Stories", applicants: 8, deadline: "Apply by Sep 28", match: 88, tone: "from-emerald-500 via-teal-400 to-cyan-300", logo: "KK", featured: false },
-  { brand: "Luma Home", campaign: "Spaces That Feel Like You", category: "Home & living", payment: "₹15,000 – ₹20,000", deliverables: "1 Reel + 1 Carousel", applicants: 17, deadline: "Apply by Oct 02", match: 83, tone: "from-fuchsia-500 via-pink-400 to-rose-300", logo: "LH", featured: false },
-  { brand: "Move Better", campaign: "30 Day Reset", category: "Fitness", payment: "₹20,000 – ₹28,000", deliverables: "2 Reels + 4 Stories", applicants: 11, deadline: "Apply by Oct 04", match: 79, tone: "from-blue-600 via-cyan-400 to-teal-300", logo: "MB", featured: false },
-  { brand: "Paper & Co.", campaign: "The Joy of Journaling", category: "Lifestyle", payment: "₹10,000 – ₹14,000", deliverables: "1 Reel + 1 Post", applicants: 6, deadline: "Apply by Oct 06", match: 76, tone: "from-amber-500 via-orange-400 to-yellow-300", logo: "PC", featured: false },
-];
-
-const categories = ["For you", "Fashion", "Beauty", "Food & wellness", "Lifestyle", "Fitness"];
+function budget(campaign: Campaign) {
+  if (campaign.compensationType === "BARTER") return "Product exchange";
+  if (campaign.compensationType === "COMMISSION") return "Commission based";
+  if (campaign.budgetMin && campaign.budgetMax) return `₹${campaign.budgetMin.toLocaleString()} – ₹${campaign.budgetMax.toLocaleString()}`;
+  if (campaign.budgetMin) return `From ₹${campaign.budgetMin.toLocaleString()}`;
+  return "Budget on request";
+}
 
 export function DiscoverPage() {
-  return <div className="space-y-6">
-    <PageHeader title="Discover opportunities" description="Find brand partnerships that fit your audience and creative style." />
-    <Card className="overflow-hidden border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent shadow-card"><CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-4"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Sparkles className="h-5 w-5" /></span><div><p className="font-display text-lg font-semibold">Your profile is a strong match</p><p className="mt-1 text-sm text-muted-foreground">Complete your media kit to unlock more campaign invitations.</p></div></div><Button variant="outline">Complete profile <ArrowUpRight className="h-4 w-4" /></Button></CardContent></Card>
-    <div className="flex flex-col gap-3 lg:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="bg-card pl-9" placeholder="Search brands, categories or campaigns" /></div><Button variant="outline">Remote & India</Button><Button variant="outline">All budgets</Button></div>
-    <div className="flex gap-2 overflow-x-auto pb-1">{categories.map((category, index) => <Button key={category} variant={index === 0 ? "default" : "outline"} size="sm" className="shrink-0">{category}</Button>)}</div>
-    <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{opportunities.map((opportunity) => <OpportunityCard key={opportunity.campaign} opportunity={opportunity} />)}</section>
-    <Card className="shadow-card"><CardHeader className="p-5 pb-2"><CardTitle>How matches work</CardTitle><p className="mt-1 text-sm text-muted-foreground">We recommend campaigns based on your audience, content and category fit.</p></CardHeader><CardContent className="grid gap-4 p-5 pt-3 sm:grid-cols-3"><MatchStep icon={Users} title="Audience fit" text="Your follower demographics align with brand goals." /><MatchStep icon={Sparkles} title="Creative fit" text="Your content style matches their campaign brief." /><MatchStep icon={CheckCircle2} title="Profile readiness" text="Complete details help brands review you faster." /></CardContent></Card>
-  </div>;
+  const [search, setSearch] = useState("");
+  const [preview, setPreview] = useState<Campaign | null>(null);
+  const [applyingTo, setApplyingTo] = useState<Campaign | null>(null);
+  const [pitch, setPitch] = useState("");
+  const query = useQuery({ queryKey: ["discover-campaigns"], queryFn: getDiscoverCampaigns });
+  const client = useQueryClient();
+  const apply = useMutation({
+    mutationFn: ({ id, message }: { id: string; message: string }) => applyCampaign(id, message),
+    onSuccess: () => {
+      setApplyingTo(null);
+      setPitch("");
+      void client.invalidateQueries({ queryKey: ["discover-campaigns"] });
+      void client.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+  const campaigns = useMemo(() => (query.data ?? []).filter((campaign) => `${campaign.title} ${campaign.category} ${campaign.organization?.name ?? ""}`.toLowerCase().includes(search.toLowerCase())), [query.data, search]);
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6">
+      <PageHeader title="Discover opportunities" description="Explore public campaigns, review every brief, and apply when you are a strong fit." />
+      <Card className="border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent shadow-card"><CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Sparkles className="h-5 w-5" /></span><div><p className="font-display text-lg font-semibold">Opportunities matched to creators</p><p className="mt-1 text-sm text-muted-foreground">Review a campaign before applying. Brands are notified as soon as you send your request.</p></div></CardContent></Card>
+      <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="h-11 bg-card pl-9" placeholder="Search brands, categories, or campaigns" /></div>
+      <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {campaigns.map((campaign) => <Opportunity key={campaign.id} campaign={campaign} onPreview={() => setPreview(campaign)} onApply={() => setApplyingTo(campaign)} />)}
+      </section>
+      {query.isLoading ? <p className="text-sm text-muted-foreground">Loading campaign opportunities…</p> : null}
+      {!query.isLoading && !campaigns.length ? <Card><CardContent className="p-10 text-center text-muted-foreground">No open campaigns are available right now.</CardContent></Card> : null}
+
+      <CampaignPreview campaign={preview} onOpenChange={(open) => !open && setPreview(null)} onApply={() => { setPreview(null); setApplyingTo(preview); }} />
+      <Dialog open={Boolean(applyingTo)} onOpenChange={(open) => { if (!open) { setApplyingTo(null); setPitch(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Apply to {applyingTo?.title}</DialogTitle><DialogDescription>Introduce your audience, creative angle, and why this campaign is a good match. The store reviews every application before assigning creators.</DialogDescription></DialogHeader>
+          <Textarea value={pitch} onChange={(event) => setPitch(event.target.value)} className="min-h-36" placeholder="I’m a strong fit because…" />
+          {pitch.length > 0 && pitch.trim().length < 20 ? <p className="text-xs text-destructive">Please write at least 20 characters.</p> : null}
+          {apply.error ? <p className="text-sm text-destructive">{apply.error instanceof Error ? apply.error.message : "Your application could not be sent."}</p> : null}
+          <DialogFooter><Button disabled={apply.isPending || pitch.trim().length < 20} onClick={() => applyingTo && apply.mutate({ id: applyingTo.id, message: pitch.trim() })}>{apply.isPending ? "Sending…" : "Send application"}<ArrowUpRight className="h-4 w-4" /></Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
 
-function OpportunityCard({ opportunity }: { opportunity: (typeof opportunities)[number] }) {
-  return <Card className="group overflow-hidden shadow-card transition-shadow hover:shadow-lg"><div className={`relative h-28 bg-gradient-to-br ${opportunity.tone} p-4`}><span className="grid h-11 w-11 place-items-center rounded-xl bg-white/90 text-sm font-bold text-foreground shadow-sm">{opportunity.logo}</span><div className="absolute right-3 top-3 flex gap-2">{opportunity.featured ? <Badge className="bg-white/20 text-white hover:bg-white/20">Featured</Badge> : null}<Button variant="secondary" size="icon" className="h-8 w-8 bg-white/85 hover:bg-white"><Bookmark className="h-4 w-4" /></Button></div></div><CardContent className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-sm text-muted-foreground">{opportunity.brand}</p><h2 className="mt-1 font-display text-lg font-semibold leading-tight">{opportunity.campaign}</h2></div><Badge className="shrink-0 bg-success/15 text-success hover:bg-success/15">{opportunity.match}% match</Badge></div><p className="mt-2 text-sm text-muted-foreground">{opportunity.category}</p><div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-muted/55 p-3 text-sm"><div><p className="text-xs text-muted-foreground">Budget</p><p className="mt-1 font-semibold">{opportunity.payment}</p></div><div><p className="text-xs text-muted-foreground">Deliverables</p><p className="mt-1 font-semibold">{opportunity.deliverables}</p></div></div><div className="mt-4 flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{opportunity.deadline}</span><span>{opportunity.applicants} applied</span></div><Button className="mt-4 w-full">View opportunity <ArrowUpRight className="h-4 w-4" /></Button></CardContent></Card>;
+function Opportunity({ campaign, onPreview, onApply }: { campaign: Campaign; onPreview: () => void; onApply: () => void }) {
+  const applied = campaign.applications?.[0];
+  return <Card className="group overflow-hidden shadow-card transition-shadow hover:shadow-lg"><div className="relative h-40 overflow-hidden bg-muted"><img src={campaign.imageUrl} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" /><div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" /><span className="absolute bottom-4 left-4 grid h-10 w-10 place-items-center rounded-xl bg-white/90 text-sm font-bold text-foreground">{campaign.organization?.name.slice(0, 2).toUpperCase()}</span></div><CardContent className="p-5"><p className="text-sm text-muted-foreground">{campaign.organization?.name}</p><div className="mt-1 flex items-start justify-between gap-3"><h2 className="font-display text-lg font-semibold">{campaign.title}</h2><Badge variant="outline">{campaign.category}</Badge></div><p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{campaign.brief}</p><div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-muted/55 p-3 text-sm"><div><p className="text-xs text-muted-foreground">Compensation</p><p className="mt-1 truncate font-semibold">{budget(campaign)}</p></div><div><p className="text-xs text-muted-foreground">Deliverables</p><p className="mt-1 truncate font-semibold">{campaign.deliverables}</p></div></div><p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />Apply by {new Date(campaign.applicationDeadline).toLocaleDateString()}</p><div className="mt-4 grid grid-cols-2 gap-2"><Button variant="outline" onClick={onPreview}><Eye className="h-4 w-4" />Preview</Button>{applied ? <Button disabled variant="outline">{applied.status}</Button> : <Button onClick={onApply}>Apply <ArrowUpRight className="h-4 w-4" /></Button>}</div></CardContent></Card>;
 }
-function MatchStep({ icon: Icon, title, text }: { icon: typeof Users; title: string; text: string }) { return <div className="flex gap-3 rounded-xl border p-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Icon className="h-4 w-4" /></span><div><p className="font-medium">{title}</p><p className="mt-1 text-sm leading-5 text-muted-foreground">{text}</p></div></div>; }
+
+function CampaignPreview({ campaign, onOpenChange, onApply }: { campaign: Campaign | null; onOpenChange: (open: boolean) => void; onApply: () => void }) {
+  return <Dialog open={Boolean(campaign)} onOpenChange={onOpenChange}><DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto p-0">{campaign ? <><img src={campaign.imageUrl} alt="" className="h-56 w-full object-cover sm:h-64" /><div className="p-6 pt-2"><DialogHeader><div className="flex flex-wrap items-center gap-2 pr-8"><Badge>{campaign.category}</Badge><span className="text-sm text-muted-foreground">{campaign.organization?.name} · {campaign.campaignType}</span></div><DialogTitle className="pt-2 font-display text-2xl">{campaign.title}</DialogTitle><DialogDescription className="leading-6">{campaign.brief}</DialogDescription></DialogHeader><div className="mt-5 grid gap-3 sm:grid-cols-3"><Detail label="Deliverables" value={campaign.deliverables} /><Detail label="Compensation" value={budget(campaign)} /><Detail label="Application deadline" value={new Date(campaign.applicationDeadline).toLocaleDateString()} /></div>{campaign.applications?.[0] ? <Button className="mt-5 w-full" variant="outline" disabled>{campaign.applications[0].status}</Button> : <Button className="mt-5 w-full" onClick={onApply}>Apply to campaign <ArrowUpRight className="h-4 w-4" /></Button>}</div></> : null}</DialogContent></Dialog>;
+}
+
+function Detail({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-muted p-3"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>; }

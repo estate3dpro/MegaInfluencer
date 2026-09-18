@@ -1,0 +1,10 @@
+ALTER TABLE "Campaign" ADD COLUMN "imageUrl" TEXT NOT NULL DEFAULT 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80';
+ALTER TABLE "Campaign" ADD COLUMN "campaignType" TEXT NOT NULL DEFAULT 'Instagram';
+ALTER TABLE "Campaign" ADD COLUMN "objective" TEXT NOT NULL DEFAULT 'Brand Awareness';
+ALTER TABLE "Campaign" ADD COLUMN "deliverableDetails" JSONB;
+ALTER TABLE "Campaign" ADD COLUMN "compensationType" TEXT NOT NULL DEFAULT 'FIXED';
+ALTER TABLE "Campaign" ADD COLUMN "compensationDetails" JSONB;
+ALTER TABLE "Campaign" ADD COLUMN "minimumFollowers" INTEGER;
+ALTER TABLE "Campaign" ADD COLUMN "applicationType" TEXT NOT NULL DEFAULT 'OPEN';
+ALTER TABLE "Campaign" ADD COLUMN "contentDeadline" TIMESTAMP(3);
+ALTER TABLE "Campaign" ADD COLUMN "campaignEndDate" TIMESTAMP(3);

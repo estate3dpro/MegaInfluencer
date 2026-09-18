@@ -19,7 +19,24 @@ export type InstagramProfileResponse = {
   };
 };
 
+export type InstagramMedia = {
+  id: string;
+  caption?: string;
+  media_type: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  timestamp?: string;
+  permalink?: string;
+};
+
 export async function getInstagramProfile() {
   const { data } = await apiClient.get<InstagramProfileResponse>("/influencer/instagram/profile");
   return data;
+}
+
+export async function getInstagramPosts() {
+  const { data } = await apiClient.get<{ items: InstagramMedia[] }>("/influencer/instagram/posts", {
+    params: { limit: 50 },
+  });
+  return data.items;
 }

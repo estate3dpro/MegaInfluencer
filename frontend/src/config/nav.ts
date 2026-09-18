@@ -81,7 +81,7 @@ export const influencerNav: NavGroup[] = [
     label: "Grow",
     items: [
       { title: "Discover", url: "/influencer/discover", icon: Compass },
-      { title: "Campaigns", url: "/influencer/campaigns", icon: Megaphone },
+      // { title: "Campaigns", url: "/influencer/campaigns", icon: Megaphone },
       { title: "Instagram Automation", url: "/influencer/instagram-automation", icon: Instagram },
     ],
   },

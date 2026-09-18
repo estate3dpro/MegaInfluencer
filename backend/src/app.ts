@@ -9,6 +9,9 @@ import { registerRoutes } from './routes/index.js';
 
 export function buildApp() {
   const app = Fastify({
+    // Campaign cover uploads are currently sent as image data URLs. Keep this
+    // deliberately bounded until object-storage uploads replace this MVP path.
+    bodyLimit: 6 * 1024 * 1024,
     logger:
       config.nodeEnv === 'test'
         ? false

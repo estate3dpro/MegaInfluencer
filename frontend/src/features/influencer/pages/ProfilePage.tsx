@@ -39,6 +39,8 @@ export function ProfilePage() {
   const data = profileQuery.data;
   const profileName =
     data?.profile.name || data?.connection.displayName || user?.name || "Influencer";
+  
+  console.log(data, "profileName");
   const username = data?.profile.username || data?.connection.username;
   const errorMessage = isApiError(profileQuery.error)
     ? profileQuery.error.message
@@ -55,7 +57,7 @@ export function ProfilePage() {
         <div className="h-24 bg-[linear-gradient(115deg,#6c5ce7,#ec6b9a,#f59e0b)]" />
         <CardContent className="relative px-6 pb-6 pt-0">
           <Avatar className="-mt-11 h-24 w-24 border-4 border-card">
-            <AvatarFallback className="bg-primary/15 text-xl font-bold text-primary">
+            <AvatarFallback className="bg-primary text-xl font-bold text-accent dark:text-accent-foreground">
               {initials(profileName)}
             </AvatarFallback>
           </Avatar>
