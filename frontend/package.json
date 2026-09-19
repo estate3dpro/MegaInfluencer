@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "start": "vite preview --port 5004",
+    "start": "PORT=5004 HOST=127.0.0.1 node .output/server/index.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

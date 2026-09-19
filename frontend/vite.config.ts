@@ -7,10 +7,7 @@ export default defineConfig({
     },
   },
 
-  vite: {
-    preview: {
-      port: 5004,
-      allowedHosts: ["megainfluencer.megascale.co.in"],
-    },
+  nitro: {
+    preset: "node-server",
   },
 });
