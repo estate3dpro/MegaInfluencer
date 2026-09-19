@@ -9,6 +9,7 @@ import { createOpaqueToken, decryptToken, encryptToken, hashOpaqueToken } from '
 
 const stateLifetimeMs = 10 * 60_000;
 const ticketLifetimeMs = 60_000;
+const localWebhookForwardTimeoutMs = 10_000;
 
 function callbackUrl() {
   if (!config.publicBaseUrl) {
@@ -184,6 +185,30 @@ export function verifyWebhookSignature(rawBody: Buffer, header: string | undefin
   if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
   const expected = createHmac('sha256', config.metaAppSecret).update(rawBody).digest('hex');
   return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+}
+
+/** Forwards the exact verified Meta payload to the opted-in local ngrok API. */
+export async function forwardWebhookToLocal(rawBody: Buffer, signature: string | undefined) {
+  if (!config.localWebhookUrl) return false;
+
+  // Copy into a standard Uint8Array while preserving every signed byte.
+  const body = new Uint8Array(rawBody.byteLength);
+  body.set(rawBody);
+
+  const response = await fetch(config.localWebhookUrl, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-forwarded-meta-webhook': 'true',
+      ...(signature ? { 'x-hub-signature-256': signature } : {}),
+    },
+    // Never JSON.stringify the payload: Meta's signature covers its raw bytes.
+    body,
+    signal: AbortSignal.timeout(localWebhookForwardTimeoutMs),
+  });
+
+  if (!response.ok) throw new Error(`Local webhook returned HTTP ${response.status}.`);
+  return true;
 }
 
 export async function recordWebhookDelivery(app: FastifyInstance, rawBody: Buffer, payload: unknown) {

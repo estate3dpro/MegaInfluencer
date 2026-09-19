@@ -3,7 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { parseOrThrow } from '../../shared/validation/pagination.js';
-import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, exchangeInstagramLoginTicket, getConnection, getInstagramProfile, listInstagramMedia, recordWebhookDelivery, verifyWebhookSignature } from './instagram.service.js';
+import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, exchangeInstagramLoginTicket, forwardWebhookToLocal, getConnection, getInstagramProfile, listInstagramMedia, recordWebhookDelivery, verifyWebhookSignature } from './instagram.service.js';
 import { exchangeLoginTicketSchema, mediaQuerySchema, oauthCallbackQuerySchema, webhookVerificationSchema } from './instagram.schema.js';
 import { config } from '../../config/env.js';
 
@@ -74,6 +74,19 @@ export const instagramWebhookRoutes: FastifyPluginAsync = async (app) => {
     if (!verifyWebhookSignature(rawBody, typeof signature === 'string' ? signature : undefined)) {
       throw new AppError('INVALID_WEBHOOK_SIGNATURE', 'Webhook signature is invalid.', 401);
     }
+
+    // When explicitly enabled on production, forward verified events to the
+    // local ngrok API and avoid processing the same event in both places.
+    try {
+      if (await forwardWebhookToLocal(rawBody, typeof signature === 'string' ? signature : undefined)) {
+        request.log.info({ target: new URL(config.localWebhookUrl!).origin }, 'Forwarded verified Instagram webhook to local development');
+        return reply.status(200).send({ received: true, forwarded: true });
+      }
+    } catch (error) {
+      request.log.error({ err: error }, 'Failed to forward verified Instagram webhook to local development');
+      throw new AppError('LOCAL_WEBHOOK_FORWARD_FAILED', 'Webhook forwarding failed.', 502);
+    }
+
     let payload: unknown;
     try { payload = JSON.parse(rawBody.toString('utf8')); } catch { throw new AppError('INVALID_WEBHOOK_PAYLOAD', 'Webhook body is not valid JSON.', 400); }
     const { duplicate } = await recordWebhookDelivery(app, rawBody, payload);

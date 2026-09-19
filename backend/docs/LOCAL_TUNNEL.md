@@ -98,3 +98,24 @@ Copy the HTTPS URL ngrok prints into `PUBLIC_BASE_URL` and both frontend
 `VITE_*` URLs above. This URL changes every run, so it is unsuitable for a
 saved OAuth redirect URI or webhook callback. Use a reserved ngrok domain for
 normal development.
+
+## Temporarily forward production webhooks to local ngrok
+
+If Meta is permanently configured with the production callback URL, set these
+variables in the **live Fastify server's** environment while you are actively
+testing:
+
+```env
+SEND_META_WEBHOOKS_TO_LOCAL="true"
+LOCAL_URL="https://mega-influencer-dev.ngrok.app"
+```
+
+Restart the Fastify process after changing them. The live server validates the
+Meta signature, forwards the original raw payload and signature to
+`LOCAL_URL/webhooks/instagram`, and deliberately skips its own database
+processing so an event is not processed twice.
+
+Your local `.env` must use the same `META_APP_SECRET`, and must keep
+`SEND_META_WEBHOOKS_TO_LOCAL="false"`. When testing is complete, set the live
+server value back to `false` and restart it. This sends real production events
+to your computer, so never leave it enabled.

@@ -31,6 +31,31 @@ function optionalUrl(name: string, fallback?: string): string | undefined {
   }
 }
 
+function localWebhookUrl(): string | undefined {
+  if (process.env.SEND_META_WEBHOOKS_TO_LOCAL !== 'true') return undefined;
+
+  const value = process.env.LOCAL_URL?.trim();
+  if (!value) throw new Error('LOCAL_URL is required when SEND_META_WEBHOOKS_TO_LOCAL=true.');
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('LOCAL_URL must be a valid HTTPS URL.');
+  }
+
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error('LOCAL_URL must be an HTTPS URL without credentials.');
+  }
+
+  const productionOrigin = process.env.PUBLIC_BASE_URL?.trim();
+  if (productionOrigin && url.origin === new URL(productionOrigin).origin) {
+    throw new Error('LOCAL_URL must not point to the production API.');
+  }
+
+  return `${url.origin}/webhooks/instagram`;
+}
+
 export const config = Object.freeze({
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: required('JWT_SECRET'),
@@ -49,4 +74,5 @@ export const config = Object.freeze({
   metaAppSecret: process.env.META_APP_SECRET?.trim() || process.env.FACEBOOK_APP_SECRET?.trim(),
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN?.trim(),
   encryptionKey: process.env.ENCRYPTION_KEY?.trim(),
+  localWebhookUrl: localWebhookUrl(),
 });
