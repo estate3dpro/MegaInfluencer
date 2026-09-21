@@ -32,43 +32,45 @@ function asLink(row: any, baseUrl: string) {
 }
 
 export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
+  const prisma = app.prisma as any;
   app.get('/store/affiliate-links', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId);
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
-    const rows = await app.prisma.affiliateLink.findMany({
+    const rows = await prisma.affiliateLink.findMany({
       where: { organizationId: organization.id, ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ slug: { contains: query.search, mode: 'insensitive' } }, { creator: { displayName: { contains: query.search, mode: 'insensitive' } } }, { product: { title: { contains: query.search, mode: 'insensitive' } } }] } : {}) },
       include: { creator: { select: { displayName: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }, orderBy: { createdAt: 'desc' },
     });
     const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
-    return { links: rows.map((row) => asLink(row, baseUrl)) };
+    return { links: rows.map((row: any) => asLink(row, baseUrl)) };
   });
 
   app.post('/store/affiliate-links', async (request, reply) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const input = createLinkSchema.parse(request.body);
-    const assigned = await app.prisma.storeInfluencerAssignment.findUnique({ where: { organizationId_influencerId: { organizationId: organization.id, influencerId: input.creatorId } } });
+    const assigned = await prisma.storeInfluencerAssignment.findUnique({ where: { organizationId_influencerId: { organizationId: organization.id, influencerId: input.creatorId } } });
     if (!assigned) throw new AppError('CREATOR_NOT_ASSIGNED', 'Choose a creator assigned to this store.', 422);
-    const product = input.productId ? await app.prisma.shopifyProduct.findFirst({ where: { id: input.productId, organizationId: organization.id }, select: { id: true, handle: true } }) : null;
+    const product = input.productId ? await prisma.shopifyProduct.findFirst({ where: { id: input.productId, organizationId: organization.id }, select: { id: true, handle: true } }) : null;
     if (input.productId && !product) throw new AppError('PRODUCT_NOT_FOUND', 'The selected product does not belong to this store.', 422);
-    const link = await app.prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, targetType: product ? 'PRODUCT' : 'STORE', destinationPath: product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug() }, include: { creator: { select: { displayName: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
+    const link = await prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, targetType: product ? 'PRODUCT' : 'STORE', destinationPath: product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug() }, include: { creator: { select: { displayName: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
     const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
     return reply.code(201).send({ link: asLink(link, baseUrl) });
   });
 
   app.patch('/store/affiliate-links/:linkId', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const { linkId } = request.params as { linkId: string }; const input = updateLinkSchema.parse(request.body);
-    const existing = await app.prisma.affiliateLink.findFirst({ where: { id: linkId, organizationId: organization.id } }); if (!existing) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
-    const link = await app.prisma.affiliateLink.update({ where: { id: linkId }, data: input, include: { creator: { select: { displayName: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
+    const existing = await prisma.affiliateLink.findFirst({ where: { id: linkId, organizationId: organization.id } }); if (!existing) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
+    const link = await prisma.affiliateLink.update({ where: { id: linkId }, data: input, include: { creator: { select: { displayName: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
     const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`; return { link: asLink(link, baseUrl) };
   });
 
 };
 
 export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {
+  const prisma = app.prisma as any;
   app.get('/r/:slug', async (request, reply) => {
-    const { slug: linkSlug } = request.params as { slug: string }; const link = await app.prisma.affiliateLink.findUnique({ where: { slug: linkSlug }, include: { organization: { select: { shopDomain: true } } } });
+    const { slug: linkSlug } = request.params as { slug: string }; const link = await prisma.affiliateLink.findUnique({ where: { slug: linkSlug }, include: { organization: { select: { shopDomain: true } } } });
     if (!link || link.status !== 'ACTIVE' || (link.expiresAt && link.expiresAt <= new Date())) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'This affiliate link is unavailable.', 404);
     const query = request.query as Record<string, string | undefined>; const visitorHash = request.headers['user-agent'] ? createHash('sha256').update(`${request.headers['user-agent']}|${request.ip}`).digest('hex') : null;
-    await app.prisma.affiliateLinkClick.create({ data: { organizationId: link.organizationId, linkId: link.id, visitorHash, referrer: request.headers.referer?.slice(0, 2_000), utmSource: query.utm_source?.slice(0, 255), utmMedium: query.utm_medium?.slice(0, 255), utmCampaign: query.utm_campaign?.slice(0, 255) } });
+    await prisma.affiliateLinkClick.create({ data: { organizationId: link.organizationId, linkId: link.id, visitorHash, referrer: request.headers.referer?.slice(0, 2_000), utmSource: query.utm_source?.slice(0, 255), utmMedium: query.utm_medium?.slice(0, 255), utmCampaign: query.utm_campaign?.slice(0, 255) } });
     const destination = safeDestination(link.organization.shopDomain, link.destinationPath);
     destination.searchParams.set('mi_link', link.slug);
     for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']) if (query[key]) destination.searchParams.set(key, query[key]!);
@@ -78,6 +80,7 @@ export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {
 
 /** Shopify should POST order payloads here after the storefront writes `mi_link` into cart attributes. */
 export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => {
+  const prisma = app.prisma as any;
   app.post('/webhooks/shopify/orders', async (request, reply) => {
     const raw = request.body as Buffer; const shopifySignature = request.headers['x-shopify-hmac-sha256']; const bridgeSignature = request.headers['x-megainfluencer-signature-256'] ?? request.headers['x-megachat-signature-256'];
     let payload: Record<string, any>; let domain: string;

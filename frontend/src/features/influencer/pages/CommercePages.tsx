@@ -1,23 +1,26 @@
 import { useState } from "react";
 import { ArrowUpRight, BadgeIndianRupee, Copy, ExternalLink, Link2, Package, ShoppingBag, Store, TrendingUp, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getInfluencerStoresOverview } from "../api/stores.api";
+import { queryKeys } from "@/lib/query-keys";
 
-type Scope = "all" | "urban" | "glow" | "kind";
-const scopeName: Record<Scope, string> = { all: "All stores", urban: "Urban Threads", glow: "Glow Theory", kind: "Kind Kitchen" };
-const scopeData: Record<Scope, { sales: string; orders: string; earnings: string; clicks: string; conversion: string }> = {
+type Scope = string;
+const fallbackScopeName: Record<string, string> = { all: "All stores", urban: "Urban Threads", glow: "Glow Theory", kind: "Kind Kitchen" };
+const fallbackScopeData: Record<string, { sales: string; orders: string; earnings: string; clicks: string; conversion: string }> = {
   all: { sales: "₹1,12,450", orders: "68", earnings: "₹24,680", clicks: "3,842", conversion: "1.8%" },
   urban: { sales: "₹62,480", orders: "36", earnings: "₹13,120", clicks: "1,964", conversion: "1.8%" },
   glow: { sales: "₹31,260", orders: "19", earnings: "₹7,560", clicks: "1,102", conversion: "1.7%" },
   kind: { sales: "₹18,710", orders: "13", earnings: "₹4,000", clicks: "776", conversion: "1.7%" },
 };
-const products = [
-  { name: "Festive Silk Co-ord Set", store: "Urban Threads", price: "₹2,499", clicks: 862, orders: 18, tone: "bg-violet-100 text-violet-600" },
-  { name: "Vitamin C Glow Serum", store: "Glow Theory", price: "₹1,299", clicks: 614, orders: 12, tone: "bg-rose-100 text-rose-600" },
-  { name: "Protein Breakfast Bundle", store: "Kind Kitchen", price: "₹899", clicks: 437, orders: 9, tone: "bg-teal-100 text-teal-600" },
+const fallbackProducts = [
+  { name: "Festive Silk Co-ord Set", store: "Urban Threads", storeSlug: "urban", price: "₹2,499", clicks: 862, orders: 18, tone: "bg-violet-100 text-violet-600" },
+  { name: "Vitamin C Glow Serum", store: "Glow Theory", storeSlug: "glow", price: "₹1,299", clicks: 614, orders: 12, tone: "bg-rose-100 text-rose-600" },
+  { name: "Protein Breakfast Bundle", store: "Kind Kitchen", storeSlug: "kind", price: "₹899", clicks: 437, orders: 9, tone: "bg-teal-100 text-teal-600" },
 ];
 const orders = [
   { id: "#UT-10482", customer: "Priya Sharma", store: "Urban Threads", total: "₹3,498", commission: "₹349", status: "Approved" },
@@ -27,12 +30,90 @@ const orders = [
 ];
 
 function useScope() { return useState<Scope>("all"); }
-function StoreSelector({ scope, setScope }: { scope: Scope; setScope: (value: Scope) => void }) { return <Select value={scope} onValueChange={(value) => setScope(value as Scope)}><SelectTrigger className="w-full bg-card sm:w-52"><Store className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Combined analytics</SelectItem><SelectItem value="urban">Urban Threads</SelectItem><SelectItem value="glow">Glow Theory</SelectItem><SelectItem value="kind">Kind Kitchen</SelectItem></SelectContent></Select>; }
-function Metrics({ scope }: { scope: Scope }) { const data = scopeData[scope]; return <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Attributed sales" value={data.sales} icon={TrendingUp} detail="Last 30 days" /><Metric label="Orders generated" value={data.orders} icon={ShoppingBag} detail="+12.5% from last month" /><Metric label="Your earnings" value={data.earnings} icon={BadgeIndianRupee} detail="Approved + pending" /><Metric label="Link clicks" value={data.clicks} icon={Link2} detail={`${data.conversion} conversion rate`} /></section>; }
+function StoreSelector({ scope, setScope, stores }: { scope: Scope; setScope: (value: Scope) => void; stores?: Array<{ id: string; name: string; slug: string }> }) {
+  const storeList = stores?.length ? stores : [
+    { id: "urban", name: "Urban Threads", slug: "urban" },
+    { id: "glow", name: "Glow Theory", slug: "glow" },
+    { id: "kind", name: "Kind Kitchen", slug: "kind" },
+  ];
+  return <Select value={scope} onValueChange={(value) => setScope(value)}><SelectTrigger className="w-full bg-card sm:w-52"><Store className="mr-2 h-4 w-4 text-muted-foreground" /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Combined analytics</SelectItem>{storeList.map((st) => <SelectItem key={st.slug || st.id} value={st.slug || st.id}>{st.name}</SelectItem>)}</SelectContent></Select>;
+}
+function Metrics({ scope, scopeData }: { scope: Scope; scopeData: Record<string, { sales: string; orders: string; earnings: string; clicks: string; conversion: string }> }) {
+  const data = scopeData[scope] || scopeData["all"] || fallbackScopeData["all"];
+  return <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Attributed sales" value={data.sales} icon={TrendingUp} detail="Last 30 days" /><Metric label="Orders generated" value={data.orders} icon={ShoppingBag} detail="+12.5% from last month" /><Metric label="Your earnings" value={data.earnings} icon={BadgeIndianRupee} detail="Approved + pending" /><Metric label="Link clicks" value={data.clicks} icon={Link2} detail={`${data.conversion} conversion rate`} /></section>;
+}
 function Metric({ label, value, icon: Icon, detail }: { label: string; value: string; icon: typeof Store; detail: string }) { return <Card className="shadow-card"><CardContent className="flex items-center gap-4 p-5"><span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary"><Icon className="h-5 w-5" /></span><div><p className="text-sm text-muted-foreground">{label}</p><p className="mt-0.5 font-display text-2xl font-semibold">{value}</p><p className="text-xs text-muted-foreground">{detail}</p></div></CardContent></Card>; }
-function filterForScope<T extends { store: string }>(rows: T[], scope: Scope) { return scope === "all" ? rows : rows.filter((row) => row.store === scopeName[scope]); }
+function filterForScope<T extends { store?: string; storeSlug?: string }>(rows: T[], scope: Scope, scopeNameMap: Record<string, string>) {
+  return scope === "all" ? rows : rows.filter((row) => (row.storeSlug === scope || row.store === scopeNameMap[scope] || row.store === scope));
+}
 
-export function StorePage() { const [scope, setScope] = useScope(); const data = scopeData[scope]; return <div className="space-y-6"><PageHeader title="My Store" description="Track the storefronts and products you share with your audience." actions={<StoreSelector scope={scope} setScope={setScope} />} /><Metrics scope={scope} /><section className="grid gap-6 xl:grid-cols-3"><Card className="shadow-card xl:col-span-2"><CardHeader className="p-5 pb-3"><CardTitle>{scope === "all" ? "Combined store performance" : `${scopeName[scope]} performance`}</CardTitle><p className="mt-1 text-sm text-muted-foreground">Sales driven by your links in the last 30 days</p></CardHeader><CardContent className="p-5 pt-2"><div className="flex h-48 items-end gap-2">{[36, 48, 42, 66, 58, 75, 69, 88, 76, 100, 84, 92].map((height, index) => <div key={index} className="flex-1 rounded-t-md bg-primary/20" style={{ height: `${height}%` }}><div className="h-full rounded-t-md bg-primary" style={{ height: `${Math.max(20, height - 18)}%` }} /></div>)}</div><div className="mt-3 flex justify-between text-xs text-muted-foreground"><span>Sep 01</span><span>Sep 10</span><span>Sep 20</span><span>Today</span></div></CardContent></Card><Card className="shadow-card"><CardHeader className="p-5 pb-3"><CardTitle>Store mix</CardTitle><p className="mt-1 text-sm text-muted-foreground">Where your sales come from</p></CardHeader><CardContent className="space-y-4 p-5 pt-2">{["Urban Threads", "Glow Theory", "Kind Kitchen"].map((name, index) => <div key={name}><div className="flex justify-between text-sm"><span>{name}</span><span className="font-medium">{[56, 28, 16][index]}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${[56, 28, 16][index]}%` }} /></div></div>)}</CardContent></Card></section><Card className="shadow-card"><CardHeader className="p-5 pb-3"><CardTitle>Top shared products</CardTitle><p className="mt-1 text-sm text-muted-foreground">Products your audience is responding to</p></CardHeader><CardContent className="space-y-3 p-5 pt-1">{filterForScope(products, scope).map((product) => <div key={product.name} className="flex flex-wrap items-center gap-3 rounded-xl border p-3"><span className={`grid h-10 w-10 place-items-center rounded-lg ${product.tone}`}><Package className="h-4 w-4" /></span><div className="min-w-40 flex-1"><p className="font-medium">{product.name}</p><p className="text-xs text-muted-foreground">{product.store} · {product.price}</p></div><p className="text-sm"><b>{product.clicks}</b> <span className="text-muted-foreground">clicks</span></p><p className="text-sm"><b>{product.orders}</b> <span className="text-muted-foreground">orders</span></p><Button size="sm" variant="outline">Share <ExternalLink className="h-3.5 w-3.5" /></Button></div>)}</CardContent></Card></div>; }
+export function StorePage() {
+  const [scope, setScope] = useScope();
+  const storesQuery = useQuery({
+    queryKey: queryKeys.stores.influencerOverview,
+    queryFn: getInfluencerStoresOverview,
+  });
+
+  const data = storesQuery.data;
+  const scopeDataMap = data?.scopeData ?? fallbackScopeData;
+  const scopeNameMap = { ...fallbackScopeName, ...(data?.stores ? Object.fromEntries(data.stores.map((s) => [s.slug || s.id, s.name])) : {}) };
+  const currentScopeTitle = scope === "all" ? "Combined store" : (scopeNameMap[scope] || "Store");
+  const storeMixList = data?.storeMix?.length ? data.storeMix : [
+    { name: "Urban Threads", percentage: 56 },
+    { name: "Glow Theory", percentage: 28 },
+    { name: "Kind Kitchen", percentage: 16 },
+  ];
+  const productList = data?.products?.length ? data.products : fallbackProducts;
+  const filteredProducts = filterForScope(productList, scope, scopeNameMap);
+  const bars = data?.timelineBars ?? [36, 48, 42, 66, 58, 75, 69, 88, 76, 100, 84, 92];
+
+  return <div className="space-y-6">
+    <PageHeader title="My Store" description="Track the storefronts and products you share with your audience." actions={<StoreSelector scope={scope} setScope={setScope} stores={data?.stores} />} />
+    <Metrics scope={scope} scopeData={scopeDataMap} />
+    <section className="grid gap-6 xl:grid-cols-3">
+      <Card className="shadow-card xl:col-span-2">
+        <CardHeader className="p-5 pb-3">
+          <CardTitle>{scope === "all" ? "Combined store performance" : `${currentScopeTitle} performance`}</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">Sales driven by your links in the last 30 days</p>
+        </CardHeader>
+        <CardContent className="p-5 pt-2">
+          <div className="flex h-48 items-end gap-2">
+            {bars.map((height, index) => <div key={index} className="flex-1 rounded-t-md bg-primary/20" style={{ height: `${height}%` }}><div className="h-full rounded-t-md bg-primary" style={{ height: `${Math.max(20, height - 18)}%` }} /></div>)}
+          </div>
+          <div className="mt-3 flex justify-between text-xs text-muted-foreground"><span>Sep 01</span><span>Sep 10</span><span>Sep 20</span><span>Today</span></div>
+        </CardContent>
+      </Card>
+      <Card className="shadow-card">
+        <CardHeader className="p-5 pb-3">
+          <CardTitle>Store mix</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">Where your sales come from</p>
+        </CardHeader>
+        <CardContent className="space-y-4 p-5 pt-2">
+          {storeMixList.map((item) => <div key={item.name}>
+            <div className="flex justify-between text-sm"><span>{item.name}</span><span className="font-medium">{item.percentage}%</span></div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${item.percentage}%` }} /></div>
+          </div>)}
+        </CardContent>
+      </Card>
+    </section>
+    <Card className="shadow-card">
+      <CardHeader className="p-5 pb-3">
+        <CardTitle>Top shared products</CardTitle>
+        <p className="mt-1 text-sm text-muted-foreground">Products your audience is responding to</p>
+      </CardHeader>
+      <CardContent className="space-y-3 p-5 pt-1">
+        {filteredProducts.map((product) => <div key={product.name} className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
+          <span className={`grid h-10 w-10 place-items-center rounded-lg ${product.tone}`}><Package className="h-4 w-4" /></span>
+          <div className="min-w-40 flex-1"><p className="font-medium">{product.name}</p><p className="text-xs text-muted-foreground">{product.store} · {product.price}</p></div>
+          <p className="text-sm"><b>{product.clicks}</b> <span className="text-muted-foreground">clicks</span></p>
+          <p className="text-sm"><b>{product.orders}</b> <span className="text-muted-foreground">orders</span></p>
+          <Button size="sm" variant="outline">Share <ExternalLink className="h-3.5 w-3.5" /></Button>
+        </div>)}
+        {!filteredProducts.length ? <p className="py-6 text-center text-sm text-muted-foreground">No products found for this store.</p> : null}
+      </CardContent>
+    </Card>
+  </div>;
+}
 
 export function ProductsPage() { const [scope, setScope] = useScope(); return <div className="space-y-6"><PageHeader title="Products" description="Discover products from your connected brand stores and share what you love." actions={<StoreSelector scope={scope} setScope={setScope} />} /><Metrics scope={scope} /><Card className="shadow-card"><CardHeader className="p-5 pb-3"><CardTitle>{scope === "all" ? "Featured across your stores" : `${scopeName[scope]} products`}</CardTitle><p className="mt-1 text-sm text-muted-foreground">Your product recommendations and their live performance.</p></CardHeader><CardContent className="grid gap-4 p-5 pt-2 md:grid-cols-2 xl:grid-cols-3">{filterForScope(products, scope).map((product) => <div key={product.name} className="rounded-xl border p-4"><div className={`grid h-32 place-items-center rounded-lg ${product.tone}`}><Package className="h-8 w-8" /></div><p className="mt-4 font-semibold">{product.name}</p><p className="mt-1 text-sm text-muted-foreground">{product.store}</p><div className="mt-3 flex items-center justify-between"><span className="font-semibold">{product.price}</span><Badge variant="secondary">{product.orders} sold</Badge></div><Button className="mt-4 w-full" variant="outline">Get share link <Link2 className="h-4 w-4" /></Button></div>)}</CardContent></Card></div>; }
 
