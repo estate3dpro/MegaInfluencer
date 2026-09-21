@@ -346,14 +346,16 @@ export function AffiliatePage() {
   const [search, setSearch] = useState("");
   const [creatorId, setCreatorId] = useState("");
   const [productId, setProductId] = useState("store");
+  const [productSearch, setProductSearch] = useState("");
   const [commissionRate, setCommissionRate] = useState("10");
   const client = useQueryClient();
   const linksQuery = useQuery({ queryKey: ["store", "affiliate-links", search], queryFn: () => getAffiliateLinks(search ? { search } : undefined) });
   const creatorsQuery = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators, enabled: dialogOpen });
-  const productsQuery = useQuery({ queryKey: ["store", "products", "affiliate-link"], queryFn: () => getStoreProducts(1), enabled: dialogOpen });
+  const productsQuery = useQuery({ queryKey: ["store", "products", "affiliate-link"], queryFn: () => getStoreProducts(1, { all: true }), enabled: dialogOpen });
   const createMutation = useMutation({ mutationFn: createAffiliateLink, onSuccess: () => { client.invalidateQueries({ queryKey: ["store", "affiliate-links"] }); setDialogOpen(false); setCreatorId(""); setProductId("store"); toast.success("Affiliate link created"); }, onError: () => toast.error("Could not create the affiliate link") });
   const statusMutation = useMutation({ mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "PAUSED" }) => updateAffiliateLink(id, { status }), onSuccess: () => client.invalidateQueries({ queryKey: ["store", "affiliate-links"] }), onError: () => toast.error("Could not update link status") });
   const links = linksQuery.data ?? [];
+  const affiliateProducts = (productsQuery.data?.products ?? []).filter((product) => `${product.name} ${product.sku}`.toLowerCase().includes(productSearch.trim().toLowerCase()));
   const totalClicks = links.reduce((sum, link) => sum + link.clicks, 0);
   const totalOrders = links.reduce((sum, link) => sum + link.orders, 0);
   const totalRevenue = links.reduce((sum, link) => sum + link.revenue, 0);
@@ -456,7 +458,7 @@ export function AffiliatePage() {
           <DialogHeader><DialogTitle>Create affiliate link</DialogTitle><DialogDescription>Choose a creator and optionally limit the link to one Shopify product.</DialogDescription></DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2"><Label>Creator</Label><Select value={creatorId} onValueChange={setCreatorId}><SelectTrigger><SelectValue placeholder="Select a creator" /></SelectTrigger><SelectContent>{(creatorsQuery.data ?? []).map((creator) => <SelectItem key={creator.id} value={creator.id}>{creator.displayName}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid gap-2"><Label>Destination</Label><Select value={productId} onValueChange={setProductId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="store">Entire store</SelectItem>{(productsQuery.data?.products ?? []).map((product) => <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Destination</Label><Input placeholder="Search all Shopify products" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} /><Select value={productId} onValueChange={setProductId}><SelectTrigger><SelectValue placeholder={productsQuery.isLoading ? "Loading products…" : "Choose a product or entire store"} /></SelectTrigger><SelectContent><SelectItem value="store">Entire store</SelectItem>{affiliateProducts.map((product) => <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">{productsQuery.isLoading ? "Loading Shopify products…" : `${affiliateProducts.length} of ${productsQuery.data?.pagination.total ?? 0} products`}</p></div>
             <div className="grid gap-2"><Label htmlFor="commission-rate">Commission rate (%)</Label><Input id="commission-rate" type="number" min="0" max="100" value={commissionRate} onChange={(event) => setCommissionRate(event.target.value)} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={submitLink} disabled={createMutation.isPending}>{createMutation.isPending ? "Creating…" : "Create link"}</Button></DialogFooter>

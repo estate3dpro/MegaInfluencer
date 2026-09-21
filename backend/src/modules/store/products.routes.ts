@@ -93,9 +93,11 @@ async function runSync(app: Parameters<FastifyPluginAsync>[0], store: Awaited<Re
 export const storeProductsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/store/products', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const store = await storeFor(app, actor.userId);
-    const requestQuery = request.query as { page?: string; limit?: string }; const page = Math.max(1, Number(requestQuery.page) || 1); const limit = Math.min(100, Math.max(1, Number(requestQuery.limit) || 25)); const where = { organizationId: store.id };
-    const [rows, total] = await Promise.all([app.prisma.shopifyProduct.findMany({ where, orderBy: { syncedAt: 'desc' }, skip: (page - 1) * limit, take: limit }), app.prisma.shopifyProduct.count({ where })]);
-    return { products: rows.map(productSummary), pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) } };
+    const requestQuery = request.query as { page?: string; limit?: string; search?: string; all?: string };
+    const page = Math.max(1, Number(requestQuery.page) || 1); const limit = Math.min(100, Math.max(1, Number(requestQuery.limit) || 25)); const search = requestQuery.search?.trim(); const all = requestQuery.all === 'true';
+    const where: Prisma.ShopifyProductWhereInput = { organizationId: store.id, ...(search ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { handle: { contains: search, mode: 'insensitive' } }, { vendor: { contains: search, mode: 'insensitive' } }, { productType: { contains: search, mode: 'insensitive' } }] } : {}) };
+    const [rows, total] = await Promise.all([app.prisma.shopifyProduct.findMany({ where, orderBy: { title: 'asc' }, ...(all ? {} : { skip: (page - 1) * limit, take: limit }) }), app.prisma.shopifyProduct.count({ where })]);
+    return { products: rows.map(productSummary), pagination: { page, limit: all ? total : limit, total, totalPages: all ? 1 : Math.max(1, Math.ceil(total / limit)) } };
   });
   app.get('/store/products/sync/status', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const store = await storeFor(app, actor.userId);

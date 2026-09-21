@@ -169,7 +169,8 @@ export function ProductsPage() {
   const [search, setSearch] = useState("");
   const [inventoryOnly, setInventoryOnly] = useState(false);
   const [page, setPage] = useState(1);
-  const query = useQuery({ queryKey: ["store", "products", page], queryFn: () => getStoreProducts(page) });
+  const normalizedSearch = search.trim();
+  const query = useQuery({ queryKey: ["store", "products", page, normalizedSearch], queryFn: () => getStoreProducts(page, { search: normalizedSearch || undefined }) });
   const sync = useQuery({ queryKey: ["store", "products", "sync"], queryFn: syncStoreProducts, enabled: false });
   const syncStatus = useQuery({ queryKey: ["store", "products", "sync-status"], queryFn: getStoreProductSyncStatus, refetchInterval: (query) => query.state.data?.sync.status === "RUNNING" ? 2000 : false });
   const isSyncing = sync.isFetching || syncStatus.data?.sync.status === "RUNNING";
@@ -183,12 +184,8 @@ export function ProductsPage() {
     return () => window.clearInterval(interval);
   }, [syncStatus.data?.sync.status]);
   const filteredProducts = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-    return (query.data?.products ?? []).filter((product) => {
-      const matchesSearch = !normalizedSearch || product.name.toLowerCase().includes(normalizedSearch) || product.sku.toLowerCase().includes(normalizedSearch);
-      return matchesSearch && (!inventoryOnly || product.stock > 0);
-    });
-  }, [inventoryOnly, query.data, search]);
+    return (query.data?.products ?? []).filter((product) => !inventoryOnly || product.stock > 0);
+  }, [inventoryOnly, query.data]);
   const lowStock = (query.data?.products ?? []).filter((product) => product.stock > 0 && product.stock < 10).length;
   const outOfStock = (query.data?.products ?? []).filter((product) => product.stock === 0).length;
   const tones = ["bg-coral/15 text-coral", "bg-primary/15 text-primary", "bg-teal/15 text-teal", "bg-indigo/15 text-indigo", "bg-warning/15 text-warning"];
@@ -219,7 +216,7 @@ export function ProductsPage() {
         <div className="min-w-60 flex-1">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-9" placeholder="Search products" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input className="pl-9" placeholder="Search all products" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
           </div>
         </div>
         <Button variant="outline" onClick={() => setInventoryOnly(false)}>All products</Button>
