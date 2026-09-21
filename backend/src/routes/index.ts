@@ -12,6 +12,7 @@ import { influencerInstagramRoutes, instagramAuthRoutes, instagramWebhookRoutes 
 import { instagramAutomationRoutes } from '../modules/instagram-automations/instagram-automations.routes.js';
 import { campaignRoutes } from '../modules/campaigns/campaigns.routes.js';
 import { affiliateLinkRoutes, affiliateShopifyWebhookRoutes, affiliateTrackingRoutes } from '../modules/affiliate-links/affiliate-links.routes.js';
+import { influencerDashboardRoutes } from '../modules/influencer-dashboard/influencer-dashboard.routes.js';
 
 export function registerRoutes(app: FastifyInstance) {
   app.register(healthRoutes);
@@ -27,6 +28,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(instagramAutomationRoutes, { prefix: '/api/v1' });
   app.register(campaignRoutes, { prefix: '/api/v1' });
   app.register(affiliateLinkRoutes, { prefix: '/api/v1' });
+  app.register(influencerDashboardRoutes, { prefix: '/api/v1' });
   app.register(affiliateTrackingRoutes);
   app.register(instagramWebhookRoutes);
   app.register(affiliateShopifyWebhookRoutes);
