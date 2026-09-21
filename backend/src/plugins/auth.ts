@@ -6,7 +6,8 @@ import { config } from '../config/env.js';
 import { UnauthorizedError } from '../shared/errors/app-error.js';
 
 export function registerAuth(app: FastifyInstance) {
-  app.register(fastifyJwt, { secret: config.jwtSecret, sign: { expiresIn: '15m' } });
+  // Access tokens intentionally have no `exp` claim. Account status is still checked on every request.
+  app.register(fastifyJwt, { secret: config.jwtSecret });
   app.decorateRequest('actor');
 
   app.addHook('onRequest', async (request) => {
@@ -29,7 +30,7 @@ export function registerAuth(app: FastifyInstance) {
       request.actor = { userId: user.id, role: user.role };
     } catch (error) {
       if (error instanceof UnauthorizedError) throw error;
-      throw new UnauthorizedError('Your access token is invalid or expired.');
+      throw new UnauthorizedError('Your access token is invalid.');
     }
   });
 }
