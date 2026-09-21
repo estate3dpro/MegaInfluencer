@@ -6,12 +6,39 @@ export interface ProductAssignmentRecord {
   createdAt: Date;
 }
 
+let tableEnsured = false;
+
+export async function ensureProductAssignmentsTable(prisma: any) {
+  if (tableEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ProductInfluencerAssignment" (
+          "id" TEXT NOT NULL,
+          "organizationId" TEXT NOT NULL,
+          "productId" TEXT NOT NULL,
+          "influencerId" TEXT NOT NULL,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "ProductInfluencerAssignment_pkey" PRIMARY KEY ("id")
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS "ProductInfluencerAssignment_productId_influencerId_key" ON "ProductInfluencerAssignment"("productId", "influencerId");
+      CREATE INDEX IF NOT EXISTS "ProductInfluencerAssignment_influencerId_idx" ON "ProductInfluencerAssignment"("influencerId");
+      CREATE INDEX IF NOT EXISTS "ProductInfluencerAssignment_organizationId_idx" ON "ProductInfluencerAssignment"("organizationId");
+      CREATE INDEX IF NOT EXISTS "ProductInfluencerAssignment_productId_idx" ON "ProductInfluencerAssignment"("productId");
+    `);
+    tableEnsured = true;
+  } catch (error) {
+    console.error('Failed to ensure ProductInfluencerAssignment table:', error);
+  }
+}
+
 export async function getAssignedProductIds(
   prisma: any,
   influencerId: string,
   organizationId?: string
 ): Promise<string[]> {
   try {
+    await ensureProductAssignmentsTable(prisma);
+
     if (organizationId) {
       const rows = await prisma.$queryRaw`
         SELECT "productId" FROM "ProductInfluencerAssignment" 
@@ -37,6 +64,8 @@ export async function setCreatorProductAssignments(
   influencerId: string,
   productIds: string[]
 ): Promise<number> {
+  await ensureProductAssignmentsTable(prisma);
+
   await prisma.$executeRaw`
     DELETE FROM "ProductInfluencerAssignment" 
     WHERE "organizationId" = ${organizationId} AND "influencerId" = ${influencerId}
