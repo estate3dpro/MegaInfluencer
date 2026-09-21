@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
+import { getAssignedProductIds } from '../product-assignments/product-assignments.service.js';
 
 const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -44,9 +45,20 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
-    // 2. Fetch products for assigned organizations
+    // 2. Fetch products for assigned organizations strictly checking product assignments
+    const assignedProductIds = await getAssignedProductIds(prisma, actor.userId);
+
+    // If the store admin has not assigned any specific products to this creator yet, return empty list
+    if (assignedProductIds.length === 0) {
+      return {
+        products: [],
+        stores: stores.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug || s.id })),
+      };
+    }
+
     let whereClause: any = {
       organizationId: { in: orgIds },
+      id: { in: assignedProductIds },
     };
 
     if (query.storeSlug && query.storeSlug !== 'all') {

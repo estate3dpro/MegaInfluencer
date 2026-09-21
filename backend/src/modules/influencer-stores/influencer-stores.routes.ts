@@ -191,23 +191,30 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       });
     });
 
-    // 4. Products for assigned stores only
+    // 4. Products strictly assigned to this creator by store admin
     const orgIds = stores.map((s: any) => s.id).filter(Boolean);
     let dbProducts: any[] = [];
     if (orgIds.length > 0) {
-      dbProducts = await prisma.shopifyProduct.findMany({
-        where: { organizationId: { in: orgIds } },
-        include: {
-          organization: { select: { name: true, slug: true } },
-          affiliateLinks: {
-            where: { creatorId: actor.userId },
-            include: {
-              _count: { select: { clicks: true, commissions: true } },
+      const assignedProductIds = await getAssignedProductIds(prisma, actor.userId);
+
+      if (assignedProductIds.length > 0) {
+        dbProducts = await prisma.shopifyProduct.findMany({
+          where: {
+            organizationId: { in: orgIds },
+            id: { in: assignedProductIds },
+          },
+          include: {
+            organization: { select: { name: true, slug: true } },
+            affiliateLinks: {
+              where: { creatorId: actor.userId },
+              include: {
+                _count: { select: { clicks: true, commissions: true } },
+              },
             },
           },
-        },
-        take: 30,
-      });
+          take: 30,
+        });
+      }
     }
 
     const tones = [

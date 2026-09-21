@@ -1,10 +1,21 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Images, Instagram, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { ArrowLeft, Check, Images, Instagram, Package, Plus, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -13,8 +24,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  getAdminInfluencerAssignedProducts,
   getAdminInstagramProfile,
   getInfluencer,
+  updateAdminInfluencerAssignedProducts,
   updateInfluencerStatus,
   type InfluencerStatus,
 } from "../api/influencers.api";
@@ -179,6 +192,10 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
           ]}
         />
       </section>
+
+      {/* Assigned Products Section */}
+      <AssignedProductsSection influencerId={influencerId} displayName={influencer.displayName} />
+
       <Card>
         <CardHeader>
           <CardTitle>Account controls</CardTitle>
@@ -194,6 +211,177 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function AssignedProductsSection({ influencerId, displayName }: { influencerId: string; displayName: string }) {
+  const client = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const productsQuery = useQuery({
+    queryKey: ["admin", "influencer-products", influencerId],
+    queryFn: () => getAdminInfluencerAssignedProducts(influencerId),
+  });
+
+  const mutation = useMutation({
+    mutationFn: (productIds: string[]) => updateAdminInfluencerAssignedProducts(influencerId, productIds),
+    onSuccess: (data) => {
+      client.invalidateQueries({ queryKey: ["admin", "influencer-products", influencerId] });
+      setDialogOpen(false);
+      toast.success(`Assigned ${data.assignedCount} products to ${displayName}`);
+    },
+    onError: () => toast.error("Failed to update product assignments"),
+  });
+
+  const stores = productsQuery.data?.stores ?? [];
+  const allProducts = stores.flatMap((s) => s.products.map((p) => ({ ...p, storeName: s.name })));
+  const assignedProducts = allProducts.filter((p) => p.isAssigned);
+
+  const openModal = () => {
+    setSelectedIds(assignedProducts.map((p) => p.id));
+    setDialogOpen(true);
+  };
+
+  const toggle = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const filtered = allProducts.filter((p) => p.title.toLowerCase().includes(search.trim().toLowerCase()));
+
+  return (
+    <Card className="shadow-none">
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" /> Assigned Products
+          </CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {assignedProducts.length > 0
+              ? `${assignedProducts.length} specific products assigned to this influencer.`
+              : "No restricted assignments. All products from assigned stores are visible."}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={openModal}>
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Manage Assignments
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {assignedProducts.length > 0 ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {assignedProducts.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 rounded-lg border p-3">
+                <div className="grid h-12 w-12 place-items-center overflow-hidden rounded bg-muted shrink-0">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <Package className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{p.title}</p>
+                  <p className="text-xs text-muted-foreground">{p.storeName} · {p.price ? (p.price.startsWith("₹") ? p.price : `₹${p.price}`) : "—"}</p>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  onClick={() => {
+                    const newIds = assignedProducts.filter((x) => x.id !== p.id).map((x) => x.id);
+                    mutation.mutate(newIds);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed p-6 text-center">
+            <p className="text-sm font-medium">No restricted product assignments</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              By default, the influencer can see all products from their assigned stores. Click &quot;Manage Assignments&quot; to limit visibility to specific products.
+            </p>
+          </div>
+        )}
+
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Assign Products to {displayName}</DialogTitle>
+              <DialogDescription>
+                Select which products from assigned stores should appear on this creator&apos;s panel.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-2">
+              <Input
+                placeholder="Search products by title..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 border rounded-lg p-2 min-h-60 max-h-96">
+              {filtered.map((p) => {
+                const isChecked = selectedIds.includes(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => toggle(p.id)}
+                    className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer ${
+                      isChecked ? "bg-primary/10 border-primary" : "hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`grid h-5 w-5 place-items-center rounded border ${
+                          isChecked ? "bg-primary text-primary-foreground border-primary" : "border-muted-foreground"
+                        }`}
+                      >
+                        {isChecked && <Check className="h-3.5 w-3.5" />}
+                      </div>
+                      <div className="grid h-10 w-10 place-items-center overflow-hidden rounded bg-muted shrink-0">
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium leading-none">{p.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {p.storeName} · {p.price ? (p.price.startsWith("₹") ? p.price : `₹${p.price}`) : "—"}
+                        </p>
+                      </div>
+                    </div>
+                    {isChecked && <Badge variant="secondary">Selected</Badge>}
+                  </div>
+                );
+              })}
+              {!filtered.length && (
+                <p className="py-10 text-center text-sm text-muted-foreground">No products found.</p>
+              )}
+            </div>
+
+            <DialogFooter className="flex items-center justify-between pt-4 border-t">
+              <p className="text-xs text-muted-foreground">
+                <b>{selectedIds.length}</b> products selected
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={() => mutation.mutate(selectedIds)} disabled={mutation.isPending}>
+                  {mutation.isPending ? "Saving..." : "Save Assignments"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }
 function Metric({ label, value }: { label: string; value: string }) {

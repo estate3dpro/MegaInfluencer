@@ -97,6 +97,7 @@ model User {
   status                UserStatus             @default(ACTIVE)
   ownedOrganizations    Organization[]         @relation("OrganizationOwner")
   storeAssignments      StoreInfluencerAssignment[] @relation("AssignedInfluencer")
+  productAssignments    ProductInfluencerAssignment[] @relation("ProductAssignedInfluencer")
   instagramConnection   InstagramConnection?
   instagramAutomations  InstagramAutomation[]
   instagramOAuthStates  InstagramOAuthState[]  @relation("InstagramOAuthStateInfluencer")
@@ -208,6 +209,7 @@ model Organization {
   affiliateClicks AffiliateLinkClick[]
   affiliateCommissions AffiliateCommission[]
   assignments StoreInfluencerAssignment[]
+  productAssignments ProductInfluencerAssignment[]
   campaigns Campaign[]
   ownerId   String
   owner     User               @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
@@ -315,6 +317,7 @@ model ShopifyProduct {
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   affiliateLinks AffiliateLink[]
+  productAssignments ProductInfluencerAssignment[]
 
   @@unique([organizationId, shopifyId])
   @@index([organizationId, syncedAt])
@@ -412,4 +415,20 @@ model StoreInfluencerAssignment {
 
   @@unique([organizationId, influencerId])
   @@index([influencerId])
+}
+
+model ProductInfluencerAssignment {
+  id             String         @id @default(cuid())
+  organizationId String
+  productId      String
+  influencerId   String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        ShopifyProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  influencer     User           @relation("ProductAssignedInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
+  createdAt      DateTime       @default(now())
+
+  @@unique([productId, influencerId])
+  @@index([influencerId])
+  @@index([organizationId])
+  @@index([productId])
 }

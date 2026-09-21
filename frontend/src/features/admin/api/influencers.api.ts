@@ -78,3 +78,34 @@ export async function getAdminInstagramProfile(id: string) {
   );
   return data;
 }
+
+export type AdminStoreProducts = {
+  id: string;
+  name: string;
+  slug: string;
+  products: Array<{
+    id: string;
+    title: string;
+    price: string | null;
+    imageUrl: string | null;
+    handle: string | null;
+    vendor: string | null;
+    isAssigned: boolean;
+  }>;
+};
+
+export async function getAdminInfluencerAssignedProducts(id: string) {
+  const { data } = await apiClient.get<{ stores: AdminStoreProducts[]; assignedCount: number }>(
+    `/admin/influencers/${id}/products`,
+  );
+  return data;
+}
+
+export async function updateAdminInfluencerAssignedProducts(id: string, productIds: string[], storeId?: string) {
+  const { data } = await apiClient.put<{ ok: boolean; assignedCount: number }>(
+    `/admin/influencers/${id}/products`,
+    { productIds, storeId },
+  );
+  return data;
+}
+
