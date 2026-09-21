@@ -16,4 +16,7 @@ export const queryKeys = {
   stores: {
     influencerOverview: ["stores", "influencer-overview"] as const,
   },
+  products: {
+    influencer: (scope: string = "all", search: string = "") => ["products", "influencer", scope, search] as const,
+  },
 } as const;

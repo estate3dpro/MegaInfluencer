@@ -115,7 +115,63 @@ export function StorePage() {
   </div>;
 }
 
-export function ProductsPage() { const [scope, setScope] = useScope(); return <div className="space-y-6"><PageHeader title="Products" description="Discover products from your connected brand stores and share what you love." actions={<StoreSelector scope={scope} setScope={setScope} />} /><Metrics scope={scope} /><Card className="shadow-card"><CardHeader className="p-5 pb-3"><CardTitle>{scope === "all" ? "Featured across your stores" : `${scopeName[scope]} products`}</CardTitle><p className="mt-1 text-sm text-muted-foreground">Your product recommendations and their live performance.</p></CardHeader><CardContent className="grid gap-4 p-5 pt-2 md:grid-cols-2 xl:grid-cols-3">{filterForScope(products, scope).map((product) => <div key={product.name} className="rounded-xl border p-4"><div className={`grid h-32 place-items-center rounded-lg ${product.tone}`}><Package className="h-8 w-8" /></div><p className="mt-4 font-semibold">{product.name}</p><p className="mt-1 text-sm text-muted-foreground">{product.store}</p><div className="mt-3 flex items-center justify-between"><span className="font-semibold">{product.price}</span><Badge variant="secondary">{product.orders} sold</Badge></div><Button className="mt-4 w-full" variant="outline">Get share link <Link2 className="h-4 w-4" /></Button></div>)}</CardContent></Card></div>; }
+import { getInfluencerProducts } from "../api/products.api";
+
+export function ProductsPage() {
+  const [scope, setScope] = useScope();
+  const storesQuery = useQuery({
+    queryKey: queryKeys.stores.influencerOverview,
+    queryFn: getInfluencerStoresOverview,
+  });
+  const productsQuery = useQuery({
+    queryKey: queryKeys.products.influencer(scope),
+    queryFn: () => getInfluencerProducts(scope),
+  });
+
+  const storesData = storesQuery.data;
+  const scopeDataMap = storesData?.scopeData ?? fallbackScopeData;
+  const scopeNameMap = { ...fallbackScopeName, ...(storesData?.stores ? Object.fromEntries(storesData.stores.map((s) => [s.slug || s.id, s.name])) : {}) };
+  const currentScopeTitle = scope === "all" ? "Featured across your stores" : `${scopeNameMap[scope] || "Store"} products`;
+
+  const productList = productsQuery.data?.products?.length
+    ? productsQuery.data.products
+    : fallbackProducts;
+
+  return <div className="space-y-6">
+    <PageHeader title="Products" description="Discover products from your connected brand stores and share what you love." actions={<StoreSelector scope={scope} setScope={setScope} stores={storesData?.stores} />} />
+    <Metrics scope={scope} scopeData={scopeDataMap} />
+    <Card className="shadow-card">
+      <CardHeader className="p-5 pb-3">
+        <CardTitle>{currentScopeTitle}</CardTitle>
+        <p className="mt-1 text-sm text-muted-foreground">Your product recommendations and their live performance.</p>
+      </CardHeader>
+      <CardContent className="grid gap-4 p-5 pt-2 md:grid-cols-2 xl:grid-cols-3">
+        {productList.map((product) => <div key={product.name} className="rounded-xl border p-4">
+          <div className={`grid h-32 place-items-center rounded-lg ${product.tone}`}>
+            {product.imageUrl ? <img src={product.imageUrl} alt="" className="h-full w-full rounded-lg object-cover" /> : <Package className="h-8 w-8" />}
+          </div>
+          <p className="mt-4 font-semibold">{product.name}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{product.store}</p>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="font-semibold">{product.price}</span>
+            <Badge variant="secondary">{product.orders} sold</Badge>
+          </div>
+          <Button
+            className="mt-4 w-full"
+            variant="outline"
+            onClick={() => {
+              const url = `${window.location.origin}/r/${product.affiliateSlug || 'store'}`;
+              navigator.clipboard?.writeText(url);
+            }}
+          >
+            Get share link <Link2 className="h-4 w-4" />
+          </Button>
+        </div>)}
+        {!productList.length ? <p className="col-span-full py-10 text-center text-sm text-muted-foreground">No products available in this store.</p> : null}
+      </CardContent>
+    </Card>
+  </div>;
+}
 
 export function LinksPage() { const [scope, setScope] = useScope(); const data = scopeData[scope]; const links = filterForScope(products, scope); return <div className="space-y-6"><PageHeader title="Links" description="Create and manage trackable links for your storefront and content." actions={<StoreSelector scope={scope} setScope={setScope} />} /><Metrics scope={scope} /><Card className="shadow-card"><CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-3"><div><CardTitle>My tracked links</CardTitle><p className="mt-1 text-sm text-muted-foreground">{scope === "all" ? "All stores combined" : `Links for ${scopeName[scope]}`}</p></div><Button><Link2 className="h-4 w-4" /> Create link</Button></CardHeader><CardContent className="space-y-3 p-5 pt-1">{links.map((product) => <div key={product.name} className="flex flex-wrap items-center gap-3 rounded-xl border p-4"><span className={`grid h-10 w-10 place-items-center rounded-lg ${product.tone}`}><Link2 className="h-4 w-4" /></span><div className="min-w-52 flex-1"><p className="font-medium">{product.name}</p><p className="mt-1 truncate text-xs text-muted-foreground">mgi.to/meerastyles/{product.name.toLowerCase().replaceAll(" ", "-")}</p></div><div className="text-sm"><p className="font-semibold">{product.clicks}</p><p className="text-xs text-muted-foreground">clicks</p></div><div className="text-sm"><p className="font-semibold">{product.orders}</p><p className="text-xs text-muted-foreground">orders</p></div><Button variant="ghost" size="icon"><Copy className="h-4 w-4" /></Button></div>)}</CardContent></Card></div>; }
 
