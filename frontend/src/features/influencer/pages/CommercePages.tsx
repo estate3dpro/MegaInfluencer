@@ -177,9 +177,7 @@ export function ProductsPage() {
   const scopeNameMap = { ...fallbackScopeName, ...(storesData?.stores ? Object.fromEntries(storesData.stores.map((s) => [s.slug || s.id, s.name])) : {}) };
   const currentScopeTitle = scope === "all" ? "Featured across your stores" : `${scopeNameMap[scope] || "Store"} products`;
 
-  const productList = productsQuery.data?.products?.length
-    ? productsQuery.data.products
-    : fallbackProducts;
+  const productList = productsQuery.data?.products ?? [];
 
   return <div className="space-y-6">
     <PageHeader title="Products" description="Discover products from your connected brand stores and share what you love." actions={<StoreSelector scope={scope} setScope={setScope} stores={storesData?.stores} />} />
@@ -187,31 +185,70 @@ export function ProductsPage() {
     <Card className="shadow-card">
       <CardHeader className="p-5 pb-3">
         <CardTitle>{currentScopeTitle}</CardTitle>
-        <p className="mt-1 text-sm text-muted-foreground">Your product recommendations and their live performance.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Your assigned product recommendations and live attribution.</p>
       </CardHeader>
-      <CardContent className="grid gap-4 p-5 pt-2 md:grid-cols-2 xl:grid-cols-3">
-        {productList.map((product) => <div key={product.name} className="rounded-xl border p-4">
-          <div className={`grid h-32 place-items-center rounded-lg ${product.tone}`}>
-            {product.imageUrl ? <img src={product.imageUrl} alt="" className="h-full w-full rounded-lg object-cover" /> : <Package className="h-8 w-8" />}
+      <CardContent className="p-5 pt-2">
+        {productList.length > 0 ? (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {productList.map((product) => (
+              <div
+                key={product.id || product.name}
+                className="group flex flex-col justify-between overflow-hidden rounded-2xl border bg-card p-4 transition-all hover:shadow-card"
+              >
+                <div>
+                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-muted/40">
+                    {product.imageUrl ? (
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className={`grid h-full w-full place-items-center ${product.tone || "bg-primary/10 text-primary"}`}>
+                        <Package className="h-10 w-10 opacity-70" />
+                      </div>
+                    )}
+                    <div className="absolute right-2.5 top-2.5">
+                      <Badge variant="secondary" className="bg-background/90 backdrop-blur font-medium shadow-sm">
+                        {product.orders} sold
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">{product.store}</p>
+                    <h3 className="font-semibold text-base leading-snug line-clamp-2 text-foreground" title={product.name}>
+                      {product.name}
+                    </h3>
+                    <p className="mt-2 font-display text-lg font-bold text-primary">
+                      {product.price}
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  className="mt-5 w-full"
+                  variant="outline"
+                  onClick={() => {
+                    const url = `${window.location.origin}/r/${product.affiliateSlug || "store"}`;
+                    navigator.clipboard?.writeText(url);
+                    toast.success("Share link copied to clipboard!");
+                  }}
+                >
+                  Get share link <Link2 className="ml-1.5 h-4 w-4" />
+                </Button>
+              </div>
+            ))}
           </div>
-          <p className="mt-4 font-semibold">{product.name}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{product.store}</p>
-          <div className="mt-3 flex items-center justify-between">
-            <span className="font-semibold">{product.price}</span>
-            <Badge variant="secondary">{product.orders} sold</Badge>
+        ) : (
+          <div className="col-span-full rounded-2xl border border-dashed p-12 text-center">
+            <Package className="mx-auto h-10 w-10 text-muted-foreground opacity-60" />
+            <p className="mt-3 text-base font-semibold">No assigned products available</p>
+            <p className="mt-1 text-sm text-muted-foreground max-w-md mx-auto">
+              Your store admin has not assigned any specific products to your account yet. Once products are assigned, they will appear here.
+            </p>
           </div>
-          <Button
-            className="mt-4 w-full"
-            variant="outline"
-            onClick={() => {
-              const url = `${window.location.origin}/r/${product.affiliateSlug || 'store'}`;
-              navigator.clipboard?.writeText(url);
-            }}
-          >
-            Get share link <Link2 className="h-4 w-4" />
-          </Button>
-        </div>)}
-        {!productList.length ? <p className="col-span-full py-10 text-center text-sm text-muted-foreground">No products available in this store.</p> : null}
+        )}
       </CardContent>
     </Card>
   </div>;
