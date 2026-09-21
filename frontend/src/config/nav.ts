@@ -73,7 +73,6 @@ export const influencerNav: NavGroup[] = [
     label: "Overview",
     items: [
       { title: "Dashboard", url: "/influencer/dashboard", icon: LayoutDashboard },
-      { title: "Analytics", url: "/influencer/analytics", icon: BarChart3 },
       { title: "Profile", url: "/influencer/profile", icon: UserRound },
     ],
   },

@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 
+const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function formatCurrency(amount: number): string {
+  return inrFormat.format(amount);
+}
+
 export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
 
@@ -8,7 +14,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
     const actor = requireRole(request, ['INFLUENCER']);
     const query = request.query as { search?: string; storeSlug?: string };
 
-    // 1. Fetch assigned organizations
+    // 1. Fetch assigned organizations only
     const assignments = await prisma.storeInfluencerAssignment.findMany({
       where: { influencerId: actor.userId },
       include: {
@@ -16,18 +22,29 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    let stores = assignments.map((a: any) => a.organization);
+    let stores = assignments.map((a: any) => a.organization).filter(Boolean);
+
     if (!stores.length) {
-      stores = await prisma.organization.findMany({
-        where: { status: 'ACTIVE' },
-        select: { id: true, name: true, slug: true },
-        take: 3,
+      const creatorLinks = await prisma.affiliateLink.findMany({
+        where: { creatorId: actor.userId },
+        select: {
+          organization: { select: { id: true, name: true, slug: true } },
+        },
+        distinct: ['organizationId'],
       });
+      stores = creatorLinks.map((l: any) => l.organization).filter(Boolean);
     }
 
-    const orgIds = stores.map((s: any) => s.id);
+    const orgIds = stores.map((s: any) => s.id).filter(Boolean);
 
-    // 2. Fetch products
+    if (orgIds.length === 0) {
+      return {
+        products: [],
+        stores: [],
+      };
+    }
+
+    // 2. Fetch products for assigned organizations
     let whereClause: any = {
       organizationId: { in: orgIds },
     };
@@ -47,10 +64,15 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       where: whereClause,
       include: {
         organization: { select: { name: true, slug: true } },
-        affiliateLinks: { where: { creatorId: actor.userId }, select: { slug: true } },
+        affiliateLinks: {
+          where: { creatorId: actor.userId },
+          include: {
+            _count: { select: { clicks: true, commissions: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: 50,
     });
 
     const tones = [
@@ -62,26 +84,24 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       'bg-emerald-100 text-emerald-600',
     ];
 
-    let products = dbProducts.map((p: any, idx: number) => ({
-      id: p.id,
-      name: p.title,
-      store: p.organization?.name || 'Brand Store',
-      storeSlug: p.organization?.slug || 'store',
-      price: p.price ? (p.price.startsWith('₹') ? p.price : `₹${p.price}`) : '₹1,999',
-      orders: Math.max(1, (idx * 3 + 7) % 25),
-      tone: tones[idx % tones.length],
-      imageUrl: p.imageUrl ?? null,
-      handle: p.handle ?? null,
-      affiliateSlug: p.affiliateLinks?.[0]?.slug ?? null,
-    }));
+    const products = dbProducts.map((p: any, idx: number) => {
+      const userLink = p.affiliateLinks?.[0];
+      const ordersCount = userLink?._count?.commissions ?? 0;
+      const numPrice = Number(p.price || 0);
 
-    if (!products.length && (!query.search || query.search === '')) {
-      products = [
-        { id: '1', name: 'Festive Silk Co-ord Set', store: 'Urban Threads', storeSlug: 'urban-threads', price: '₹2,499', orders: 18, tone: 'bg-violet-100 text-violet-600', imageUrl: null, handle: 'silk-coord-set', affiliateSlug: 'silk-coord' },
-        { id: '2', name: 'Vitamin C Glow Serum', store: 'Glow Theory', storeSlug: 'glow-theory', price: '₹1,299', orders: 12, tone: 'bg-rose-100 text-rose-600', imageUrl: null, handle: 'vitamin-c-serum', affiliateSlug: 'glow-serum' },
-        { id: '3', name: 'Protein Breakfast Bundle', store: 'Kind Kitchen', storeSlug: 'kind-kitchen', price: '₹899', orders: 9, tone: 'bg-teal-100 text-teal-600', imageUrl: null, handle: 'breakfast-bundle', affiliateSlug: 'protein-bundle' },
-      ];
-    }
+      return {
+        id: p.id,
+        name: p.title,
+        store: p.organization?.name || 'Brand Store',
+        storeSlug: p.organization?.slug || 'store',
+        price: numPrice > 0 ? formatCurrency(numPrice) : (p.price ? `₹${p.price}` : '₹0.00'),
+        orders: ordersCount,
+        tone: tones[idx % tones.length],
+        imageUrl: p.imageUrl ?? null,
+        handle: p.handle ?? null,
+        affiliateSlug: userLink?.slug ?? null,
+      };
+    });
 
     return {
       products,

@@ -1,5 +1,15 @@
 import { apiClient } from "@/lib/api/client";
 
+export type TimelinePoint = {
+  label: string;
+  date: string;
+  sales: number;
+  salesFormatted: string;
+  orders: number;
+  clicks: number;
+  height: number;
+};
+
 export type InfluencerStoresOverview = {
   stores: Array<{
     id: string;
@@ -15,6 +25,7 @@ export type InfluencerStoresOverview = {
       clicks: string;
       conversion: string;
       bars?: number[];
+      timeline?: TimelinePoint[];
     }
   >;
   storeMix: Array<{
@@ -22,6 +33,7 @@ export type InfluencerStoresOverview = {
     percentage: number;
   }>;
   products: Array<{
+    id?: string;
     name: string;
     store: string;
     storeSlug: string;
@@ -29,9 +41,12 @@ export type InfluencerStoresOverview = {
     clicks: number;
     orders: number;
     tone: string;
+    imageUrl?: string | null;
+    affiliateSlug?: string | null;
   }>;
   timelineBars: number[];
   timelineLabels?: string[];
+  timeline?: TimelinePoint[];
 };
 
 export async function getInfluencerStoresOverview() {

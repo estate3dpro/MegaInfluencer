@@ -14,8 +14,8 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
   app.get('/influencer/stores/overview', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
 
-    // 1. Fetch assigned organizations or active fallback organizations
-    let assignments = await prisma.storeInfluencerAssignment.findMany({
+    // 1. Fetch only assigned organizations for this influencer
+    const assignments = await prisma.storeInfluencerAssignment.findMany({
       where: { influencerId: actor.userId },
       include: {
         organization: {
@@ -24,21 +24,18 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    let stores = assignments.map((a: any) => a.organization);
-    if (!stores.length) {
-      stores = await prisma.organization.findMany({
-        where: { status: 'ACTIVE' },
-        select: { id: true, name: true, slug: true, shopDomain: true, logoUrl: true },
-        take: 3,
-      });
-    }
+    let stores = assignments.map((a: any) => a.organization).filter(Boolean);
 
+    // If no direct assignment yet, check if creator has affiliate links with organizations
     if (!stores.length) {
-      stores = [
-        { id: 'urban', name: 'Urban Threads', slug: 'urban-threads', shopDomain: 'urbanthreads.in' },
-        { id: 'glow', name: 'Glow Theory', slug: 'glow-theory', shopDomain: 'glowtheory.in' },
-        { id: 'kind', name: 'Kind Kitchen', slug: 'kind-kitchen', shopDomain: 'kindkitchen.in' },
-      ];
+      const creatorLinks = await prisma.affiliateLink.findMany({
+        where: { creatorId: actor.userId },
+        select: {
+          organization: { select: { id: true, name: true, slug: true, shopDomain: true, logoUrl: true } },
+        },
+        distinct: ['organizationId'],
+      });
+      stores = creatorLinks.map((l: any) => l.organization).filter(Boolean);
     }
 
     // 2. Fetch commissions & clicks
@@ -56,46 +53,86 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const bucketMs = (30 * 24 * 60 * 60 * 1000) / 12;
 
-    function computeBars(scopeComms: any[], scopeClicks: any[]): number[] {
-      const buckets = new Array(12).fill(0);
+    function buildTimeline(scopeComms: any[], scopeClicks: any[]) {
+      const intervals = Array.from({ length: 12 }, (_, i) => {
+        const stepStart = new Date(thirtyDaysAgo.getTime() + i * bucketMs);
+        const stepEnd = new Date(thirtyDaysAgo.getTime() + (i + 1) * bucketMs);
+        const label = i === 11 ? 'Today' : stepStart.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        return {
+          start: stepStart.getTime(),
+          end: stepEnd.getTime(),
+          label,
+          date: stepStart.toISOString().split('T')[0],
+          sales: 0,
+          orders: 0,
+          clicks: 0,
+        };
+      });
+
       for (const c of scopeComms) {
         const cTime = new Date(c.createdAt).getTime();
         if (cTime >= thirtyDaysAgo.getTime()) {
           const idx = Math.min(11, Math.max(0, Math.floor((cTime - thirtyDaysAgo.getTime()) / bucketMs)));
-          buckets[idx] += Number(c.orderAmount || c.amount || 0);
+          intervals[idx].sales += Number(c.orderAmount || 0);
+          intervals[idx].orders += 1;
         }
       }
 
-      const maxVal = Math.max(...buckets);
-      if (maxVal > 0) {
-        return buckets.map((v) => (v === 0 ? 0 : Math.max(20, Math.round((v / maxVal) * 100))));
-      }
-
-      const clickBuckets = new Array(12).fill(0);
       for (const cl of scopeClicks) {
         const clTime = new Date(cl.createdAt).getTime();
         if (clTime >= thirtyDaysAgo.getTime()) {
           const idx = Math.min(11, Math.max(0, Math.floor((clTime - thirtyDaysAgo.getTime()) / bucketMs)));
-          clickBuckets[idx] += 1;
+          intervals[idx].clicks += 1;
         }
       }
-      const maxClicks = Math.max(...clickBuckets);
-      if (maxClicks > 0) {
-        return clickBuckets.map((v) => (v === 0 ? 0 : Math.max(20, Math.round((v / maxClicks) * 100))));
-      }
 
-      return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      const maxSales = Math.max(...intervals.map((item) => item.sales));
+      const maxClicks = Math.max(...intervals.map((item) => item.clicks));
+
+      return intervals.map((item) => {
+        let height = 0;
+        if (maxSales > 0) {
+          height = item.sales === 0 ? 0 : Math.max(20, Math.round((item.sales / maxSales) * 100));
+        } else if (maxClicks > 0) {
+          height = item.clicks === 0 ? 0 : Math.max(20, Math.round((item.clicks / maxClicks) * 100));
+        }
+        return {
+          label: item.label,
+          date: item.date,
+          sales: Number(item.sales.toFixed(2)),
+          salesFormatted: formatCurrency(item.sales),
+          orders: item.orders,
+          clicks: item.clicks,
+          height,
+        };
+      });
     }
 
-    const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-    const d20 = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
-    const d10 = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+    const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' });
+    const d20 = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' });
+    const d10 = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN', { month: 'short', day: '2-digit' });
     const timelineLabels = [d30, d20, d10, 'Today'];
 
     // 3. Compute scopeData
     const scopeData: Record<
       string,
-      { sales: string; orders: string; earnings: string; clicks: string; conversion: string; bars: number[] }
+      {
+        sales: string;
+        orders: string;
+        earnings: string;
+        clicks: string;
+        conversion: string;
+        bars: number[];
+        timeline: Array<{
+          label: string;
+          date: string;
+          sales: number;
+          salesFormatted: string;
+          orders: number;
+          clicks: number;
+          height: number;
+        }>;
+      }
     > = {};
 
     const totalSalesAll = commissions.reduce((sum: number, c: any) => sum + Number(c.orderAmount), 0);
@@ -103,7 +140,8 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
     const totalOrdersAll = commissions.length;
     const totalClicksAll = clicks.length;
     const convAll = totalClicksAll > 0 ? ((totalOrdersAll / totalClicksAll) * 100).toFixed(1) : '0.0';
-    const allBars = computeBars(commissions, clicks);
+    const allTimeline = buildTimeline(commissions, clicks);
+    const allBars = allTimeline.map((t) => t.height);
 
     scopeData['all'] = {
       sales: formatCurrency(totalSalesAll),
@@ -112,6 +150,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       clicks: numberStandard.format(totalClicksAll),
       conversion: `${convAll}%`,
       bars: allBars,
+      timeline: allTimeline,
     };
 
     const storeMix: Array<{ name: string; percentage: number }> = [];
@@ -124,7 +163,8 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       const sOrders = storeComms.length;
       const sClicks = storeClicks.length;
       const sConv = sClicks > 0 ? ((sOrders / sClicks) * 100).toFixed(1) : '0.0';
-      const storeBars = computeBars(storeComms, storeClicks);
+      const storeTimeline = buildTimeline(storeComms, storeClicks);
+      const storeBars = storeTimeline.map((t) => t.height);
 
       scopeData[store.slug || store.id] = {
         sales: formatCurrency(sSales),
@@ -133,6 +173,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
         clicks: numberStandard.format(sClicks),
         conversion: `${sConv}%`,
         bars: storeBars,
+        timeline: storeTimeline,
       };
 
       let percent = 0;
@@ -150,21 +191,24 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       });
     });
 
-    // 4. Products for top shared list with real link clicks and commissions
+    // 4. Products for assigned stores only
     const orgIds = stores.map((s: any) => s.id).filter(Boolean);
-    const dbProducts = await prisma.shopifyProduct.findMany({
-      where: { organizationId: { in: orgIds } },
-      include: {
-        organization: { select: { name: true, slug: true } },
-        affiliateLinks: {
-          where: { creatorId: actor.userId },
-          include: {
-            _count: { select: { clicks: true, commissions: true } },
+    let dbProducts: any[] = [];
+    if (orgIds.length > 0) {
+      dbProducts = await prisma.shopifyProduct.findMany({
+        where: { organizationId: { in: orgIds } },
+        include: {
+          organization: { select: { name: true, slug: true } },
+          affiliateLinks: {
+            where: { creatorId: actor.userId },
+            include: {
+              _count: { select: { clicks: true, commissions: true } },
+            },
           },
         },
-      },
-      take: 20,
-    });
+        take: 30,
+      });
+    }
 
     const tones = [
       'bg-violet-100 text-violet-600',
@@ -172,35 +216,26 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       'bg-teal-100 text-teal-600',
     ];
 
-    let products: Array<{
-      name: string;
-      store: string;
-      storeSlug: string;
-      price: string;
-      clicks: number;
-      orders: number;
-      tone: string;
-    }> = [];
-
-    if (dbProducts.length) {
-      products = dbProducts
-        .map((p: any, idx: number) => {
-          const userLink = p.affiliateLinks?.[0];
-          const pClicks = userLink?._count?.clicks ?? 0;
-          const pOrders = userLink?._count?.commissions ?? 0;
-          const numPrice = Number(p.price || 0);
-          return {
-            name: p.title,
-            store: p.organization?.name || 'Brand Store',
-            storeSlug: p.organization?.slug || 'store',
-            price: numPrice > 0 ? formatCurrency(numPrice) : (p.price ? `₹${p.price}` : '₹0.00'),
-            clicks: pClicks,
-            orders: pOrders,
-            tone: tones[idx % tones.length],
-          };
-        })
-        .sort((a: any, b: any) => (b.orders - a.orders) || (b.clicks - a.clicks));
-    }
+    const products = dbProducts
+      .map((p: any, idx: number) => {
+        const userLink = p.affiliateLinks?.[0];
+        const pClicks = userLink?._count?.clicks ?? 0;
+        const pOrders = userLink?._count?.commissions ?? 0;
+        const numPrice = Number(p.price || 0);
+        return {
+          id: p.id,
+          name: p.title,
+          store: p.organization?.name || 'Brand Store',
+          storeSlug: p.organization?.slug || 'store',
+          price: numPrice > 0 ? formatCurrency(numPrice) : (p.price ? `₹${p.price}` : '₹0.00'),
+          clicks: pClicks,
+          orders: pOrders,
+          tone: tones[idx % tones.length],
+          imageUrl: p.imageUrl ?? null,
+          affiliateSlug: userLink?.slug ?? null,
+        };
+      })
+      .sort((a: any, b: any) => (b.orders - a.orders) || (b.clicks - a.clicks));
 
     return {
       stores: stores.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug || s.id })),
@@ -209,6 +244,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       products,
       timelineBars: allBars,
       timelineLabels,
+      timeline: allTimeline,
     };
   });
 };
