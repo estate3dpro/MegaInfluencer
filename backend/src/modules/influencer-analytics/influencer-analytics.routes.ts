@@ -4,7 +4,7 @@ import { getInstagramProfile, listInstagramMedia } from '../instagram/instagram.
 
 const numberCompact = new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 });
 const numberStandard = new Intl.NumberFormat('en-IN');
-const inrCurrency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const inrCurrency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function formatChange(current: number, previous: number): string {
   if (!previous) return current > 0 ? '+100%' : '+0%';
@@ -13,7 +13,7 @@ function formatChange(current: number, previous: number): string {
   return `${sign}${diff.toFixed(1)}%`;
 }
 
-function formatInrLakhs(amount: number): string {
+function formatInr(amount: number): string {
   if (amount >= 100000) {
     const lakhs = amount / 100000;
     return `₹${lakhs.toFixed(2).replace(/\.00$/, '')}L`;
@@ -87,17 +87,17 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       // Media not available
     }
 
-    const followersBase = igProfile?.followers_count ?? 84240;
-    const reachBase = Math.round(followersBase * 1.5 + currentClicks * 12);
-    const engagementBase = Math.round(followersBase * 0.086 + ordersCountCurrent * 45);
-    const profileVisitsBase = Math.round(reachBase * 0.071 + currentClicks * 2);
+    const followersBase = igProfile?.followers_count ?? 2;
+    const reachBase = Math.max(currentClicks * 6, Math.round(followersBase * 1.5 + currentClicks * 12));
+    const engagementBase = Math.max(ordersCountCurrent * 2, Math.round(followersBase * 0.086 + ordersCountCurrent * 45));
+    const profileVisitsBase = Math.max(currentClicks * 2, Math.round(reachBase * 0.071 + currentClicks * 2));
 
     // 3. Overview Cards
     const overview = [
       {
         label: 'Accounts reached',
-        value: numberCompact.format(reachBase),
-        change: '+22.6%',
+        value: reachBase >= 1000 ? numberCompact.format(reachBase) : numberStandard.format(reachBase),
+        change: formatChange(reachBase, followersBase),
       },
       {
         label: 'Content engagement',
@@ -111,8 +111,8 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       },
       {
         label: 'Link clicks',
-        value: numberStandard.format(currentClicks || 3842),
-        change: formatChange(currentClicks || 3842, previousClicks || 3518),
+        value: numberStandard.format(currentClicks),
+        change: formatChange(currentClicks, previousClicks),
       },
     ];
 
@@ -123,9 +123,12 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     for (let i = 0; i < trendSteps; i++) {
       const stepDate = new Date(startDate.getTime() + i * dayStep * 24 * 60 * 60 * 1000);
       const dayLabel = stepDate.toLocaleDateString('en-IN', { day: '2-digit' });
-      const growthFactor = (i / trendSteps) * 3040;
-      const followerCount = Math.round(followersBase - 3040 + growthFactor);
-      const stepReach = Math.round(4800 + (i * 640) + (i % 3 === 0 ? 1200 : 0));
+      let followerCount = followersBase;
+      if (followersBase > 100) {
+        const growthFactor = (i / trendSteps) * 3040;
+        followerCount = Math.round(followersBase - 3040 + growthFactor);
+      }
+      const stepReach = Math.round(Math.max(1, reachBase * ((i + 1) / trendSteps)));
       audienceTrend.push({
         day: dayLabel,
         followers: followerCount,
@@ -135,8 +138,8 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     // 5. Audience Quality
     const audienceQuality = {
-      engagementRate: '5.8%',
-      engagementRatePercentage: 74,
+      engagementRate: Number(clickConversionRate) > 0 ? `${clickConversionRate}%` : '5.8%',
+      engagementRatePercentage: Math.min(100, Math.max(10, Math.round(Number(clickConversionRate) * 15))),
       returningViewers: '41.2%',
       returningViewersPercentage: 58,
       savesPerReach: '4.6%',
@@ -146,19 +149,19 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     // 6. Content Performance Format
     const contentPerformance = [
-      { label: 'Reels', reach: Math.round(reachBase * 0.54), engagement: Math.round(engagementBase * 0.66) },
-      { label: 'Posts', reach: Math.round(reachBase * 0.26), engagement: Math.round(engagementBase * 0.24) },
-      { label: 'Stories', reach: Math.round(reachBase * 0.20), engagement: Math.round(engagementBase * 0.10) },
+      { label: 'Reels', reach: Math.max(1, Math.round(reachBase * 0.54)), engagement: Math.max(1, Math.round(engagementBase * 0.66)) },
+      { label: 'Posts', reach: Math.max(1, Math.round(reachBase * 0.26)), engagement: Math.max(1, Math.round(engagementBase * 0.24)) },
+      { label: 'Stories', reach: Math.max(1, Math.round(reachBase * 0.20)), engagement: Math.max(1, Math.round(engagementBase * 0.10)) },
     ];
 
     // 7. Conversion Impact
     const conversionImpact = {
-      linkClicks: numberStandard.format(currentClicks || 3842),
+      linkClicks: numberStandard.format(currentClicks),
       linkClicksDetail: `${clickConversionRate}% click-through rate`,
-      attributedSales: formatInrLakhs(totalSalesCurrent || 112450),
-      attributedSalesDetail: `${formatChange(totalSalesCurrent || 112450, totalSalesPrevious || 99650)} vs. last month`,
-      ordersGenerated: String(ordersCountCurrent || 68),
-      ordersGeneratedDetail: `₹${numberStandard.format(avgOrderValue || 1654)} average order value`,
+      attributedSales: formatInr(totalSalesCurrent),
+      attributedSalesDetail: `${formatChange(totalSalesCurrent, totalSalesPrevious)} vs. last month`,
+      ordersGenerated: String(ordersCountCurrent),
+      ordersGeneratedDetail: `₹${totalSalesCurrent > 0 ? (totalSalesCurrent / ordersCountCurrent).toFixed(2) : '0.00'} average order value`,
     };
 
     // 8. Top Performing Content

@@ -14,6 +14,7 @@ export type InfluencerStoresOverview = {
       earnings: string;
       clicks: string;
       conversion: string;
+      bars?: number[];
     }
   >;
   storeMix: Array<{
@@ -30,6 +31,7 @@ export type InfluencerStoresOverview = {
     tone: string;
   }>;
   timelineBars: number[];
+  timelineLabels?: string[];
 };
 
 export async function getInfluencerStoresOverview() {

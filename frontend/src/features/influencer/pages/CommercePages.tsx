@@ -58,14 +58,15 @@ export function StorePage() {
   const scopeDataMap = data?.scopeData ?? fallbackScopeData;
   const scopeNameMap = { ...fallbackScopeName, ...(data?.stores ? Object.fromEntries(data.stores.map((s) => [s.slug || s.id, s.name])) : {}) };
   const currentScopeTitle = scope === "all" ? "Combined store" : (scopeNameMap[scope] || "Store");
-  const storeMixList = data?.storeMix?.length ? data.storeMix : [
+  const storeMixList = data?.storeMix ?? [
     { name: "Urban Threads", percentage: 56 },
     { name: "Glow Theory", percentage: 28 },
     { name: "Kind Kitchen", percentage: 16 },
   ];
-  const productList = data?.products?.length ? data.products : fallbackProducts;
+  const productList = data?.products ?? fallbackProducts;
   const filteredProducts = filterForScope(productList, scope, scopeNameMap);
-  const bars = data?.timelineBars ?? [36, 48, 42, 66, 58, 75, 69, 88, 76, 100, 84, 92];
+  const bars = data?.scopeData?.[scope]?.bars ?? data?.timelineBars ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const timelineLabels = data?.timelineLabels ?? ["Sep 01", "Sep 10", "Sep 20", "Today"];
 
   return <div className="space-y-6">
     <PageHeader title="My Store" description="Track the storefronts and products you share with your audience." actions={<StoreSelector scope={scope} setScope={setScope} stores={data?.stores} />} />
@@ -78,9 +79,11 @@ export function StorePage() {
         </CardHeader>
         <CardContent className="p-5 pt-2">
           <div className="flex h-48 items-end gap-2">
-            {bars.map((height, index) => <div key={index} className="flex-1 rounded-t-md bg-primary/20" style={{ height: `${height}%` }}><div className="h-full rounded-t-md bg-primary" style={{ height: `${Math.max(20, height - 18)}%` }} /></div>)}
+            {bars.map((height, index) => <div key={index} className="flex-1 rounded-t-md bg-primary/20" style={{ height: `${Math.max(4, height)}%` }}><div className="h-full rounded-t-md bg-primary" style={{ height: `${height > 0 ? Math.max(15, height - 15) : 0}%` }} /></div>)}
           </div>
-          <div className="mt-3 flex justify-between text-xs text-muted-foreground"><span>Sep 01</span><span>Sep 10</span><span>Sep 20</span><span>Today</span></div>
+          <div className="mt-3 flex justify-between text-xs text-muted-foreground">
+            {timelineLabels.map((label, idx) => <span key={idx}>{label}</span>)}
+          </div>
         </CardContent>
       </Card>
       <Card className="shadow-card">
