@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { getStoreProducts, syncStoreProducts } from "../api/products.api";
+import { getStoreProducts, getStoreProductSyncStatus, syncStoreProducts } from "../api/products.api";
 import { getStoreOrders, syncStoreOrders } from "../api/orders.api";
 import { getStoreCustomers } from "../api/customers.api";
 
@@ -155,12 +155,33 @@ function Initial({ name }: { name: string }) {
   );
 }
 
+function formatProductPrice(price: string, currency: string) {
+  const value = Number(price);
+  if (!Number.isFinite(value)) return "Price unavailable";
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
 export function ProductsPage() {
   const [search, setSearch] = useState("");
   const [inventoryOnly, setInventoryOnly] = useState(false);
   const [page, setPage] = useState(1);
   const query = useQuery({ queryKey: ["store", "products", page], queryFn: () => getStoreProducts(page) });
   const sync = useQuery({ queryKey: ["store", "products", "sync"], queryFn: syncStoreProducts, enabled: false });
+  const syncStatus = useQuery({ queryKey: ["store", "products", "sync-status"], queryFn: getStoreProductSyncStatus, refetchInterval: (query) => query.state.data?.sync.status === "RUNNING" ? 2000 : false });
+  const isSyncing = sync.isFetching || syncStatus.data?.sync.status === "RUNNING";
+  useEffect(() => {
+    if (syncStatus.data?.sync.status !== "RUNNING") {
+      if (syncStatus.data?.sync.status === "COMPLETED") void query.refetch();
+      return;
+    }
+    void query.refetch();
+    const interval = window.setInterval(() => void query.refetch(), 2000);
+    return () => window.clearInterval(interval);
+  }, [syncStatus.data?.sync.status]);
   const filteredProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return (query.data?.products ?? []).filter((product) => {
@@ -176,12 +197,12 @@ export function ProductsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Manage your catalogue, inventory and pricing."
+        description="Live Shopify catalogue, inventory and pricing."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => void sync.refetch().then(() => query.refetch())} disabled={sync.isFetching}>
-              <RefreshCw className={`h-4 w-4 ${sync.isFetching ? "animate-spin" : ""}`} />
-              {sync.isFetching ? "Syncing..." : "Sync products"}
+            <Button variant="outline" onClick={() => void sync.refetch().then(() => void syncStatus.refetch())} disabled={isSyncing}>
+              <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+              {isSyncing ? `Syncing${syncStatus.data?.sync.synced ? ` (${syncStatus.data.sync.synced})` : ""}...` : "Sync products"}
             </Button>
             <Button>
               <Plus className="h-4 w-4" /> Add product
@@ -222,11 +243,13 @@ export function ProductsPage() {
               <tr key={product.id} className="border-b last:border-0">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-3">
-                    <span
-                      className={`grid h-10 w-10 place-items-center rounded-lg ${tones[index % tones.length]}`}
-                    >
-                      <Package className="h-4 w-4" />
-                    </span>
+                    {product.imageUrl ? (
+                      <img src={product.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                    ) : (
+                      <span className={`grid h-10 w-10 place-items-center rounded-lg ${tones[index % tones.length]}`}>
+                        <Package className="h-4 w-4" />
+                      </span>
+                    )}
                     <div>
                       <p className="font-medium">{product.name}</p>
                       <p className="text-xs text-muted-foreground">{product.sku}</p>
@@ -243,10 +266,10 @@ export function ProductsPage() {
                           : "outline"
                     }
                   >
-                    {product.stock === 0 ? "Out of stock" : `${product.stock} in stock`}
+                    {product.stock === 0 ? "Out of stock" : `${product.stock.toLocaleString("en-IN")} in stock`}
                   </Badge>
                 </td>
-                <td className="px-5 py-3 font-medium">{new Intl.NumberFormat("en-IN", { style: "currency", currency: product.currency, maximumFractionDigits: 2 }).format(Number(product.price))}</td>
+                <td className="px-5 py-3"><p className="font-semibold">{formatProductPrice(product.price, product.currency)}</p><p className="mt-0.5 text-xs text-muted-foreground">{product.currency}</p></td>
                 <td className="px-5 py-3 text-muted-foreground">—</td>
                 <td className="px-5 py-3">
                   <Button asChild variant="ghost" size="sm"><Link to="/store-admin/products/$productId" params={{ productId: product.id }}>View details <ChevronRight className="h-4 w-4" /></Link></Button>
