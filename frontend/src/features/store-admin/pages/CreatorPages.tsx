@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   BadgeIndianRupee,
   ChevronRight,
@@ -17,7 +19,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 import { getStoreCreators } from "../api/creators.api";
+import { getStoreProducts } from "../api/products.api";
+import { createAffiliateLink, getAffiliateLinks, updateAffiliateLink } from "../api/affiliate-links.api";
 
 const creators = [
   {
@@ -93,40 +101,6 @@ const campaigns = [
     sales: "—",
     status: "Draft",
     end: "Not scheduled",
-  },
-];
-const links = [
-  {
-    creator: "Meera Kapoor",
-    link: "urbanthreads.in/c/meera",
-    clicks: "2,842",
-    orders: 28,
-    revenue: "₹18,420",
-    status: "Active",
-  },
-  {
-    creator: "Aditi Nair",
-    link: "urbanthreads.in/c/aditi",
-    clicks: "1,966",
-    orders: 19,
-    revenue: "₹12,840",
-    status: "Active",
-  },
-  {
-    creator: "Kabir Singh",
-    link: "urbanthreads.in/c/kabir",
-    clicks: "1,438",
-    orders: 14,
-    revenue: "₹9,760",
-    status: "Active",
-  },
-  {
-    creator: "Tanya Bhatia",
-    link: "urbanthreads.in/c/tanya",
-    clicks: "—",
-    orders: 0,
-    revenue: "₹0",
-    status: "Paused",
   },
 ];
 const commissions = [
@@ -368,30 +342,73 @@ export function CampaignsPage() {
 }
 
 export function AffiliatePage() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [creatorId, setCreatorId] = useState("");
+  const [productId, setProductId] = useState("store");
+  const [commissionRate, setCommissionRate] = useState("10");
+  const client = useQueryClient();
+  const linksQuery = useQuery({ queryKey: ["store", "affiliate-links", search], queryFn: () => getAffiliateLinks(search ? { search } : undefined) });
+  const creatorsQuery = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators, enabled: dialogOpen });
+  const productsQuery = useQuery({ queryKey: ["store", "products", "affiliate-link"], queryFn: () => getStoreProducts(1), enabled: dialogOpen });
+  const createMutation = useMutation({ mutationFn: createAffiliateLink, onSuccess: () => { client.invalidateQueries({ queryKey: ["store", "affiliate-links"] }); setDialogOpen(false); setCreatorId(""); setProductId("store"); toast.success("Affiliate link created"); }, onError: () => toast.error("Could not create the affiliate link") });
+  const statusMutation = useMutation({ mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "PAUSED" }) => updateAffiliateLink(id, { status }), onSuccess: () => client.invalidateQueries({ queryKey: ["store", "affiliate-links"] }), onError: () => toast.error("Could not update link status") });
+  const links = linksQuery.data ?? [];
+  const totalClicks = links.reduce((sum, link) => sum + link.clicks, 0);
+  const totalOrders = links.reduce((sum, link) => sum + link.orders, 0);
+  const totalRevenue = links.reduce((sum, link) => sum + link.revenue, 0);
+  const copyLink = async (url: string) => {
+    try {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = url;
+        textarea.setAttribute("readonly", "");
+        textarea.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand("copy");
+        textarea.remove();
+        if (!copied) throw new Error("Clipboard command was rejected");
+      }
+      toast.success("Link copied");
+    } catch {
+      toast.error("Could not copy link");
+    }
+  };
+  const submitLink = () => {
+    if (!creatorId) { toast.error("Select a creator"); return; }
+    const rate = Number(commissionRate); if (!Number.isFinite(rate) || rate < 0 || rate > 100) { toast.error("Commission must be between 0 and 100%"); return; }
+    createMutation.mutate({ creatorId, productId: productId === "store" ? null : productId, commissionRate: rate });
+  };
   return (
     <div className="space-y-6">
       <PageHeader
         title="Affiliate links"
         description="Track the links creators use to refer customers."
         actions={
-          <Button>
+          <Button onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4" /> Create link
           </Button>
         }
       />
       <section className="grid gap-4 sm:grid-cols-3">
-        <Summary label="Active links" value="36" note="Across 36 creators" icon={Link2} />
-        <Summary label="Total clicks" value="9,284" note="This month" icon={ExternalLink} />
+        <Summary label="Active links" value={String(links.filter((link) => link.status === "ACTIVE").length)} note={`Across ${new Set(links.map((link) => link.creatorId)).size} creators`} icon={Link2} />
+        <Summary label="Total clicks" value={totalClicks.toLocaleString()} note="All tracked links" icon={ExternalLink} />
         <Summary
           label="Link conversion"
-          value="3.8%"
-          note="349 orders attributed"
+          value={totalClicks ? `${((totalOrders / totalClicks) * 100).toFixed(1)}%` : "—"}
+          note={`${totalOrders} orders · ₹${totalRevenue.toLocaleString("en-IN")}`}
           icon={BadgeIndianRupee}
         />
       </section>
       <div className="flex flex-wrap gap-3">
-        <SearchBox placeholder="Search creator or link" />
-        <Button variant="outline">All links</Button>
+        <div className="relative min-w-60 flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-9" placeholder="Search creator, product or link" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </div>
+        <Button variant="outline" onClick={() => setSearch("")}>All links</Button>
         <Button asChild variant="outline">
           <Link to="/store-admin/analytics">View link analytics</Link>
         </Button>
@@ -409,27 +426,42 @@ export function AffiliatePage() {
               </tr>
             </thead>
             <tbody>
-              {links.map((link, index) => (
-                <tr key={link.creator} className="border-b last:border-0">
+              {links.map((link) => (
+                <tr key={link.id} className="border-b last:border-0">
                   <td className="px-5 py-3 font-medium">{link.creator}</td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Link2 className="h-3.5 w-3.5" />
-                      {link.link}
-                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                      <span className="max-w-72 truncate" title={link.url}>{link.url}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyLink(link.url)} aria-label={`Copy ${link.creator}'s link`}>
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{link.product ?? "Store-wide"} · {link.commissionRate}% commission</p>
                   </td>
-                  <td className="px-5 py-3">{link.clicks}</td>
+                  <td className="px-5 py-3">{link.clicks.toLocaleString()}</td>
                   <td className="px-5 py-3">{link.orders}</td>
-                  <td className="px-5 py-3 text-right font-semibold">{link.revenue}</td>
+                  <td className="px-5 py-3 text-right font-semibold">
+                    <div className="flex items-center justify-end gap-2">₹{link.revenue.toLocaleString("en-IN")}<Button variant="ghost" size="sm" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate({ id: link.id, status: link.status === "ACTIVE" ? "PAUSED" : "ACTIVE" })}>{link.status === "ACTIVE" ? "Pause" : "Resume"}</Button></div>
+                  </td>
                 </tr>
               ))}
+              {!linksQuery.isLoading && links.length === 0 ? <tr><td colSpan={5} className="px-5 py-16 text-center text-muted-foreground">No affiliate links yet. Create one to start tracking creator traffic.</td></tr> : null}
             </tbody>
           </table>
         </CardContent>
       </Card>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Create affiliate link</DialogTitle><DialogDescription>Choose a creator and optionally limit the link to one Shopify product.</DialogDescription></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2"><Label>Creator</Label><Select value={creatorId} onValueChange={setCreatorId}><SelectTrigger><SelectValue placeholder="Select a creator" /></SelectTrigger><SelectContent>{(creatorsQuery.data ?? []).map((creator) => <SelectItem key={creator.id} value={creator.id}>{creator.displayName}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Destination</Label><Select value={productId} onValueChange={setProductId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="store">Entire store</SelectItem>{(productsQuery.data?.products ?? []).map((product) => <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label htmlFor="commission-rate">Commission rate (%)</Label><Input id="commission-rate" type="number" min="0" max="100" value={commissionRate} onChange={(event) => setCommissionRate(event.target.value)} /></div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={submitLink} disabled={createMutation.isPending}>{createMutation.isPending ? "Creating…" : "Create link"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

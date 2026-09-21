@@ -30,7 +30,7 @@ export function buildApp() {
         : { level: config.logLevel },
   });
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (request, body, done) => {
-    if (request.url.split('?')[0] === '/webhooks/instagram') return done(null, body);
+    if (['/webhooks/instagram', '/webhooks/shopify/orders'].includes(request.url.split('?')[0])) return done(null, body);
     try {
       done(null, JSON.parse(body.toString('utf8')));
     } catch (error) {

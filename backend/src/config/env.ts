@@ -74,5 +74,7 @@ export const config = Object.freeze({
   metaAppSecret: process.env.META_APP_SECRET?.trim() || process.env.FACEBOOK_APP_SECRET?.trim(),
   webhookVerifyToken: process.env.WEBHOOK_VERIFY_TOKEN?.trim(),
   encryptionKey: process.env.ENCRYPTION_KEY?.trim(),
+  shopifyAppSecret: process.env.SHOPIFY_APP_SECRET?.trim(),
+  shopifyBridgeWebhookSecret: process.env.SHOPIFY_BRIDGE_WEBHOOK_SECRET?.trim(),
   localWebhookUrl: localWebhookUrl(),
 });
