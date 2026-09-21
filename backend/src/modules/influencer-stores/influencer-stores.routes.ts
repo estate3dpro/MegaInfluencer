@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
+import { getAssignedProductIds } from '../product-assignments/product-assignments.service.js';
 
 const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const numberStandard = new Intl.NumberFormat('en-IN');
