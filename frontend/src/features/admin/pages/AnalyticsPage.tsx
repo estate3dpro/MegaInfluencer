@@ -1,125 +1,175 @@
-import { Download, Info, TrendingUp, UsersRound } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  BadgeIndianRupee,
+  CalendarDays,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Info,
+  Megaphone,
+  Sparkles,
+  TrendingUp,
+  UsersRound,
+} from "lucide-react";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { toast } from "sonner";
+import { getAdminAnalytics, getAdminCampaigns, getAdminDashboard } from "../api/overview.api";
 
-const trend = [42, 51, 47, 65, 59, 72, 68, 83, 76, 91, 88, 100];
-
-const channels = [
-  { name: "Instagram", value: "68.4%", revenue: "₹16.97L", color: "bg-fuchsia-500" },
-  { name: "Creator storefronts", value: "21.7%", revenue: "₹5.38L", color: "bg-violet-500" },
-  { name: "Direct campaigns", value: "9.9%", revenue: "₹2.45L", color: "bg-sky-500" },
-];
-
-const campaigns = [
-  ["Monsoon Essentials", "Urban Threads", "156", "₹4.82L", "7.8%"],
-  ["Home Refresh", "Northstar Home", "94", "₹3.76L", "6.4%"],
-  ["Weekend Edit", "Kora Collective", "128", "₹3.21L", "5.9%"],
-  ["Back to Campus", "Mode & Co.", "81", "₹2.68L", "5.2%"],
-];
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 export function AnalyticsPage() {
+  const analyticsQuery = useQuery({ queryKey: ["admin", "analytics"], queryFn: getAdminAnalytics });
+  const dashQuery = useQuery({ queryKey: ["admin", "dashboard"], queryFn: getAdminDashboard });
+  const campaignsQuery = useQuery({ queryKey: ["admin", "campaigns"], queryFn: () => getAdminCampaigns() });
+
+  const overview = analyticsQuery.data?.overview ?? {
+    totalPlatformGMV: 0,
+    creatorAttributedGMV: 0,
+    totalCommissionsPaid: 0,
+    totalOrdersCount: 0,
+    attributedOrdersCount: 0,
+    totalClicksCount: 0,
+    conversionRate: 0,
+  };
+
+  const placements = analyticsQuery.data?.placements ?? [];
+  const monthlyPerformance = dashQuery.data?.monthlyPerformance ?? [];
+  const campaigns = (campaignsQuery.data?.campaigns ?? []).slice(0, 5);
+
+  const colors = ["bg-fuchsia-500", "bg-violet-500", "bg-sky-500", "bg-emerald-500"];
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Analytics"
-        description="Understand growth, conversion and performance across the platform."
+        title="Platform Analytics & Performance"
+        description="Cross-brand growth metrics, creator revenue attribution, conversion funnels, and channel share."
         actions={
-          <>
-            <Select defaultValue="30d">
-              <SelectTrigger className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7d">Last 7 days</SelectItem>
-                <SelectItem value="30d">Last 30 days</SelectItem>
-                <SelectItem value="90d">Last 90 days</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline">
-              <Download className="h-4 w-4" /> Export
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => toast.success("Analytics statement generated")}
+          >
+            <Download className="h-4 w-4 mr-1" /> Export Report
+          </Button>
         }
       />
 
       <section className="grid gap-4 md:grid-cols-3">
-        {[
-          ["Revenue", "₹24.80L", "+18.6%", "Compared to ₹20.91L previously"],
-          ["Orders", "12,486", "+14.2%", "Average order value ₹1,986"],
-          ["Conversion rate", "5.84%", "+0.7 pts", "From store visit to order"],
-        ].map(([label, value, delta, caption]) => (
-          <Card key={label} className="shadow-none">
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <div className="mt-2 flex items-end gap-2">
-                <p className="text-2xl font-semibold tracking-tight">{value}</p>
-                <Badge
-                  variant="secondary"
-                  className="mb-0.5 text-emerald-700 dark:text-emerald-400"
-                >
-                  {delta}
-                </Badge>
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">{caption}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-3">
-        <Card className="shadow-none xl:col-span-2">
-          <CardHeader className="p-5 pb-0">
-            <CardTitle>Revenue & orders</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Daily marketplace performance</p>
-          </CardHeader>
-          <CardContent className="p-5 pt-8">
-            <div className="flex h-56 items-end gap-1.5 sm:gap-2">
-              {trend.map((height, index) => (
-                <div key={index} className="group flex h-full flex-1 items-end">
-                  <div
-                    className="w-full rounded-t-sm bg-primary/20 transition-colors group-hover:bg-primary"
-                    style={{ height: `${height}%` }}
-                    title={`Day ${index + 1}`}
-                  />
-                </div>
-              ))}
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <p className="text-xs font-medium text-muted-foreground">Total Platform Revenue (GMV)</p>
+            <div className="mt-2 flex items-baseline gap-2">
+              <p className="text-2xl font-bold tracking-tight">{formatCurrency(overview.totalPlatformGMV)}</p>
             </div>
-            <div className="mt-3 flex justify-between text-xs text-muted-foreground">
-              <span>1 Sep</span>
-              <span>7 Sep</span>
-              <span>14 Sep</span>
-              <span>21 Sep</span>
-              <span>30 Sep</span>
-            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {overview.totalOrdersCount} orders across all merchant brands
+            </p>
           </CardContent>
         </Card>
 
-        <Card className="shadow-none">
-          <CardHeader className="p-5 pb-2">
-            <CardTitle>Revenue by channel</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Attributed sales</p>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <p className="text-xs font-medium text-muted-foreground">Creator Attributed Sales</p>
+            <div className="mt-2 flex items-baseline gap-2">
+              <p className="text-2xl font-bold tracking-tight text-primary">
+                {formatCurrency(overview.creatorAttributedGMV)}
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {overview.attributedOrdersCount} orders via influencer referral
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <p className="text-xs font-medium text-muted-foreground">Referral Conversion Rate</p>
+            <div className="mt-2 flex items-baseline gap-2">
+              <p className="text-2xl font-bold tracking-tight text-teal">
+                {overview.conversionRate}%
+              </p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              From {overview.totalClicksCount.toLocaleString()} tracked link visits
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-3">
+        <Card className="shadow-card xl:col-span-2">
+          <CardHeader className="p-5 pb-0">
+            <CardTitle className="text-lg">Monthly Revenue Trend</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Aggregated order volume by month</p>
           </CardHeader>
-          <CardContent className="space-y-5 p-5 pt-4">
-            {channels.map((channel) => (
-              <div key={channel.name}>
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">{channel.name}</span>
-                  <span>{channel.value}</span>
+          <CardContent className="h-[270px] p-2 pt-5 sm:p-5 sm:pt-5">
+            {monthlyPerformance.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={monthlyPerformance} margin={{ top: 20, right: 8, left: 8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="analyticsLine" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#8b5cf6" />
+                      <stop offset="100%" stopColor="#ec4899" />
+                    </linearGradient>
+                    <linearGradient id="analyticsFill" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="#ec4899" stopOpacity={0.2} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="month"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(v: any) => [formatCurrency(Number(v)), "GMV"]}
+                    contentStyle={{ borderRadius: "8px", border: "none", backgroundColor: "black", color: "white" }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="url(#analyticsLine)"
+                    strokeWidth={3}
+                    fill="url(#analyticsFill)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                No revenue history recorded yet
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-lg">Attributed Channels</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Social & checkout touchpoints</p>
+          </CardHeader>
+          <CardContent className="space-y-4 p-5 pt-3">
+            {placements.map((p, idx) => (
+              <div key={p.channel}>
+                <div className="flex justify-between text-xs">
+                  <span className="font-medium text-foreground">{p.channel}</span>
+                  <span className="font-semibold text-muted-foreground">{p.share}%</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{channel.revenue} in sales</p>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                <p className="mt-0.5 text-xs text-muted-foreground font-semibold">{formatCurrency(p.gmv)}</p>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
                   <div
-                    className={`h-full rounded-full ${channel.color}`}
-                    style={{ width: channel.value }}
+                    className={`h-full rounded-full ${colors[idx % colors.length]}`}
+                    style={{ width: `${p.share}%` }}
                   />
                 </div>
               </div>
@@ -128,81 +178,49 @@ export function AnalyticsPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <Card className="shadow-none xl:col-span-2">
-          <CardHeader className="flex-row items-center justify-between space-y-0 p-5">
-            <div>
-              <CardTitle>Top campaigns</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">Ranked by attributed revenue</p>
-            </div>
-            <TrendingUp className="h-5 w-5 text-emerald-500" />
-          </CardHeader>
-          <CardContent className="overflow-x-auto p-0">
-            <table className="w-full min-w-[620px] text-left text-sm">
-              <thead className="border-y bg-muted/40 text-xs text-muted-foreground">
+      {/* Top Campaigns Table */}
+      <Card className="shadow-card overflow-hidden">
+        <CardHeader className="p-5 pb-2">
+          <CardTitle className="text-lg">Top Active Campaigns</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">Highest performing partnerships</p>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[620px] text-left text-sm">
+            <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3 font-medium">Campaign</th>
+                <th className="px-5 py-3 font-medium">Brand</th>
+                <th className="px-5 py-3 text-center font-medium">Applications</th>
+                <th className="px-5 py-3 text-center font-medium">Assigned Creators</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.length === 0 ? (
                 <tr>
-                  <th className="px-5 py-3 font-medium">Campaign</th>
-                  <th className="px-4 py-3 font-medium">Creators</th>
-                  <th className="px-4 py-3 font-medium">Revenue</th>
-                  <th className="px-5 py-3 font-medium">Conversion</th>
+                  <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">
+                    No campaigns created yet.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {campaigns.map(([name, brand, creators, revenue, conversion]) => (
-                  <tr key={name} className="border-b last:border-0">
-                    <td className="px-5 py-4">
-                      <p className="font-medium">{name}</p>
-                      <p className="text-xs text-muted-foreground">{brand}</p>
-                    </td>
-                    <td className="px-4 py-4">{creators}</td>
-                    <td className="px-4 py-4 font-medium">{revenue}</td>
-                    <td className="px-5 py-4">
-                      <Badge variant="secondary">{conversion}</Badge>
+              ) : (
+                campaigns.map((c) => (
+                  <tr key={c.id} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
+                    <td className="px-5 py-3.5 font-semibold text-foreground">{c.title}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground">{c.storeName}</td>
+                    <td className="px-5 py-3.5 text-center font-semibold text-primary">{c.applicationsCount}</td>
+                    <td className="px-5 py-3.5 text-center font-medium">{c.assignedCreatorsCount}</td>
+                    <td className="px-5 py-3.5">
+                      <Badge variant="outline" className="border-teal/30 bg-teal/5 text-teal text-xs">
+                        {c.status}
+                      </Badge>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-        <Card className="shadow-none">
-          <CardHeader className="p-5 pb-2">
-            <CardTitle>Audience growth</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Creator audience this period</p>
-          </CardHeader>
-          <CardContent className="p-5 pt-4">
-            <div className="rounded-xl bg-primary/5 p-4">
-              <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-primary text-primary-foreground">
-                  <UsersRound className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-2xl font-semibold">+184K</p>
-                  <p className="text-xs text-muted-foreground">new followers reached</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Engagement rate</span>
-                <span className="font-medium">4.6%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Content published</span>
-                <span className="font-medium">1,286 posts</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Active creators</span>
-                <span className="font-medium">2,841</span>
-              </div>
-            </div>
-            <p className="mt-5 flex gap-1.5 text-xs text-muted-foreground">
-              <Info className="h-3.5 w-3.5 shrink-0" /> Audience figures refresh when connected
-              social accounts sync.
-            </p>
-          </CardContent>
-        </Card>
-      </section>
+                ))
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

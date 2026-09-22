@@ -9,6 +9,18 @@ export type StoreCreator = {
   instagramUsername: string | null;
   instagramStatus: string | null;
   assignedAt: string;
+  totalSales?: number;
+  totalOrders?: number;
+  totalCommissions?: number;
+  activeLinks?: number;
+  };
+
+export type AvailableCreator = {
+  id: string;
+  displayName: string;
+  email: string | null;
+  creatorCode: string | null;
+  instagramUsername: string | null;
 };
 
 export type AssignableProduct = {
@@ -21,8 +33,44 @@ export type AssignableProduct = {
   isAssigned: boolean;
 };
 
+export type CommissionItem = {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  orderAmount: number;
+  commissionRate: number;
+  amount: number;
+  status: "PENDING" | "APPROVED" | "PAID" | "REVERSED";
+  createdAt: string;
+  creator: {
+    id: string;
+    name: string;
+    email: string | null;
+    code: string | null;
+    instagram: string | null;
+  } | null;
+};
+
+export type CommissionsResponse = {
+  commissions: CommissionItem[];
+  metrics: {
+    pendingAmount: number;
+    approvedAmount: number;
+    paidAmount: number;
+    totalCount: number;
+  };
+};
+
 export async function getStoreCreators() {
   return (await apiClient.get<{ creators: StoreCreator[] }>("/store/creators")).data.creators;
+}
+
+export async function getAvailableCreators() {
+  return (await apiClient.get<{ creators: AvailableCreator[] }>("/store/creators/available")).data.creators;
+}
+
+export async function assignStoreCreator(influencerId: string) {
+  return (await apiClient.post<{ ok: boolean; assignment: any }>("/store/creators/assign", { influencerId })).data;
 }
 
 export async function getStoreCreatorDetails(creatorId: string) {
@@ -35,4 +83,16 @@ export async function getCreatorAssignedProducts(creatorId: string) {
 
 export async function updateCreatorAssignedProducts(creatorId: string, productIds: string[]) {
   return (await apiClient.put<{ ok: boolean; assignedCount: number }>(`/store/creators/${creatorId}/products`, { productIds })).data;
+}
+
+export async function getStoreCommissions(params?: { status?: string; search?: string }) {
+  const searchParams = new URLSearchParams();
+  if (params?.status && params.status !== "ALL") searchParams.set("status", params.status);
+  if (params?.search) searchParams.set("search", params.search);
+  const query = searchParams.toString();
+  return (await apiClient.get<CommissionsResponse>(`/store/commissions${query ? `?${query}` : ""}`)).data;
+}
+
+export async function updateCommissionStatus(commissionId: string, status: "PENDING" | "APPROVED" | "PAID" | "REVERSED") {
+  return (await apiClient.patch<{ ok: boolean; commission: any }>(`/store/commissions/${commissionId}/status`, { status })).data;
 }

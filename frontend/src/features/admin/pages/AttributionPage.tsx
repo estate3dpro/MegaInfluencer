@@ -1,158 +1,236 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   CheckCircle2,
+  Instagram,
   Link2,
   MousePointerClick,
   ShoppingCart,
+  Sparkles,
   UsersRound,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getAdminAnalytics, getAdminCommissions } from "../api/overview.api";
 
-const funnel = [
-  ["Tracked link clicks", "248,190", "100%", "bg-primary"],
-  ["Product page views", "136,482", "55.0%", "bg-violet-500"],
-  ["Checkout started", "24,681", "9.9%", "bg-sky-500"],
-  ["Attributed orders", "12,486", "5.0%", "bg-emerald-500"],
-];
-
-const topCreators = [
-  ["Aanya Shah", "@aanyacreates", "1,842", "₹3.64L", "6.8%"],
-  ["Kabir Singh", "@kabir.edits", "1,224", "₹2.81L", "5.9%"],
-  ["Mira Kapoor", "@mirastylefile", "986", "₹2.23L", "5.4%"],
-  ["Dev Malhotra", "@devdiscovers", "817", "₹1.94L", "4.8%"],
-];
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 export function AttributionPage() {
+  const analyticsQuery = useQuery({ queryKey: ["admin", "analytics"], queryFn: getAdminAnalytics });
+  const commQuery = useQuery({ queryKey: ["admin", "commissions"], queryFn: () => getAdminCommissions() });
+
+  const overview = analyticsQuery.data?.overview ?? {
+    totalPlatformGMV: 0,
+    creatorAttributedGMV: 0,
+    totalCommissionsPaid: 0,
+    totalOrdersCount: 0,
+    attributedOrdersCount: 0,
+    totalClicksCount: 0,
+    conversionRate: 0,
+  };
+
+  const commissions = commQuery.data?.commissions ?? [];
+
+  // Group top creators by revenue
+  const creatorMap = new Map<string, { name: string; handle: string | null; orders: number; revenue: number }>();
+  for (const c of commissions) {
+    const key = c.creator?.id ?? "unknown";
+    if (!creatorMap.has(key)) {
+      creatorMap.set(key, {
+        name: c.creator?.name ?? "Creator",
+        handle: c.creator?.instagram ? `@${c.creator.instagram}` : c.creator?.code ? `@${c.creator.code}` : null,
+        orders: 0,
+        revenue: 0,
+      });
+    }
+    const item = creatorMap.get(key)!;
+    item.orders += 1;
+    item.revenue += c.orderAmount;
+  }
+
+  const topCreators = Array.from(creatorMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+
+  const clicks = overview.totalClicksCount || 1;
+  const orders = overview.attributedOrdersCount;
+  const funnel = [
+    ["Tracked UTM Link Clicks", `${overview.totalClicksCount.toLocaleString()} visits`, "100%", "bg-primary"],
+    ["Attributed Checkouts & Orders", `${orders.toLocaleString()} orders placed`, `${overview.conversionRate}%`, "bg-teal"],
+    ["Creator Commissions Accrued", formatCurrency(overview.totalCommissionsPaid), "100%", "bg-coral"],
+  ];
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Attribution"
-        description="Track the creator journeys that turn discovery into revenue."
+        title="Creator Attribution & Tracking Engine"
+        description="Monitor end-to-end attribution pipelines, UTM parameter resolution, and conversion tracking."
         actions={
-          <Button>
-            <Link2 className="h-4 w-4" /> Manage tracking
+          <Button asChild size="sm">
+            <Link to="/admin/commissions">
+              <Sparkles className="h-4 w-4 mr-1" /> View Commissions
+            </Link>
           </Button>
         }
       />
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["Attributed revenue", "₹24.80L", "+18.6%", Link2],
-          ["Attributed orders", "12,486", "+14.2%", ShoppingCart],
-          ["Creator conversion", "5.03%", "+0.4 pts", MousePointerClick],
-          ["Contributing creators", "2,318", "+10.8%", UsersRound],
-        ].map(([label, value, change, Icon]) => {
-          const MetricIcon = Icon as typeof Link2;
-          return (
-            <Card key={label as string} className="shadow-none">
-              <CardContent className="p-5">
-                <div className="flex justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{label as string}</p>
-                    <p className="mt-2 text-2xl font-semibold">{value as string}</p>
-                  </div>
-                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <MetricIcon className="h-4 w-4" />
-                  </span>
-                </div>
-                <p className="mt-4 flex items-center gap-1 text-xs font-medium text-emerald-600">
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                  {change as string}{" "}
-                  <span className="font-normal text-muted-foreground">vs. last month</span>
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Attributed GMV</p>
+                <p className="mt-2 text-2xl font-bold">{formatCurrency(overview.creatorAttributedGMV)}</p>
+              </div>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Link2 className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">Driven by influencer referrals</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Attributed Orders</p>
+                <p className="mt-2 text-2xl font-bold">{orders.toLocaleString()}</p>
+              </div>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal/10 text-teal">
+                <ShoppingCart className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">Of {overview.totalOrdersCount} total platform orders</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Conversion Rate</p>
+                <p className="mt-2 text-2xl font-bold">{overview.conversionRate}%</p>
+              </div>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-coral/10 text-coral">
+                <MousePointerClick className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">Clicks to verified purchases</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Active Partner Roster</p>
+                <p className="mt-2 text-2xl font-bold">{creatorMap.size}</p>
+              </div>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-indigo/10 text-indigo">
+                <UsersRound className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">Creators with attributed sales</p>
+          </CardContent>
+        </Card>
       </section>
+
       <section className="grid gap-6 xl:grid-cols-5">
-        <Card className="shadow-none xl:col-span-2">
-          <CardHeader className="p-5">
-            <CardTitle>Attribution funnel</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Creator-led customer journey</p>
+        <Card className="shadow-card xl:col-span-2">
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-base">Attribution Funnel</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">Creator-led conversion funnel</p>
           </CardHeader>
-          <CardContent className="space-y-5 p-5 pt-0">
+          <CardContent className="space-y-4 p-5 pt-2">
             {funnel.map(([label, value, rate, color]) => (
               <div key={label}>
                 <div className="flex items-end justify-between">
                   <div>
-                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs font-semibold text-foreground">{label}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{value}</p>
                   </div>
-                  <span className="text-sm font-semibold">{rate}</span>
+                  <span className="text-xs font-bold text-primary">{rate}</span>
                 </div>
-                <div className="mt-2 h-3 overflow-hidden rounded-full bg-muted">
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
                   <div className={`h-full rounded-full ${color}`} style={{ width: rate }} />
                 </div>
               </div>
             ))}
           </CardContent>
         </Card>
-        <Card className="shadow-none xl:col-span-3">
-          <CardHeader className="flex-row items-center justify-between space-y-0 p-5">
+
+        <Card className="shadow-card xl:col-span-3">
+          <CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-2">
             <div>
-              <CardTitle>Attribution confidence</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Order matching quality in the last 30 days
+              <CardTitle className="text-base">Attribution Engine Health</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Order matching accuracy & webhook attribution pipeline
               </p>
             </div>
-            <Badge variant="secondary" className="text-emerald-700 dark:text-emerald-400">
-              Healthy
+            <Badge variant="outline" className="border-teal/30 bg-teal/5 text-teal text-xs font-medium">
+              Active Sync
             </Badge>
           </CardHeader>
-          <CardContent className="grid gap-4 p-5 pt-1 sm:grid-cols-3">
+          <CardContent className="grid gap-4 p-5 pt-2 sm:grid-cols-3">
             {[
-              ["92.8%", "Direct link match", "Click to order was linked directly"],
-              ["5.6%", "Assisted conversion", "Customer returned after creator visit"],
-              ["1.6%", "Unattributed", "No verified creator source"],
-            ].map(([value, label, description]) => (
-              <div key={label} className="rounded-lg border bg-muted/20 p-4">
-                <p className="text-2xl font-semibold">{value}</p>
-                <p className="mt-2 text-sm font-medium">{label}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+              ["Direct Link Match", "Automatic referral tracking via /r/:slug redirect cookies and UTM tags."],
+              ["Promo Code Attribution", "Checkout matching for influencer creator discount codes."],
+              ["Shopify Webhook Bridge", "Instant real-time attribution on order creation and payment confirmation."],
+            ].map(([title, desc]) => (
+              <div key={title} className="rounded-lg border bg-muted/20 p-4">
+                <p className="font-semibold text-xs text-foreground">{title}</p>
+                <p className="mt-1 text-xs text-muted-foreground leading-5">{desc}</p>
               </div>
             ))}
           </CardContent>
         </Card>
       </section>
-      <Card className="shadow-none">
-        <CardHeader className="flex-row items-center justify-between space-y-0 p-5">
-          <div>
-            <CardTitle>Top attributed creators</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Creators driving the most verified revenue
-            </p>
-          </div>
-          <Button variant="outline" size="sm">
-            Export data
-          </Button>
+
+      {/* Top Attributed Creators */}
+      <Card className="shadow-card overflow-hidden">
+        <CardHeader className="p-5 pb-2">
+          <CardTitle className="text-base">Top Performing Attributed Influencers</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">Ranked by total verified sales generated</p>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full min-w-[680px] text-left text-sm">
-            <thead className="border-y bg-muted/40 text-xs text-muted-foreground">
+            <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-5 py-3 font-medium">Creator</th>
-                <th className="px-4 py-3 font-medium">Orders</th>
-                <th className="px-4 py-3 font-medium">Revenue</th>
-                <th className="px-5 py-3 font-medium">Conversion</th>
+                <th className="px-4 py-3 font-medium">Handle / Code</th>
+                <th className="px-4 py-3 text-center font-medium">Attributed Orders</th>
+                <th className="px-5 py-3 text-right font-medium">Total GMV Driven</th>
               </tr>
             </thead>
             <tbody>
-              {topCreators.map(([name, handle, orders, revenue, conversion]) => (
-                <tr key={name} className="border-b last:border-0">
-                  <td className="px-5 py-4">
-                    <p className="font-medium">{name}</p>
-                    <p className="text-xs text-muted-foreground">{handle}</p>
-                  </td>
-                  <td className="px-4 py-4">{orders}</td>
-                  <td className="px-4 py-4 font-medium">{revenue}</td>
-                  <td className="px-5 py-4">
-                    <Badge variant="secondary">{conversion}</Badge>
+              {topCreators.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">
+                    No attributed orders recorded yet.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                topCreators.map((c, idx) => (
+                  <tr key={idx} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
+                    <td className="px-5 py-3.5 font-semibold text-foreground">{c.name}</td>
+                    <td className="px-4 py-3.5 text-xs text-pink-600 dark:text-pink-400 font-medium">
+                      {c.handle || "—"}
+                    </td>
+                    <td className="px-4 py-3.5 text-center font-semibold text-primary">{c.orders}</td>
+                    <td className="px-5 py-3.5 text-right font-bold text-foreground">
+                      {formatCurrency(c.revenue)}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </CardContent>

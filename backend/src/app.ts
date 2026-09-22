@@ -22,7 +22,7 @@ export function buildApp() {
               target: 'pino-pretty',
               options: {
                 colorize: true,
-                translateTime: 'HH:MM:ss Z',
+                translateTime: 'SYS:HH:MM:ss',
                 ignore: 'pid,hostname',
               },
             },

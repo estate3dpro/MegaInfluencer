@@ -60,16 +60,6 @@ export const identityRoutes: FastifyPluginAsync = async (app) => {
     return { organization };
   });
 
-  app.get('/admin/users', async (request) => {
-    requireRole(request, ['ADMIN']);
-    const query = parseOrThrow(paginationQuerySchema, request.query);
-    const users = await app.prisma.user.findMany({
-      take: query.limit,
-      orderBy: { createdAt: query.order },
-      select: { id: true, email: true, displayName: true, role: true, status: true, createdAt: true },
-    });
-    return { items: users, nextCursor: null };
-  });
 
   app.patch('/admin/users/:userId/status', async (request) => {
     const actor = requireRole(request, ['ADMIN']);

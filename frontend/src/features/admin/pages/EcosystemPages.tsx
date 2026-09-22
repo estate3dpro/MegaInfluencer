@@ -1,119 +1,628 @@
-import { Boxes, Building2, Instagram, Megaphone, Sparkles, Store } from "lucide-react";
-import { EcosystemPage } from "./EcosystemPage";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import {
+  Boxes,
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  ExternalLink,
+  Instagram,
+  Megaphone,
+  Plus,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Store,
+  UsersRound,
+} from "lucide-react";
+import { PageHeader } from "@/components/app/PageHeader";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  getAdminCampaigns,
+  getAdminProducts,
+  getAdminSocial,
+} from "../api/overview.api";
+import { getStores } from "../api/stores.api";
+import { InfluencersPage } from "./InfluencersPage";
+import { StoresPage } from "./StoresPage";
 
-const data = {
-  influencers: {
-    title: "Influencers",
-    description: "Manage creator accounts, verification and platform performance.",
-    singular: "influencer",
-    icon: Sparkles,
-    metrics: [
-      { label: "Total creators", value: "2,841", detail: "+12.4% this month" },
-      { label: "Verified", value: "2,392", detail: "84.2% of creators" },
-      { label: "Pending review", value: "24", detail: "6 require attention" },
-    ],
-    columns: ["Followers", "GMV", "Campaigns"],
-    rows: [
-      ["Aanya Shah", "@aanyacreates", ["284K", "₹3.64L", "8"], "Active"],
-      ["Kabir Singh", "@kabir.edits", ["193K", "₹2.81L", "6"], "Active"],
-      ["Mira Kapoor", "@mirastylefile", ["156K", "₹2.23L", "5"], "Pending"],
-    ],
-  },
-  stores: {
-    title: "Stores",
-    description: "Monitor store onboarding, sales and creator collaborations.",
-    singular: "store",
-    icon: Store,
-    metrics: [
-      { label: "Active stores", value: "186", detail: "+8.2% this month" },
-      { label: "Verified stores", value: "174", detail: "93.5% verified" },
-      { label: "Total GMV", value: "₹24.8L", detail: "Last 30 days" },
-    ],
-    columns: ["Products", "Orders", "GMV"],
-    rows: [
-      ["Urban Threads", "Fashion & apparel", ["482", "2,184", "₹6.42L"], "Active"],
-      ["Northstar Home", "Home & living", ["238", "1,362", "₹4.18L"], "Active"],
-      ["Kora Collective", "Lifestyle", ["156", "978", "₹3.21L"], "Pending"],
-    ],
-  },
-  brands: {
-    title: "Brands",
-    description: "Oversee partner brands and their marketplace participation.",
-    singular: "brand",
-    icon: Building2,
-    metrics: [
-      { label: "Partner brands", value: "74", detail: "+5 this quarter" },
-      { label: "Live campaigns", value: "42", detail: "Across 31 brands" },
-      { label: "Brand spend", value: "₹8.9L", detail: "Last 30 days" },
-    ],
-    columns: ["Stores", "Campaigns", "Spend"],
-    rows: [
-      ["Urban Collective", "Fashion group", ["4", "7", "₹2.82L"], "Active"],
-      ["Northstar Group", "Home group", ["2", "5", "₹1.76L"], "Active"],
-      ["Mode & Co.", "Lifestyle group", ["1", "3", "₹1.14L"], "Active"],
-    ],
-  },
-  products: {
-    title: "Products",
-    description: "Review marketplace products, inventory and sales performance.",
-    singular: "product",
-    icon: Boxes,
-    metrics: [
-      { label: "Live products", value: "8,426", detail: "+324 this month" },
-      { label: "Low stock", value: "42", detail: "Across 18 stores" },
-      { label: "Product sales", value: "₹24.8L", detail: "Last 30 days" },
-    ],
-    columns: ["Store", "Orders", "Revenue"],
-    rows: [
-      ["Linen Overshirt", "SKU: UT-LOS-021", ["Urban Threads", "842", "₹10.94L"], "Active"],
-      ["Woven Throw", "SKU: NS-WTH-011", ["Northstar Home", "468", "₹3.98L"], "Active"],
-      ["Everyday Tote", "SKU: KC-ETO-003", ["Kora Collective", "382", "₹2.29L"], "Active"],
-    ],
-  },
-  campaigns: {
-    title: "Campaigns",
-    description: "Review campaign delivery, creator participation and revenue impact.",
-    singular: "campaign",
-    icon: Megaphone,
-    metrics: [
-      { label: "Live campaigns", value: "42", detail: "8 closing this week" },
-      { label: "Active creators", value: "1,286", detail: "Across live campaigns" },
-      { label: "Attributed GMV", value: "₹16.9L", detail: "Last 30 days" },
-    ],
-    columns: ["Brand", "Creators", "Revenue"],
-    rows: [
-      ["Monsoon Essentials", "Ends Sep 30", ["Urban Threads", "156", "₹4.82L"], "Live"],
-      ["Home Refresh", "Ends Oct 08", ["Northstar Home", "94", "₹3.76L"], "Live"],
-      ["Weekend Edit", "Starts Oct 01", ["Kora Collective", "128", "—"], "Pending"],
-    ],
-  },
-  social: {
-    title: "Social accounts",
-    description: "Monitor connected social accounts and integration health.",
-    singular: "account",
-    icon: Instagram,
-    metrics: [
-      { label: "Connected accounts", value: "2,392", detail: "+96 this month" },
-      { label: "Healthy connections", value: "2,318", detail: "96.9% connected" },
-      { label: "Needs reconnection", value: "74", detail: "Token or permission issue" },
-    ],
-    columns: ["Platform", "Followers", "Last sync"],
-    rows: [
-      ["Aanya Shah", "@aanyacreates", ["Instagram", "284K", "4 min ago"], "Connected"],
-      ["Kabir Singh", "@kabir.edits", ["Instagram", "193K", "12 min ago"], "Connected"],
-      ["Mira Kapoor", "@mirastylefile", ["Instagram", "156K", "2 hrs ago"], "Reconnect"],
-    ],
-  },
-} as const;
-
-type EcosystemKey = keyof typeof data;
-
-function makePage(key: EcosystemKey) {
-  return () => <EcosystemPage config={data[key]} />;
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
-export const InfluencersPage = makePage("influencers");
-export const StoresPage = makePage("stores");
-export const BrandsPage = makePage("brands");
-export const ProductsPage = makePage("products");
-export const CampaignsPage = makePage("campaigns");
-export const SocialPage = makePage("social");
+
+// -------------------------------------------------------------
+// 1. BRANDS PAGE
+// -------------------------------------------------------------
+export function BrandsPage() {
+  const [search, setSearch] = useState("");
+  const query = useQuery({ queryKey: ["admin", "stores"], queryFn: getStores });
+  const stores = query.data?.stores ?? [];
+
+  const filtered = stores.filter((s: any) =>
+    `${s.name} ${s.category || ""} ${s.shopDomain || ""}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Partner Merchant Brands"
+        description="Oversee verified retail brand accounts, store platforms, and campaign partnerships."
+        actions={
+          <Button asChild size="sm">
+            <Link to="/admin/stores">
+              <Store className="h-4 w-4 mr-1" /> Manage Stores Directory
+            </Link>
+          </Button>
+        }
+      />
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Connected Brands</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Building2 className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">{stores.length}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Active store organizations</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Shopify Verified</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal/10 text-teal">
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">
+              {stores.filter((s: any) => s.connectionStatus === "CONNECTED").length}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Operating with active sync</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Creator Partnerships</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-coral/10 text-coral">
+                <Sparkles className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">
+              {stores.reduce((sum: number, s: any) => sum + (s._count?.assignments ?? 0), 0)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Active influencer assignments</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card className="shadow-card overflow-hidden">
+        <div className="p-5">
+          <div className="relative min-w-64 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9 h-9"
+              placeholder="Search brand by name, category, or domain..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[780px] text-left text-sm">
+            <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3 font-medium">Brand Store</th>
+                <th className="px-5 py-3 font-medium">Domain / Platform</th>
+                <th className="px-5 py-3 font-medium">Store Owner</th>
+                <th className="px-5 py-3 text-center font-medium">Creator Partners</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 text-right font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {query.isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td colSpan={6} className="px-5 py-4">
+                      <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
+                    </td>
+                  </tr>
+                ))
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                    No brand stores found.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((store: any) => (
+                  <tr key={store.id} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
+                    <td className="px-5 py-3.5">
+                      <p className="font-semibold text-foreground">{store.name}</p>
+                      <p className="text-xs text-muted-foreground">{store.category || "General Retail"}</p>
+                    </td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground font-mono">
+                      {store.shopDomain || "Not configured"}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <p className="font-medium text-foreground text-xs">{store.owner?.displayName}</p>
+                      <p className="text-xs text-muted-foreground">{store.owner?.email}</p>
+                    </td>
+                    <td className="px-5 py-3.5 text-center font-semibold text-primary">
+                      {store._count?.assignments ?? 0}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Badge
+                        variant={store.connectionStatus === "CONNECTED" ? "outline" : "secondary"}
+                        className={
+                          store.connectionStatus === "CONNECTED"
+                            ? "border-teal/30 bg-teal/5 text-teal text-xs font-medium"
+                            : "text-xs"
+                        }
+                      >
+                        {store.connectionStatus}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <Button asChild variant="ghost" size="sm" className="text-primary">
+                        <Link to="/admin/stores">
+                          Manage <ExternalLink className="h-3.5 w-3.5 ml-1" />
+                        </Link>
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 2. PRODUCTS PAGE
+// -------------------------------------------------------------
+export function ProductsPage() {
+  const [search, setSearch] = useState("");
+  const query = useQuery({
+    queryKey: ["admin", "products", search],
+    queryFn: () => getAdminProducts({ search }),
+  });
+
+  const products = query.data?.products ?? [];
+  const totalProducts = query.data?.totalProducts ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Cross-Store Products Catalog"
+        description="Unified inventory and product catalog synced across all connected Shopify stores."
+      />
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Catalog Products</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Boxes className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">{totalProducts.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Synced from brand inventories</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Active Influencer Assignments</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal/10 text-teal">
+                <Sparkles className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">
+              {products.reduce((sum, p) => sum + p.assignedCreatorsCount, 0)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Products assigned to creators</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Tracking Links Created</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-coral/10 text-coral">
+                <UsersRound className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">
+              {products.reduce((sum, p) => sum + p.activeLinksCount, 0)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Active affiliate referral links</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card className="shadow-card overflow-hidden">
+        <div className="p-5">
+          <div className="relative min-w-64 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9 h-9"
+              placeholder="Search product by title, vendor, or store name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[820px] text-left text-sm">
+            <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3 font-medium">Product</th>
+                <th className="px-5 py-3 font-medium">Brand Store</th>
+                <th className="px-5 py-3 font-medium">Vendor</th>
+                <th className="px-5 py-3 text-center font-medium">Stock Total</th>
+                <th className="px-5 py-3 text-center font-medium">Assigned Creators</th>
+                <th className="px-5 py-3 text-right font-medium">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {query.isLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td colSpan={6} className="px-5 py-4">
+                      <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
+                    </td>
+                  </tr>
+                ))
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                    No products found.
+                  </td>
+                </tr>
+              ) : (
+                products.map((product) => (
+                  <tr key={product.id} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        {product.imageUrl ? (
+                          <img
+                            src={product.imageUrl}
+                            alt=""
+                            className="h-9 w-9 rounded-lg object-cover border"
+                          />
+                        ) : (
+                          <span className="grid h-9 w-9 place-items-center rounded-lg bg-muted text-muted-foreground">
+                            <Boxes className="h-4 w-4" />
+                          </span>
+                        )}
+                        <p className="font-semibold text-foreground">{product.title}</p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 font-medium text-foreground">{product.storeName}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground text-xs">{product.vendor || "—"}</td>
+                    <td className="px-5 py-3.5 text-center">
+                      <Badge
+                        variant={product.inventoryTotal > 0 ? "outline" : "secondary"}
+                        className={
+                          product.inventoryTotal > 10
+                            ? "border-teal/30 bg-teal/5 text-teal text-xs"
+                            : product.inventoryTotal > 0
+                            ? "border-amber-500/30 bg-amber-500/5 text-amber-600 text-xs"
+                            : "bg-destructive/10 text-destructive text-xs"
+                        }
+                      >
+                        {product.inventoryTotal} in stock
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3.5 text-center font-semibold text-primary">
+                      {product.assignedCreatorsCount}
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-bold text-foreground">
+                      {formatCurrency(product.price)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 3. CAMPAIGNS PAGE
+// -------------------------------------------------------------
+export function CampaignsPage() {
+  const [search, setSearch] = useState("");
+  const query = useQuery({
+    queryKey: ["admin", "campaigns", search],
+    queryFn: () => getAdminCampaigns({ search }),
+  });
+
+  const campaigns = query.data?.campaigns ?? [];
+  const liveCount = query.data?.liveCount ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Platform Creator Campaigns"
+        description="Monitor brand campaigns, creator brief deliverables, budget allocation, and creator applications."
+      />
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Total Campaigns</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Megaphone className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">{campaigns.length}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Across all merchant brands</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Live & Active</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal/10 text-teal">
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">{liveCount}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Discoverable by creators</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Creator Applications</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-coral/10 text-coral">
+                <UsersRound className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">
+              {campaigns.reduce((sum, c) => sum + c.applicationsCount, 0)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Submitted applications</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card className="shadow-card overflow-hidden">
+        <div className="p-5">
+          <div className="relative min-w-64 max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9 h-9"
+              placeholder="Search campaigns by title, category, or brand..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[850px] text-left text-sm">
+            <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3 font-medium">Campaign</th>
+                <th className="px-5 py-3 font-medium">Brand</th>
+                <th className="px-5 py-3 font-medium">Category & Type</th>
+                <th className="px-5 py-3 text-center font-medium">Applications</th>
+                <th className="px-5 py-3 text-center font-medium">Assigned</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {query.isLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td colSpan={6} className="px-5 py-4">
+                      <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
+                    </td>
+                  </tr>
+                ))
+              ) : campaigns.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                    No campaigns found.
+                  </td>
+                </tr>
+              ) : (
+                campaigns.map((c) => (
+                  <tr key={c.id} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <img src={c.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover border" />
+                        <div>
+                          <p className="font-semibold text-foreground">{c.title}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-1">{c.deliverables}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 font-medium text-foreground">{c.storeName}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">
+                      {c.category} · {c.campaignType}
+                    </td>
+                    <td className="px-5 py-3.5 text-center font-semibold text-primary">
+                      {c.applicationsCount}
+                    </td>
+                    <td className="px-5 py-3.5 text-center font-semibold text-foreground">
+                      {c.assignedCreatorsCount}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Badge
+                        variant={c.status === "PUBLISHED" ? "outline" : "secondary"}
+                        className={
+                          c.status === "PUBLISHED"
+                            ? "border-teal/30 bg-teal/5 text-teal text-xs font-medium"
+                            : "text-xs"
+                        }
+                      >
+                        {c.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 4. SOCIAL ACCOUNTS PAGE
+// -------------------------------------------------------------
+export function SocialPage() {
+  const query = useQuery({ queryKey: ["admin", "social"], queryFn: () => getAdminSocial() });
+  const accounts = query.data?.accounts ?? [];
+  const metrics = query.data?.metrics ?? { totalAccounts: 0, healthyCount: 0, attentionNeededCount: 0 };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Connected Instagram Accounts"
+        description="Monitor Instagram Graph API OAuth tokens, automation webhook bindings, and connection health."
+      />
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Connected Profiles</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-pink-500/10 text-pink-600">
+                <Instagram className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">{metrics.totalAccounts}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Active Meta OAuth authorizations</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Healthy & Synced</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-teal/10 text-teal">
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">{metrics.healthyCount}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Live webhook delivery active</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-muted-foreground">Attention Needed</p>
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-amber-500/10 text-amber-600">
+                <RefreshCw className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 font-display text-2xl font-semibold">{metrics.attentionNeededCount}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Expired or disconnected tokens</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card className="shadow-card overflow-hidden">
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[780px] text-left text-sm">
+            <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3 font-medium">Influencer Account</th>
+                <th className="px-5 py-3 font-medium">Instagram Handle</th>
+                <th className="px-5 py-3 font-medium">Creator Code</th>
+                <th className="px-5 py-3 font-medium">Connection Status</th>
+                <th className="px-5 py-3 text-right font-medium">Last Synced</th>
+              </tr>
+            </thead>
+            <tbody>
+              {query.isLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td colSpan={5} className="px-5 py-4">
+                      <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
+                    </td>
+                  </tr>
+                ))
+              ) : accounts.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">
+                    No Instagram accounts connected yet.
+                  </td>
+                </tr>
+              ) : (
+                accounts.map((acc) => (
+                  <tr key={acc.id} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
+                    <td className="px-5 py-3.5">
+                      <p className="font-semibold text-foreground">{acc.influencerName}</p>
+                      <p className="text-xs text-muted-foreground">{acc.influencerEmail || "No email"}</p>
+                    </td>
+                    <td className="px-5 py-3.5 font-medium text-pink-600 dark:text-pink-400">
+                      <span className="flex items-center gap-1">
+                        <Instagram className="h-3.5 w-3.5" />
+                        @{acc.username}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-xs font-semibold text-primary">
+                      {acc.creatorCode ? `@${acc.creatorCode}` : "—"}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Badge
+                        variant={acc.status === "ACTIVE" ? "outline" : "secondary"}
+                        className={
+                          acc.status === "ACTIVE"
+                            ? "border-teal/30 bg-teal/5 text-teal text-xs font-medium"
+                            : "text-xs"
+                        }
+                      >
+                        {acc.status}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-xs text-muted-foreground">
+                      {new Intl.DateTimeFormat("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }).format(new Date(acc.syncedAt))}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export { InfluencersPage, StoresPage };
