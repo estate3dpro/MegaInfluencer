@@ -14,11 +14,9 @@ import {
 import {
   Area,
   AreaChart,
-  CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis,
 } from "recharts";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +77,13 @@ const performanceData = [
   { day: "25", sales: 15500 },
   { day: "28", sales: 19200 },
 ];
+
+const compactCurrency = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  notation: "compact",
+  maximumFractionDigits: 2,
+});
 
 const orders = [
   { id: "#UT-10482", customer: "Priya Sharma", items: "2 items", total: "₹3,498", status: "Paid" },
@@ -189,15 +194,20 @@ export function DashboardPage() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
                 data={performanceData}
-                margin={{ top: 10, right: 8, left: -20, bottom: 0 }}
+                margin={{ top: 26, right: 8, left: 8, bottom: 0 }}
               >
                 <defs>
-                  <linearGradient id="storeSales" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.01} />
+                  <linearGradient id="storeSalesLine" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#fb923c" />
+                    <stop offset="48%" stopColor="#ec4899" />
+                    <stop offset="100%" stopColor="#3b82f6" />
+                  </linearGradient>
+                  <linearGradient id="storeSalesFill" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#fb923c" stopOpacity={0.16} />
+                    <stop offset="48%" stopColor="#ec4899" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.22} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
                 <XAxis
                   dataKey="day"
                   axisLine={false}
@@ -205,29 +215,18 @@ export function DashboardPage() {
                   tickMargin={10}
                   tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
                 />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tickMargin={8}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-                  tickFormatter={(value) => `₹${value / 1000}k`}
-                />
                 <Tooltip
-                  cursor={{ stroke: "var(--primary)", strokeDasharray: "4 4" }}
-                  contentStyle={{
-                    borderColor: "var(--border)",
-                    borderRadius: 10,
-                    background: "var(--card)",
-                  }}
-                  formatter={(value) => [`₹${Number(value).toLocaleString("en-IN")}`, "Sales"]}
-                  labelFormatter={(label) => `September ${label}`}
+                  content={<SalesPerformanceTooltip />}
+                  cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.5, strokeWidth: 1 }}
                 />
                 <Area
                   type="monotone"
                   dataKey="sales"
-                  stroke="var(--primary)"
-                  strokeWidth={2.5}
-                  fill="url(#storeSales)"
+                  stroke="url(#storeSalesLine)"
+                  strokeWidth={3}
+                  fill="url(#storeSalesFill)"
+                  dot={false}
+                  activeDot={{ r: 6, fill: "#ec4899", stroke: "var(--card)", strokeWidth: 3 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -351,6 +350,24 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </section>
+    </div>
+  );
+}
+
+function SalesPerformanceTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number }>;
+}) {
+  const value = payload?.[0]?.value;
+
+  if (!active || typeof value !== "number") return null;
+
+  return (
+    <div className="rounded-full bg-neutral-950 px-3 py-1.5 text-sm font-semibold text-white shadow-lg">
+      {compactCurrency.format(value)}
     </div>
   );
 }

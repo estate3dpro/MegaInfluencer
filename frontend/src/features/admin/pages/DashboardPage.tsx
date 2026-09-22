@@ -13,6 +13,7 @@ import {
   Store,
   UsersRound,
 } from "lucide-react";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,27 @@ const reviewQueue = [
   { name: "Monsoon Edit", type: "Campaign approval", requested: "1 hr ago", status: "Review" },
 ];
 
-const revenueBars = [38, 48, 44, 61, 57, 72, 68, 86, 78, 94, 83, 100];
+const marketplacePerformance = [
+  { month: "Oct", value: 418000 },
+  { month: "Nov", value: 452000 },
+  { month: "Dec", value: 487000 },
+  { month: "Jan", value: 498000 },
+  { month: "Feb", value: 536000 },
+  { month: "Mar", value: 522000 },
+  { month: "Apr", value: 574000 },
+  { month: "May", value: 632000 },
+  { month: "Jun", value: 676000 },
+  { month: "Jul", value: 701000 },
+  { month: "Aug", value: 694000 },
+  { month: "Sep", value: 728000 },
+];
+
+const compactCurrency = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  notation: "compact",
+  maximumFractionDigits: 2,
+});
 
 export function DashboardPage() {
   return (
@@ -125,26 +146,47 @@ export function DashboardPage() {
             </div>
             <Badge variant="secondary">+18.6%</Badge>
           </CardHeader>
-          <CardContent className="p-5 pt-8">
-            <div className="flex h-48 items-end gap-2 sm:gap-3">
-              {revenueBars.map((height, index) => (
-                <div key={index} className="group flex h-full flex-1 items-end">
-                  <div
-                    className="w-full rounded-t-md bg-primary/20 transition-colors group-hover:bg-primary"
-                    style={{ height: `${height}%` }}
-                    title={`Month ${index + 1}`}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 flex justify-between text-xs text-muted-foreground">
-              <span>Oct</span>
-              <span>Dec</span>
-              <span>Feb</span>
-              <span>Apr</span>
-              <span>Jun</span>
-              <span>Sep</span>
-            </div>
+          <CardContent className="h-[260px] p-2 pt-5 sm:p-5 sm:pt-5">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={marketplacePerformance}
+                margin={{ top: 26, right: 8, left: 8, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="marketplaceLine" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#fb923c" />
+                    <stop offset="48%" stopColor="#ec4899" />
+                    <stop offset="100%" stopColor="#3b82f6" />
+                  </linearGradient>
+                  <linearGradient id="marketplaceFill" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#fb923c" stopOpacity={0.16} />
+                    <stop offset="48%" stopColor="#ec4899" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.22} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="month"
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={12}
+                  interval={1}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <Tooltip
+                  content={<PerformanceTooltip />}
+                  cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.5, strokeWidth: 1 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="url(#marketplaceLine)"
+                  strokeWidth={3}
+                  fill="url(#marketplaceFill)"
+                  dot={false}
+                  activeDot={{ r: 6, fill: "#ec4899", stroke: "var(--card)", strokeWidth: 3 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
@@ -242,6 +284,24 @@ export function DashboardPage() {
         <CheckCircle2 className="h-4 w-4 shrink-0" /> All core platform services are operating
         normally.
       </div>
+    </div>
+  );
+}
+
+function PerformanceTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number }>;
+}) {
+  const value = payload?.[0]?.value;
+
+  if (!active || typeof value !== "number") return null;
+
+  return (
+    <div className="rounded-full bg-neutral-950 px-3 py-1.5 text-sm font-semibold text-white shadow-lg">
+      {compactCurrency.format(value)}
     </div>
   );
 }
