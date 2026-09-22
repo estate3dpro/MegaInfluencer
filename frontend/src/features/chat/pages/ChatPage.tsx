@@ -208,8 +208,20 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
   }
 
   return (
-    <div className="h-[calc(100dvh-6rem)] overflow-hidden md:h-[calc(100dvh-7rem)]">
-      <section className="grid h-full min-h-0 grid-rows-[240px_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card lg:grid-cols-[300px_minmax(0,1fr)] lg:grid-rows-1">
+    <div
+      className={cn(
+        "overflow-hidden",
+        mode === "workspace"
+          ? "h-[calc(100dvh-4rem)]"
+          : "h-[calc(100dvh-6rem)] md:h-[calc(100dvh-7rem)]",
+      )}
+    >
+      <section
+        className={cn(
+          "grid h-full min-h-0 grid-rows-[240px_minmax(0,1fr)] overflow-hidden bg-card lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1",
+          mode === "workspace" ? "border-0" : "rounded-lg border",
+        )}
+      >
         <aside className="flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r">
           <div className="flex gap-2 border-b p-3">
             <div className="relative min-w-0 flex-1">
@@ -222,8 +234,8 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
               </Button>
             ) : null}
           </div>
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="p-2">
+          <ScrollArea className="min-h-0 min-w-0 flex-1">
+            <div className="w-full min-w-0 max-w-full overflow-hidden p-2">
               <p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">Messages</p>
               {filteredConversations.map((conversation) => (
                 <button
@@ -240,12 +252,12 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
                       {conversation.group ? <UsersRound className="h-4 w-4" /> : conversation.members[0]?.initials}
                     </AvatarFallback>
                   </Avatar>
-                  <span className={cn("min-w-0 flex-1 overflow-hidden", conversation.unread && "pr-6")}>
+                  <span className={cn("w-0 min-w-0 flex-1 overflow-hidden", conversation.unread && "pr-6")}>
                     <span className="flex min-w-0 items-center justify-between gap-2">
                       <span className="truncate text-sm font-semibold">{conversation.title}</span>
                       <span className="shrink-0 text-[11px] text-muted-foreground">{conversation.time}</span>
                     </span>
-                    <span className="mt-0.5 block max-w-full truncate text-xs text-muted-foreground">{conversation.preview}</span>
+                    <span className="mt-0.5 line-clamp-2 max-w-full whitespace-normal break-words text-xs leading-5 text-muted-foreground">{conversation.preview}</span>
                   </span>
                   {conversation.unread ? <span className="absolute bottom-2.5 right-2.5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">{conversation.unread}</span> : null}
                 </button>

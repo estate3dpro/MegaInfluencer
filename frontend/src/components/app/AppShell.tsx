@@ -94,6 +94,8 @@ function RoleSidebar({ role }: { role: Role }) {
 export function AppShell({ role, children }: { role: Role; children?: ReactNode }) {
   const meta = roleMeta[role];
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isChatPage = pathname.endsWith("/chat");
   const user = useAuthStore((state) => state.user);
   const signOut = useAuthStore((state) => state.signOut);
   const accountName = user?.name || meta.person;
@@ -169,7 +171,15 @@ export function AppShell({ role, children }: { role: Role; children?: ReactNode 
               </DropdownMenu>
             </div>
           </header>
-          <main className="flex-1 space-y-6 p-4 md:p-6">{children ?? <Outlet />}</main>
+          <main
+            className={
+              isChatPage
+                ? "min-h-0 flex-1 overflow-hidden"
+                : "flex-1 space-y-6 p-4 md:p-6"
+            }
+          >
+            {children ?? <Outlet />}
+          </main>
         </div>
       </div>
     </SidebarProvider>
