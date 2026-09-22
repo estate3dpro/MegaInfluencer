@@ -344,15 +344,16 @@ export function CampaignsPage() {
 export function AffiliatePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [linkType, setLinkType] = useState<"CREATOR" | "STORE">("CREATOR");
   const [creatorId, setCreatorId] = useState("");
   const [productId, setProductId] = useState("store");
   const [productSearch, setProductSearch] = useState("");
   const [commissionRate, setCommissionRate] = useState("10");
   const client = useQueryClient();
   const linksQuery = useQuery({ queryKey: ["store", "affiliate-links", search], queryFn: () => getAffiliateLinks(search ? { search } : undefined) });
-  const creatorsQuery = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators, enabled: dialogOpen });
+  const creatorsQuery = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators, enabled: dialogOpen && linkType === "CREATOR" });
   const productsQuery = useQuery({ queryKey: ["store", "products", "affiliate-link"], queryFn: () => getStoreProducts(1, { all: true }), enabled: dialogOpen });
-  const createMutation = useMutation({ mutationFn: createAffiliateLink, onSuccess: () => { client.invalidateQueries({ queryKey: ["store", "affiliate-links"] }); setDialogOpen(false); setCreatorId(""); setProductId("store"); toast.success("Affiliate link created"); }, onError: () => toast.error("Could not create the affiliate link") });
+  const createMutation = useMutation({ mutationFn: createAffiliateLink, onSuccess: () => { client.invalidateQueries({ queryKey: ["store", "affiliate-links"] }); setDialogOpen(false); setLinkType("CREATOR"); setCreatorId(""); setProductId("store"); toast.success("Tracking link created"); }, onError: () => toast.error("Could not create the tracking link") });
   const statusMutation = useMutation({ mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "PAUSED" }) => updateAffiliateLink(id, { status }), onSuccess: () => client.invalidateQueries({ queryKey: ["store", "affiliate-links"] }), onError: () => toast.error("Could not update link status") });
   const links = linksQuery.data ?? [];
   const affiliateProducts = (productsQuery.data?.products ?? []).filter((product) => `${product.name} ${product.sku}`.toLowerCase().includes(productSearch.trim().toLowerCase()));
@@ -380,9 +381,9 @@ export function AffiliatePage() {
     }
   };
   const submitLink = () => {
-    if (!creatorId) { toast.error("Select a creator"); return; }
+    if (linkType === "CREATOR" && !creatorId) { toast.error("Select a creator"); return; }
     const rate = Number(commissionRate); if (!Number.isFinite(rate) || rate < 0 || rate > 100) { toast.error("Commission must be between 0 and 100%"); return; }
-    createMutation.mutate({ creatorId, productId: productId === "store" ? null : productId, commissionRate: rate });
+    createMutation.mutate({ creatorId: linkType === "CREATOR" ? creatorId : null, productId: productId === "store" ? null : productId, commissionRate: rate });
   };
   return (
     <div className="space-y-6">
@@ -396,7 +397,7 @@ export function AffiliatePage() {
         }
       />
       <section className="grid gap-4 sm:grid-cols-3">
-        <Summary label="Active links" value={String(links.filter((link) => link.status === "ACTIVE").length)} note={`Across ${new Set(links.map((link) => link.creatorId)).size} creators`} icon={Link2} />
+        <Summary label="Active links" value={String(links.filter((link) => link.status === "ACTIVE").length)} note={`${new Set(links.filter((link) => link.creatorId).map((link) => link.creatorId)).size} creators + store links`} icon={Link2} />
         <Summary label="Total clicks" value={totalClicks.toLocaleString()} note="All tracked links" icon={ExternalLink} />
         <Summary
           label="Link conversion"
@@ -430,16 +431,16 @@ export function AffiliatePage() {
             <tbody>
               {links.map((link) => (
                 <tr key={link.id} className="border-b last:border-0">
-                  <td className="px-5 py-3 font-medium">{link.creator}</td>
+                  <td className="px-5 py-3 font-medium">{link.creator ?? "Store link"}</td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5 text-muted-foreground">
                       <Link2 className="h-3.5 w-3.5" />
                       <span className="max-w-72 truncate" title={link.url}>{link.url}</span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyLink(link.url)} aria-label={`Copy ${link.creator}'s link`}>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyLink(link.url)} aria-label={`Copy ${link.creator ?? "store"} link`}>
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{link.product ?? "Store-wide"} · {link.commissionRate}% commission</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{link.product ?? "Store-wide"} · {link.creator ? `${link.commissionRate}% commission` : `₹${link.storeCredits.toLocaleString("en-IN")} store credits`}</p>
                   </td>
                   <td className="px-5 py-3">{link.clicks.toLocaleString()}</td>
                   <td className="px-5 py-3">{link.orders}</td>
@@ -448,18 +449,19 @@ export function AffiliatePage() {
                   </td>
                 </tr>
               ))}
-              {!linksQuery.isLoading && links.length === 0 ? <tr><td colSpan={5} className="px-5 py-16 text-center text-muted-foreground">No affiliate links yet. Create one to start tracking creator traffic.</td></tr> : null}
+              {!linksQuery.isLoading && links.length === 0 ? <tr><td colSpan={5} className="px-5 py-16 text-center text-muted-foreground">No tracking links yet. Create a creator or store link to start tracking orders.</td></tr> : null}
             </tbody>
           </table>
         </CardContent>
       </Card>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Create affiliate link</DialogTitle><DialogDescription>Choose a creator and optionally limit the link to one Shopify product.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Create tracking link</DialogTitle><DialogDescription>Create a creator link for commissions or a store link to count attributed orders as store credits.</DialogDescription></DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2"><Label>Creator</Label><Select value={creatorId} onValueChange={setCreatorId}><SelectTrigger><SelectValue placeholder="Select a creator" /></SelectTrigger><SelectContent>{(creatorsQuery.data ?? []).map((creator) => <SelectItem key={creator.id} value={creator.id}>{creator.displayName}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Link type</Label><Select value={linkType} onValueChange={(value: "CREATOR" | "STORE") => setLinkType(value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CREATOR">Creator link</SelectItem><SelectItem value="STORE">Store link</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground">{linkType === "CREATOR" ? "Orders are attributed to the selected creator for commission." : "Orders are attributed to your store and counted as store credits."}</p></div>
+            {linkType === "CREATOR" ? <div className="grid gap-2"><Label>Creator</Label><Select value={creatorId} onValueChange={setCreatorId}><SelectTrigger><SelectValue placeholder="Select a creator" /></SelectTrigger><SelectContent>{(creatorsQuery.data ?? []).map((creator) => <SelectItem key={creator.id} value={creator.id}>{creator.displayName}</SelectItem>)}</SelectContent></Select></div> : null}
             <div className="grid gap-2"><Label>Destination</Label><Input placeholder="Search all Shopify products" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} /><Select value={productId} onValueChange={setProductId}><SelectTrigger><SelectValue placeholder={productsQuery.isLoading ? "Loading products…" : "Choose a product or entire store"} /></SelectTrigger><SelectContent><SelectItem value="store">Entire store</SelectItem>{affiliateProducts.map((product) => <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">{productsQuery.isLoading ? "Loading Shopify products…" : `${affiliateProducts.length} of ${productsQuery.data?.pagination.total ?? 0} products`}</p></div>
-            <div className="grid gap-2"><Label htmlFor="commission-rate">Commission rate (%)</Label><Input id="commission-rate" type="number" min="0" max="100" value={commissionRate} onChange={(event) => setCommissionRate(event.target.value)} /></div>
+            <div className="grid gap-2"><Label htmlFor="commission-rate">{linkType === "CREATOR" ? "Commission rate (%)" : "Store credit rate (%)"}</Label><Input id="commission-rate" type="number" min="0" max="100" value={commissionRate} onChange={(event) => setCommissionRate(event.target.value)} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={submitLink} disabled={createMutation.isPending}>{createMutation.isPending ? "Creating…" : "Create link"}</Button></DialogFooter>
         </DialogContent>

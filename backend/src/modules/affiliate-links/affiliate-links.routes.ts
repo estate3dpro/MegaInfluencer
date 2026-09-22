@@ -7,7 +7,7 @@ import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 
 const createLinkSchema = z.object({
-  creatorId: z.string().min(1), productId: z.string().min(1).optional().nullable(),
+  creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
   commissionRate: z.coerce.number().min(0).max(100).default(10), expiresAt: z.coerce.date().optional().nullable(),
 });
 const updateLinkSchema = z.object({ status: z.enum(['ACTIVE', 'PAUSED']).optional(), expiresAt: z.coerce.date().optional().nullable() });
@@ -28,7 +28,8 @@ function asLink(row: any, baseUrl: string) {
   const commissions = (row.commissions ?? []).filter((commission: any) => commission.status !== 'REVERSED');
   const orders = commissions.length;
   const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0);
-  return { id: row.id, creatorId: row.creatorId, creator: row.creator.displayName, productId: row.productId, product: row.product?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionRate: Number(row.commissionRate), status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
+  const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
+  return { id: row.id, creatorId: row.creatorId, creator: row.creator?.displayName ?? null, productId: row.productId, product: row.product?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionRate: Number(row.commissionRate), status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, storeCredits, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
 }
 
 export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
@@ -46,8 +47,10 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/store/affiliate-links', async (request, reply) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const input = createLinkSchema.parse(request.body);
-    const assigned = await prisma.storeInfluencerAssignment.findUnique({ where: { organizationId_influencerId: { organizationId: organization.id, influencerId: input.creatorId } } });
-    if (!assigned) throw new AppError('CREATOR_NOT_ASSIGNED', 'Choose a creator assigned to this store.', 422);
+    if (input.creatorId) {
+      const assigned = await prisma.storeInfluencerAssignment.findUnique({ where: { organizationId_influencerId: { organizationId: organization.id, influencerId: input.creatorId } } });
+      if (!assigned) throw new AppError('CREATOR_NOT_ASSIGNED', 'Choose a creator assigned to this store.', 422);
+    }
     const product = input.productId ? await prisma.shopifyProduct.findFirst({ where: { id: input.productId, organizationId: organization.id }, select: { id: true, handle: true } }) : null;
     if (input.productId && !product) throw new AppError('PRODUCT_NOT_FOUND', 'The selected product does not belong to this store.', 422);
     const link = await prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, targetType: product ? 'PRODUCT' : 'STORE', destinationPath: product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug() }, include: { creator: { select: { displayName: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
