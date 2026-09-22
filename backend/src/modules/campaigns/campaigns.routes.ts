@@ -2,14 +2,12 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
 import { requireRole } from '../../shared/auth/authorization.js';
-import { AppError } from '../../shared/errors/app-error.js';
 import { parseOrThrow } from '../../shared/validation/pagination.js';
 import { applicationSchema, campaignInputSchema, idSchema } from './campaigns.schema.js';
 import * as service from './campaigns.service.js';
 
 const campaignStatusBodySchema = z.object({ status: service.campaignStatusSchema });
 const influencerIdBodySchema = z.object({ influencerId: z.string().cuid() });
-const notificationIdSchema = z.object({ notificationId: z.string().cuid() });
 
 export const campaignRoutes: FastifyPluginAsync = async (app) => {
   app.get('/store/campaigns', async (request) => {
@@ -83,26 +81,5 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     const { campaignId } = parseOrThrow(idSchema.pick({ campaignId: true }), request.params);
     const input = parseOrThrow(applicationSchema, request.body);
     return reply.status(201).send({ application: await service.apply(app, auth.userId, campaignId, input) });
-  });
-  app.get('/notifications', async (request) => {
-    const auth = requireRole(request, ['ADMIN', 'STORE_OWNER', 'INFLUENCER']);
-    const items = await app.prisma.notification.findMany({
-      where: { userId: auth.userId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-    return { items };
-  });
-  app.patch('/notifications/:notificationId/read', async (request) => {
-    const auth = requireRole(request, ['ADMIN', 'STORE_OWNER', 'INFLUENCER']);
-    const { notificationId } = parseOrThrow(notificationIdSchema, request.params);
-    const notification = await app.prisma.notification.findFirst({ where: { id: notificationId, userId: auth.userId } });
-    if (!notification) throw new AppError('NOTIFICATION_NOT_FOUND', 'Notification was not found.', 404);
-    return { notification: await app.prisma.notification.update({ where: { id: notificationId }, data: { readAt: new Date() } }) };
-  });
-  app.patch('/notifications/read-all', async (request) => {
-    const auth = requireRole(request, ['ADMIN', 'STORE_OWNER', 'INFLUENCER']);
-    await app.prisma.notification.updateMany({ where: { userId: auth.userId, readAt: null }, data: { readAt: new Date() } });
-    return { ok: true };
   });
 };
