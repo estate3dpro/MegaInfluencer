@@ -91,7 +91,12 @@ export const instagramWebhookRoutes: FastifyPluginAsync = async (app) => {
     let payload: unknown;
     try { payload = JSON.parse(rawBody.toString('utf8')); } catch { throw new AppError('INVALID_WEBHOOK_PAYLOAD', 'Webhook body is not valid JSON.', 400); }
     const { duplicate } = await recordWebhookDelivery(app, rawBody, payload);
-    const commentEvents = duplicate ? 0 : await processInstagramCommentAutomations(app, payload);
-    return reply.status(200).send({ received: true, duplicate, commentEvents });
+    if (duplicate) {
+      request.log.info({ payloadBytes: rawBody.length }, 'Duplicate Instagram webhook ignored');
+      return reply.status(200).send({ received: true, duplicate: true, commentEvents: 0 });
+    }
+    const processing = await processInstagramCommentAutomations(app, payload);
+    request.log.info(processing, 'Instagram webhook processed');
+    return reply.status(200).send({ received: true, duplicate: false, ...processing });
   });
 };

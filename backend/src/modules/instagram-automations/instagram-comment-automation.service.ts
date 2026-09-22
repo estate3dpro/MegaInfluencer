@@ -12,6 +12,14 @@ type MetaCommentEvent = {
   instagramAccountId?: string;
 };
 
+type ProcessingSummary = {
+  comments: number;
+  matchingAutomations: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+};
+
 type InstagramWebhookPayload = {
   object?: unknown;
   entry?: Array<{
@@ -84,20 +92,62 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message.slice(0, 1_000) : 'Unknown Instagram delivery error.';
 }
 
-async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent) {
+function commentLog(event: MetaCommentEvent) {
+  return {
+    commentId: event.commentId,
+    commenterId: event.commenterId,
+    commenterUsername: event.commenterName ?? null,
+    mediaId: event.mediaId,
+    instagramAccountId: event.instagramAccountId ?? null,
+    // Keep logs useful without allowing an unusually long comment to flood them.
+    commentText: event.commentText.slice(0, 500),
+  };
+}
+
+async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent): Promise<Omit<ProcessingSummary, 'comments'>> {
+  const summary = { matchingAutomations: 0, sent: 0, failed: 0, skipped: 0 };
+  app.log.info(commentLog(event), 'Instagram comment received');
+
   const automations = await app.prisma.instagramAutomation.findMany({
     where: { instagramPostId: event.mediaId, status: 'ACTIVE' },
     include: { influencer: { include: { instagramConnection: true } } },
   });
 
+  if (!automations.length) {
+    app.log.info(commentLog(event), 'No active Instagram automation exists for this post');
+    return summary;
+  }
+
   for (const automation of automations) {
     const connection = automation.influencer.instagramConnection;
-    if (
-      !connection || connection.status !== 'ACTIVE'
-      || (connection.tokenExpiresAt && connection.tokenExpiresAt <= new Date())
-      || (event.instagramAccountId && connection.instagramUserId !== event.instagramAccountId)
-      || !matchesKeywords(event.commentText, automation.keywords, automation.wholeWordMatch)
-    ) continue;
+    const logContext = { ...commentLog(event), automationId: automation.id, automationName: automation.name };
+    if (!connection) {
+      summary.skipped += 1;
+      app.log.warn(logContext, 'Instagram automation skipped: creator has no Instagram connection');
+      continue;
+    }
+    if (connection.status !== 'ACTIVE') {
+      summary.skipped += 1;
+      app.log.warn({ ...logContext, connectionStatus: connection.status }, 'Instagram automation skipped: connection is inactive');
+      continue;
+    }
+    if (connection.tokenExpiresAt && connection.tokenExpiresAt <= new Date()) {
+      summary.skipped += 1;
+      app.log.warn({ ...logContext, tokenExpiresAt: connection.tokenExpiresAt }, 'Instagram automation skipped: connection token expired');
+      continue;
+    }
+    if (event.instagramAccountId && connection.instagramUserId !== event.instagramAccountId) {
+      summary.skipped += 1;
+      app.log.warn({ ...logContext, connectedInstagramAccountId: connection.instagramUserId }, 'Instagram automation skipped: webhook account does not own this automation');
+      continue;
+    }
+    if (!matchesKeywords(event.commentText, automation.keywords, automation.wholeWordMatch)) {
+      summary.skipped += 1;
+      app.log.info({ ...logContext, keywords: automation.keywords, wholeWordMatch: automation.wholeWordMatch }, 'Instagram automation skipped: comment did not match keywords');
+      continue;
+    }
+    summary.matchingAutomations += 1;
+    app.log.info({ ...logContext, keywords: automation.keywords }, 'Instagram automation keyword matched');
 
     // This unique row is the idempotency boundary for Meta retries and events
     // delivered more than once in separate webhook payloads.
@@ -114,7 +164,11 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
         select: { id: true },
       });
     } catch (error) {
-      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') continue;
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+        summary.skipped += 1;
+        app.log.info(logContext, 'Instagram automation skipped: duplicate comment delivery');
+        continue;
+      }
       throw error;
     }
 
@@ -129,19 +183,29 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
         where: { id: delivery.id },
         data: { status: 'SENT', providerMessageId: result.message_id ?? null, sentAt: new Date() },
       });
-      app.log.info({ automationId: automation.id, commentId: event.commentId }, 'Instagram automation private reply sent');
+      summary.sent += 1;
+      app.log.info({ ...logContext, providerMessageId: result.message_id ?? null }, 'Instagram automation private reply sent');
     } catch (error) {
       await app.prisma.instagramAutomationDelivery.update({
         where: { id: delivery.id },
         data: { status: 'FAILED', errorMessage: errorMessage(error) },
       });
-      app.log.error({ err: error, automationId: automation.id, commentId: event.commentId }, 'Instagram automation private reply failed');
+      summary.failed += 1;
+      app.log.error({ err: error, ...logContext }, 'Instagram automation private reply failed');
     }
   }
+  return summary;
 }
 
 export async function processInstagramCommentAutomations(app: FastifyInstance, payload: unknown) {
   const events = parseCommentEvents(payload);
-  for (const event of events) await processCommentEvent(app, event);
-  return events.length;
+  const summary: ProcessingSummary = { comments: events.length, matchingAutomations: 0, sent: 0, failed: 0, skipped: 0 };
+  for (const event of events) {
+    const result = await processCommentEvent(app, event);
+    summary.matchingAutomations += result.matchingAutomations;
+    summary.sent += result.sent;
+    summary.failed += result.failed;
+    summary.skipped += result.skipped;
+  }
+  return summary;
 }
