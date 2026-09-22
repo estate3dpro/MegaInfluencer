@@ -27,6 +27,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
             displayName: true,
             email: true,
             status: true,
+            creatorCode: true,
             createdAt: true,
             instagramConnection: { select: { username: true, displayName: true, status: true } },
           },

@@ -6,6 +6,7 @@ import { AppError, ForbiddenError } from '../../shared/errors/app-error.js';
 import { createSession } from '../../shared/auth/session.js';
 import { createAuthorizationUrl, exchangeAuthorizationCode, exchangeLongLivedToken, getInstagramMedia, getInstagramProfile as fetchInstagramProfile, getInstagramUser } from './instagram.client.js';
 import { createOpaqueToken, decryptToken, encryptToken, hashOpaqueToken } from './instagram.crypto.js';
+import { ensureCreatorCode } from '../../shared/creator-code.js';
 
 const stateLifetimeMs = 10 * 60_000;
 const ticketLifetimeMs = 60_000;
@@ -108,6 +109,7 @@ export async function completeInstagramOAuth(app: FastifyInstance, input: { code
       data: { displayName: instagramUser.name || instagramUser.username, role: 'INFLUENCER' },
       select: { id: true },
     });
+    await ensureCreatorCode(app.prisma, user.id);
     influencerId = user.id;
   } else {
     influencerId = existingConnection.influencerId;
@@ -166,7 +168,9 @@ export async function getInstagramProfile(app: FastifyInstance, influencerId: st
     throw new AppError('INSTAGRAM_TOKEN_EXPIRED', 'Reconnect Instagram to refresh the expired token.', 409);
   }
   const profile = await fetchInstagramProfile(decryptToken(connection.encryptedAccessToken));
+  const creator = await app.prisma.user.findUnique({ where: { id: influencerId }, select: { creatorCode: true } });
   return {
+    creatorCode: creator?.creatorCode ?? null,
     connection: {
       instagramUserId: connection.instagramUserId,
       username: connection.username,

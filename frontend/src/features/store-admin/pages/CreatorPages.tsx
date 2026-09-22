@@ -244,7 +244,7 @@ export function CreatorsPage() {
                       <Avatar name={creator.displayName} tone="bg-primary/10 text-primary" />
                       <div>
                         <p className="font-medium">{creator.displayName}</p>
-                        <p className="text-xs text-muted-foreground">{creator.instagramUsername ? `@${creator.instagramUsername}` : creator.email ?? "No Instagram connected"}</p>
+                        <p className="text-xs text-muted-foreground">{creator.instagramUsername ? `@${creator.instagramUsername}` : creator.email ?? "No Instagram connected"} · Code {creator.creatorCode ?? "—"}</p>
                       </div>
                     </div>
                   </td>
@@ -440,7 +440,7 @@ export function AffiliatePage() {
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{link.product ?? "Store-wide"} · {link.creator ? `${link.commissionRate}% commission` : `₹${link.storeCredits.toLocaleString("en-IN")} store credits`}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{link.product ?? "Store-wide"} · {link.creator ? `Code ${link.creatorCode ?? "—"} · ${link.commissionRate}% commission` : `₹${link.storeCredits.toLocaleString("en-IN")} store credits`}</p>
                   </td>
                   <td className="px-5 py-3">{link.clicks.toLocaleString()}</td>
                   <td className="px-5 py-3">{link.orders}</td>

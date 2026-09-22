@@ -5,6 +5,7 @@ export type StoreCreator = {
   displayName: string;
   email: string | null;
   status: string;
+  creatorCode: string | null;
   instagramUsername: string | null;
   instagramStatus: string | null;
   assignedAt: string;

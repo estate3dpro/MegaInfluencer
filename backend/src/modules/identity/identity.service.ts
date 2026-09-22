@@ -4,6 +4,7 @@ import type { UserRole } from '@prisma/client';
 
 import { AppError, ForbiddenError } from '../../shared/errors/app-error.js';
 import { createSession, hashRefreshToken } from '../../shared/auth/session.js';
+import { ensureCreatorCode } from '../../shared/creator-code.js';
 
 const passwordOptions = {
   type: argon2.argon2id,
@@ -33,6 +34,7 @@ export async function registerUser(
   const user = await app.prisma.user.create({
     data: { email: input.email, passwordHash, displayName: input.displayName, role: input.role },
   });
+  if (user.role === 'INFLUENCER') await ensureCreatorCode(app.prisma, user.id);
 
   return toUserResponse(user);
 }

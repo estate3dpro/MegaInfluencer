@@ -70,6 +70,7 @@ export function ProfilePage() {
                 </Badge>
               </div>
               {username ? <p className="mt-1 text-sm text-muted-foreground">@{username}</p> : null}
+              <p className="mt-1 text-sm text-muted-foreground">Creator code: <span className="font-mono font-medium text-foreground">{data?.creatorCode ?? "—"}</span></p>
               {user?.email ? (
                 <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
               ) : null}
@@ -124,6 +125,7 @@ export function ProfilePage() {
               </CardHeader>
               <CardContent className="grid gap-4 text-sm sm:grid-cols-2">
                 <Detail label="Instagram username" value={`@${data.connection.username}`} />
+                <Detail label="Creator code" value={data.creatorCode ?? "—"} mono />
                 <Detail label="Instagram account ID" value={data.connection.instagramUserId} mono />
                 <Detail
                   label="Connection status"

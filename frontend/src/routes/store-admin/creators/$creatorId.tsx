@@ -100,6 +100,7 @@ function Page() {
   const cards = [
     ["Followers", stats?.followers_count ?? "—"],
     ["Assigned Products", `${assignedProducts.length} items`],
+    ["Creator code", creator.creatorCode ?? "—"],
     ["Account status", creator.status === "ACTIVE" ? "Active" : "Suspended"],
     ["Assigned to store", new Date(assignedAt).toLocaleDateString()],
   ];
@@ -203,6 +204,10 @@ function Page() {
           <div>
             <dt className="text-sm text-muted-foreground">Email</dt>
             <dd className="mt-1 font-medium">{creator.email ?? "Not provided"}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Creator code</dt>
+            <dd className="mt-1 font-mono font-medium">{creator.creatorCode ?? "—"}</dd>
           </div>
           <div>
             <dt className="text-sm text-muted-foreground">Instagram username</dt>

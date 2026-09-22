@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api/client";
 
 export type InstagramProfileResponse = {
+  creatorCode: string | null;
   connection: {
     instagramUserId: string;
     username: string;

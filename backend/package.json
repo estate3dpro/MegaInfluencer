@@ -13,6 +13,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts",
+    "creator-codes:backfill": "tsx src/scripts/backfill-creator-codes.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

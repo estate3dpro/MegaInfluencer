@@ -13,13 +13,14 @@ export const influencerDashboardRoutes: FastifyPluginAsync = async (app) => {
     const thirtyDaysAgo = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29));
     const activeCommission = { creatorId: actor.userId, status: { not: 'REVERSED' as const } };
 
-    const [monthCommissions, previousCommissions, recentCommissions, monthClicks, previousClicks, assignments] = await Promise.all([
+    const [monthCommissions, previousCommissions, recentCommissions, monthClicks, previousClicks, assignments, creator] = await Promise.all([
       prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: monthStart } }, select: { amount: true, orderAmount: true, createdAt: true } }),
       prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: previousMonthStart, lt: monthStart } }, select: { amount: true, orderAmount: true } }),
       prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: thirtyDaysAgo } }, select: { amount: true, createdAt: true, status: true, shopifyOrder: { select: { name: true } }, organization: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
       prisma.affiliateLinkClick.count({ where: { link: { creatorId: actor.userId }, createdAt: { gte: monthStart } } }),
       prisma.affiliateLinkClick.count({ where: { link: { creatorId: actor.userId }, createdAt: { gte: previousMonthStart, lt: monthStart } } }),
       prisma.campaignAssignment.findMany({ where: { influencerId: actor.userId, campaign: { status: { in: ['PUBLISHED', 'PAUSED'] }, deletedAt: null } }, include: { campaign: { include: { organization: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      prisma.user.findUnique({ where: { id: actor.userId }, select: { creatorCode: true } }),
     ]);
 
     const sum = (items: Array<{ amount: unknown }>) => items.reduce((total, item) => total + Number(item.amount), 0);
@@ -36,6 +37,7 @@ export const influencerDashboardRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return {
+      creatorCode: creator?.creatorCode ?? null,
       metrics: {
         earnings: sum(monthCommissions), sales: sales(monthCommissions), orders: monthCommissions.length, clicks: monthClicks,
         earningsChange: change(sum(monthCommissions), sum(previousCommissions)), clicksChange: change(monthClicks, previousClicks),

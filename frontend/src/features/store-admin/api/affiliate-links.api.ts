@@ -1,7 +1,7 @@
 import { apiClient } from "@/lib/api/client";
 
 export type AffiliateLink = {
-  id: string; creatorId: string | null; creator: string | null; productId: string | null; product: string | null;
+  id: string; creatorId: string | null; creator: string | null; creatorCode: string | null; productId: string | null; product: string | null;
   slug: string; url: string; targetType: "STORE" | "PRODUCT"; commissionRate: number;
   status: "ACTIVE" | "PAUSED"; expiresAt: string | null; clicks: number; orders: number;
   revenue: number; storeCredits: number; conversion: number; createdAt: string;

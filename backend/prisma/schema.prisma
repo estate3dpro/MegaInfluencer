@@ -95,6 +95,7 @@ model User {
   displayName           String
   role                  UserRole
   status                UserStatus             @default(ACTIVE)
+  creatorCode           String?                @unique
   ownedOrganizations    Organization[]         @relation("OrganizationOwner")
   storeAssignments      StoreInfluencerAssignment[] @relation("AssignedInfluencer")
   productAssignments    ProductInfluencerAssignment[] @relation("ProductAssignedInfluencer")
@@ -334,6 +335,7 @@ model ShopifyOrder {
   financialStatus String?
   fulfillmentStatus String?
   processedAt    DateTime?
+  creatorCode   String?
   payload        Json
   syncedAt       DateTime     @updatedAt
   createdAt      DateTime     @default(now())
@@ -341,6 +343,7 @@ model ShopifyOrder {
   affiliateCommissions AffiliateCommission[]
   @@unique([organizationId, shopifyId])
   @@index([organizationId, syncedAt])
+  @@index([organizationId, creatorCode])
 }
 
 model AffiliateLink {
