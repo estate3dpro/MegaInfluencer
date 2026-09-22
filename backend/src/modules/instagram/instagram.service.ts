@@ -183,12 +183,26 @@ export async function getInstagramProfile(app: FastifyInstance, influencerId: st
   };
 }
 
+function webhookSecrets() {
+  return [...new Set([
+    process.env.FACEBOOK_APP_SECRET,
+    process.env.INSTAGRAM_APP_SECRET,
+    process.env.META_APP_SECRET,
+  ].map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
 export function verifyWebhookSignature(rawBody: Buffer, header: string | undefined) {
-  if (!header?.startsWith('sha256=') || !config.metaAppSecret) return false;
-  const signature = header.slice('sha256='.length);
+  if (!header) return false;
+  const normalizedHeader = header.trim();
+  if (!normalizedHeader.toLowerCase().startsWith('sha256=')) return false;
+  const signature = normalizedHeader.slice('sha256='.length).trim();
   if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
-  const expected = createHmac('sha256', config.metaAppSecret).update(rawBody).digest('hex');
-  return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+
+  const received = Buffer.from(signature, 'hex');
+  return webhookSecrets().some((secret) => {
+    const expected = Buffer.from(createHmac('sha256', secret).update(rawBody).digest('hex'), 'hex');
+    return received.length === expected.length && timingSafeEqual(received, expected);
+  });
 }
 
 /** Forwards the exact verified Meta payload to the opted-in local ngrok API. */
