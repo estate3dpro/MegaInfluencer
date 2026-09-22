@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/features/auth/types";
 
@@ -179,6 +180,7 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeId) ?? conversations[0];
   const filteredConversations = useMemo(
@@ -206,36 +208,21 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">
-            {mode === "support" ? "Help & Support" : "Chat"}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {mode === "support"
-              ? role === "admin"
-                ? "Handle direct support conversations with stores and influencers."
-                : "Chat directly with the platform support team."
-              : "Coordinate campaigns with store teams and influencers."}
-          </p>
-        </div>
-        {canCreateGroup ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> Create group
-          </Button>
-        ) : null}
-      </div>
-
-      <section className="grid min-h-[680px] overflow-hidden rounded-lg border bg-card lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_270px]">
+    <div className="h-[calc(100dvh-6rem)] overflow-hidden md:h-[calc(100dvh-7rem)]">
+      <section className="grid h-full min-h-0 grid-rows-[240px_minmax(0,1fr)] overflow-hidden rounded-lg border bg-card lg:grid-cols-[300px_minmax(0,1fr)] lg:grid-rows-1">
         <aside className="flex min-h-0 flex-col border-b lg:border-b-0 lg:border-r">
-          <div className="border-b p-3">
-            <div className="relative">
+          <div className="flex gap-2 border-b p-3">
+            <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" className="bg-muted/40 pl-9" />
             </div>
+            {canCreateGroup ? (
+              <Button size="icon" onClick={() => setCreateOpen(true)} aria-label="Create group" title="Create group">
+                <Plus className="h-4 w-4" />
+              </Button>
+            ) : null}
           </div>
-          <ScrollArea className="h-[290px] lg:h-[620px]">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="p-2">
               <p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">Messages</p>
               {filteredConversations.map((conversation) => (
@@ -244,7 +231,7 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
                   type="button"
                   onClick={() => setActiveId(conversation.id)}
                   className={cn(
-                    "flex w-full gap-3 rounded-md px-2.5 py-3 text-left transition-colors hover:bg-muted/60",
+                    "relative flex w-full min-w-0 gap-3 overflow-hidden rounded-md px-2.5 py-3 text-left transition-colors hover:bg-muted/60",
                     conversation.id === activeId && "bg-primary/8",
                   )}
                 >
@@ -253,21 +240,21 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
                       {conversation.group ? <UsersRound className="h-4 w-4" /> : conversation.members[0]?.initials}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-2">
+                  <span className={cn("min-w-0 flex-1 overflow-hidden", conversation.unread && "pr-6")}>
+                    <span className="flex min-w-0 items-center justify-between gap-2">
                       <span className="truncate text-sm font-semibold">{conversation.title}</span>
                       <span className="shrink-0 text-[11px] text-muted-foreground">{conversation.time}</span>
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{conversation.preview}</span>
+                    <span className="mt-0.5 block max-w-full truncate text-xs text-muted-foreground">{conversation.preview}</span>
                   </span>
-                  {conversation.unread ? <span className="mt-5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">{conversation.unread}</span> : null}
+                  {conversation.unread ? <span className="absolute bottom-2.5 right-2.5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">{conversation.unread}</span> : null}
                 </button>
               ))}
             </div>
           </ScrollArea>
         </aside>
 
-        <div className="flex min-h-[620px] min-w-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-col">
           <header className="flex h-[72px] shrink-0 items-center gap-3 border-b px-4">
             <Avatar className="h-10 w-10">
               <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
@@ -283,21 +270,24 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
             <Button variant="ghost" size="icon" aria-label="Conversation options">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
+            <Button variant="ghost" size="icon" onClick={() => setDetailsOpen(true)} aria-label="Open conversation details" title="Conversation details">
+              <Info className="h-4 w-4" />
+            </Button>
           </header>
 
           <ScrollArea className="min-h-0 flex-1 bg-muted/25">
             <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6">
               <div className="my-1 flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">Today</div>
               {messages.map((message) => (
-                <div key={message.id} className={cn("flex max-w-[85%] gap-2", message.mine && "ml-auto flex-row-reverse")}>
+                <div key={message.id} className={cn("flex min-w-0 max-w-[85%] gap-2", message.mine && "ml-auto flex-row-reverse")}>
                   {!message.mine ? (
                     <Avatar className="mt-5 h-7 w-7 shrink-0"><AvatarFallback className="bg-muted text-[10px]">{message.sender.split(" ").map((part) => part[0]).join("").slice(0, 2)}</AvatarFallback></Avatar>
                   ) : null}
-                  <div>
+                  <div className="min-w-0">
                     <div className={cn("mb-1 flex items-center gap-2 text-[11px] text-muted-foreground", message.mine && "justify-end")}>
                       <span>{message.sender}</span><span>{message.time}</span>
                     </div>
-                    <div className={cn("rounded-lg px-3.5 py-2.5 text-sm leading-6 shadow-sm", message.mine ? "rounded-tr-sm bg-primary text-primary-foreground" : "rounded-tl-sm border bg-card")}>
+                    <div className={cn("break-words rounded-lg px-3.5 py-2.5 text-sm leading-6 shadow-sm", message.mine ? "rounded-tr-sm bg-primary text-primary-foreground" : "rounded-tl-sm border bg-card")}>
                       {message.file ? (
                         <div className="flex min-w-52 items-center gap-3">
                           <span className="grid h-9 w-9 place-items-center rounded-md bg-coral/15 text-coral"><FileText className="h-4 w-4" /></span>
@@ -327,9 +317,10 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
           </div>
         </div>
 
-        <aside className="hidden border-l xl:block">
-          <div className="flex h-[72px] items-center gap-2 border-b px-4"><Info className="h-4 w-4 text-muted-foreground" /><p className="font-semibold">Conversation details</p></div>
-          <ScrollArea className="h-[620px]">
+        <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+          <SheetContent className="w-full p-0 sm:max-w-sm">
+            <div className="flex h-[72px] items-center gap-2 border-b px-5 pr-12"><Info className="h-4 w-4 text-muted-foreground" /><SheetTitle className="text-base">Conversation details</SheetTitle></div>
+            <ScrollArea className="h-[calc(100dvh-72px)]">
             <div className="p-5 text-center">
               <Avatar className="mx-auto h-16 w-16"><AvatarFallback className="bg-primary/10 font-semibold text-primary">{activeConversation.group ? <UsersRound className="h-6 w-6" /> : activeConversation.members[0]?.initials}</AvatarFallback></Avatar>
               <p className="mt-3 font-semibold">{activeConversation.title}</p>
@@ -352,8 +343,9 @@ export function ChatPage({ role, mode = "workspace" }: { role: Role; mode?: Chat
               <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">Shared media</p>
               <button className="flex w-full items-center gap-3 rounded-md p-2 text-left hover:bg-muted"><span className="grid h-9 w-9 place-items-center rounded-md bg-blue-500/10 text-blue-600"><Image className="h-4 w-4" /></span><span><span className="block text-sm font-medium">Campaign assets</span><span className="block text-xs text-muted-foreground">8 files</span></span></button>
             </div>
-          </ScrollArea>
-        </aside>
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
       </section>
 
       {canCreateGroup ? <CreateGroupDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={addConversation} /> : null}
