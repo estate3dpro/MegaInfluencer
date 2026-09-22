@@ -62,6 +62,7 @@ const fallbackProducts: Array<{
   tone: string;
   imageUrl?: string | null;
   affiliateSlug?: string | null;
+  affiliateUrl?: string | null;
 }> = [];
 
 function useScope() {
@@ -149,6 +150,19 @@ function filterForScope<T extends { store?: string; storeSlug?: string }>(
   return scope === "all"
     ? rows
     : rows.filter((row) => row.storeSlug === scope || row.store === scopeNameMap[scope] || row.store === scope);
+}
+
+async function copyShareLink(url: string | null | undefined) {
+  if (!url) {
+    toast.error("No tracking link is available for this product yet.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.success("Share link copied to clipboard!");
+  } catch {
+    toast.error("Could not copy the tracking link.");
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -286,11 +300,7 @@ export function StorePage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const url = `${window.location.origin}/r/${product.affiliateSlug || "store"}`;
-                  navigator.clipboard?.writeText(url);
-                  toast.success("Share link copied to clipboard!");
-                }}
+                onClick={() => copyShareLink(product.affiliateUrl)}
               >
                 Share <ExternalLink className="h-3.5 w-3.5" />
               </Button>
@@ -386,11 +396,7 @@ export function ProductsPage() {
                   <Button
                     className="mt-5 w-full"
                     variant="outline"
-                    onClick={() => {
-                      const url = `${window.location.origin}/r/${product.affiliateSlug || "store"}`;
-                      navigator.clipboard?.writeText(url);
-                      toast.success("Share link copied to clipboard!");
-                    }}
+                    onClick={() => copyShareLink(product.affiliateUrl)}
                   >
                     Get share link <Link2 className="ml-1.5 h-4 w-4" />
                   </Button>
@@ -539,7 +545,7 @@ export function LinksPage() {
                     <div className="space-y-2">
                       <Label htmlFor="slug">Custom Alias / Slug (Optional)</Label>
                       <div className="flex items-center rounded-lg border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
-                        <span>{window.location.host}/r/</span>
+                        <span>Tracking link alias: /r/</span>
                         <input
                           id="slug"
                           type="text"
@@ -607,7 +613,7 @@ export function LinksPage() {
                       </Badge>
                     </div>
                     <p className="mt-0.5 font-mono text-xs text-primary truncate">
-                      {window.location.host}/r/{link.slug}
+                      {link.url}
                     </p>
                   </div>
                 </div>

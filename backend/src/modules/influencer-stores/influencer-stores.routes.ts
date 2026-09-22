@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { getAssignedProductIds } from '../product-assignments/product-assignments.service.js';
+import { config } from '../../config/env.js';
 
 const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const numberStandard = new Intl.NumberFormat('en-IN');
@@ -14,6 +15,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/influencer/stores/overview', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
+    const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
 
     // 1. Fetch only assigned organizations for this influencer
     const assignments = await prisma.storeInfluencerAssignment.findMany({
@@ -241,6 +243,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
           tone: tones[idx % tones.length],
           imageUrl: p.imageUrl ?? null,
           affiliateSlug: userLink?.slug ?? null,
+          affiliateUrl: userLink ? `${baseUrl}/r/${userLink.slug}` : null,
         };
       })
       .sort((a: any, b: any) => (b.orders - a.orders) || (b.clicks - a.clicks));

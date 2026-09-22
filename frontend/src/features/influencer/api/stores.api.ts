@@ -43,6 +43,7 @@ export type InfluencerStoresOverview = {
     tone: string;
     imageUrl?: string | null;
     affiliateSlug?: string | null;
+    affiliateUrl?: string | null;
   }>;
   timelineBars: number[];
   timelineLabels?: string[];

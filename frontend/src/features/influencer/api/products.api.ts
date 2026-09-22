@@ -11,6 +11,7 @@ export type InfluencerProduct = {
   imageUrl: string | null;
   handle: string | null;
   affiliateSlug: string | null;
+  affiliateUrl: string | null;
 };
 
 export type InfluencerProductsResponse = {
