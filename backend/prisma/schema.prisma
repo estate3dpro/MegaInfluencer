@@ -56,6 +56,13 @@ enum InstagramAutomationStatus {
   PAUSED
 }
 
+enum InstagramAutomationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 enum CampaignStatus {
   DRAFT
   PUBLISHED
@@ -184,11 +191,32 @@ model InstagramAutomation {
   dmMessage      String
   wholeWordMatch Boolean                   @default(true)
   status         InstagramAutomationStatus @default(ACTIVE)
+  deliveries     InstagramAutomationDelivery[]
   createdAt      DateTime                  @default(now())
   updatedAt      DateTime                  @updatedAt
 
   @@index([influencerId, createdAt])
   @@index([influencerId, instagramPostId])
+}
+
+model InstagramAutomationDelivery {
+  id              String                            @id @default(cuid())
+  automationId    String
+  commentId       String
+  commenterId     String
+  commenterName   String?
+  commentText     String
+  status          InstagramAutomationDeliveryStatus @default(PENDING)
+  providerMessageId String?
+  errorMessage    String?
+  sentAt          DateTime?
+  createdAt       DateTime                          @default(now())
+  updatedAt       DateTime                          @updatedAt
+  automation      InstagramAutomation               @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, commentId])
+  @@index([automationId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Organization {

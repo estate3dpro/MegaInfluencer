@@ -4,6 +4,7 @@ import { AppError } from '../../shared/errors/app-error.js';
 const oauthUrl = 'https://api.instagram.com/oauth/authorize';
 const tokenUrl = 'https://api.instagram.com/oauth/access_token';
 const graphUrl = 'https://graph.instagram.com';
+const messagingGraphUrl = 'https://graph.instagram.com/v23.0';
 
 type InstagramError = { error?: { message?: string; type?: string; code?: number } };
 
@@ -112,4 +113,29 @@ export async function getInstagramProfile(accessToken: string) {
   } catch {
     return profile;
   }
+}
+
+/**
+ * Send the configured private reply for a comment webhook.  This is the
+ * Instagram Login messaging endpoint: the recipient is the comment ID, not
+ * the commenter ID, which allows Meta to deliver the initial private reply.
+ */
+export async function sendInstagramPrivateReply(
+  accessToken: string,
+  instagramUserId: string,
+  commentId: string,
+  message: string,
+) {
+  const response = await fetch(`${messagingGraphUrl}/${instagramUserId}/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${accessToken.trim()}`,
+    },
+    body: JSON.stringify({
+      recipient: { comment_id: commentId },
+      message: { text: message },
+    }),
+  });
+  return parseResponse<{ recipient_id?: string; message_id?: string }>(response);
 }

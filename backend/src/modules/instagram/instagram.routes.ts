@@ -6,6 +6,7 @@ import { parseOrThrow } from '../../shared/validation/pagination.js';
 import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, exchangeInstagramLoginTicket, forwardWebhookToLocal, getConnection, getInstagramProfile, listInstagramMedia, recordWebhookDelivery, verifyWebhookSignature } from './instagram.service.js';
 import { exchangeLoginTicketSchema, mediaQuerySchema, oauthCallbackQuerySchema, webhookVerificationSchema } from './instagram.schema.js';
 import { config } from '../../config/env.js';
+import { processInstagramCommentAutomations } from '../instagram-automations/instagram-comment-automation.service.js';
 
 export const instagramAuthRoutes: FastifyPluginAsync = async (app) => {
   app.get('/auth/instagram', async (_request, reply) => reply.redirect(await beginInstagramOAuth(app, 'LOGIN')));
@@ -90,6 +91,7 @@ export const instagramWebhookRoutes: FastifyPluginAsync = async (app) => {
     let payload: unknown;
     try { payload = JSON.parse(rawBody.toString('utf8')); } catch { throw new AppError('INVALID_WEBHOOK_PAYLOAD', 'Webhook body is not valid JSON.', 400); }
     const { duplicate } = await recordWebhookDelivery(app, rawBody, payload);
-    return reply.status(200).send({ received: true, duplicate });
+    const commentEvents = duplicate ? 0 : await processInstagramCommentAutomations(app, payload);
+    return reply.status(200).send({ received: true, duplicate, commentEvents });
   });
 };
