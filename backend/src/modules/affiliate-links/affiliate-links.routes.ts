@@ -344,17 +344,20 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       : Array.isArray(payload.customAttributes)
       ? payload.customAttributes
       : [];
+    const lineItems = Array.isArray(payload.line_items) ? payload.line_items : Array.isArray(payload.lineItems) ? payload.lineItems : [];
+    const lineAttributes = lineItems.flatMap((line: any) => Array.isArray(line.properties) ? line.properties : Array.isArray(line.customAttributes) ? line.customAttributes : []);
+    const attributionAttributes = [...rawAttributes, ...lineAttributes];
 
     const getAttr = (key: string) => {
-      const found = rawAttributes.find((item: any) => {
+      const found = attributionAttributes.find((item: any) => {
         const k = String(item?.name ?? item?.key ?? '').trim().toLowerCase();
         return k === key.toLowerCase();
       });
       return found?.value ? String(found.value).trim() : null;
     };
 
-    const linkSlug = getAttr('mi_link');
-    let trackedCreatorCode = getAttr('mi_creator_code') ?? getAttr('utm_creator_code');
+    const linkSlug = getAttr('mi_link') ?? getAttr('_mi_link');
+    let trackedCreatorCode = getAttr('mi_creator_code') ?? getAttr('_mi_creator_code') ?? getAttr('utm_creator_code');
 
     const discountCodes: string[] = Array.isArray(payload.discount_codes)
       ? payload.discount_codes.map((d: any) => String(d.code || '').trim()).filter(Boolean)

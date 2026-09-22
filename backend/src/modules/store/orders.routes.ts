@@ -8,7 +8,7 @@ import { decryptToken } from '../instagram/instagram.crypto.js';
 type Node = Record<string, any>;
 type Page = { items?: Node[]; pageInfo?: { hasNextPage: boolean; endCursor: string | null }; error?: string };
 
-const query = `query Orders($after:String){orders(first:100,after:$after,sortKey:PROCESSED_AT,reverse:true){nodes{id name email phone note tags customAttributes{key value} displayFinancialStatus displayFulfillmentStatus processedAt createdAt totalPriceSet{shopMoney{amount currencyCode}} totalShippingPriceSet{shopMoney{amount currencyCode}} totalTaxSet{shopMoney{amount currencyCode}} lineItems(first:250){nodes{title quantity sku originalUnitPriceSet{shopMoney{amount currencyCode}} variant{title image{url}} image{url}}} shippingAddress{firstName lastName name address1 address2 city province zip country phone} customer{firstName lastName email phone} } pageInfo{hasNextPage endCursor}}}`;
+const query = `query Orders($after:String){orders(first:100,after:$after,sortKey:PROCESSED_AT,reverse:true){nodes{id name email phone note tags customAttributes{key value} displayFinancialStatus displayFulfillmentStatus processedAt createdAt totalPriceSet{shopMoney{amount currencyCode}} totalShippingPriceSet{shopMoney{amount currencyCode}} totalTaxSet{shopMoney{amount currencyCode}} lineItems(first:250){nodes{title quantity sku customAttributes{key value} originalUnitPriceSet{shopMoney{amount currencyCode}} variant{title image{url}} image{url}}} shippingAddress{firstName lastName name address1 address2 city province zip country phone} customer{firstName lastName email phone} } pageInfo{hasNextPage endCursor}}}`;
 
 async function storeFor(app: Parameters<FastifyPluginAsync>[0], userId: string) {
   const s = await app.prisma.organization.findFirst({
@@ -248,11 +248,15 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         p.items.map(async (item: Node) => {
           const raw = item.raw ?? item;
           const total = raw.totalPriceSet?.shopMoney;
-          const attributes = raw.customAttributes ?? item.customAttributes ?? [];
+          const orderAttributes = raw.customAttributes ?? item.customAttributes ?? [];
+          const lineItems = raw.lineItems?.nodes ?? raw.lineItems ?? item.lineItems ?? [];
+          const lineAttributes = lineItems.flatMap((line: Node) => line.customAttributes ?? line.properties ?? []);
+          const attributes = [...orderAttributes, ...lineAttributes];
           const trackedCreatorCode =
             attributes.find(
               (attribute: Node) =>
                 (attribute.key ?? attribute.name) === 'mi_creator_code' ||
+                (attribute.key ?? attribute.name) === '_mi_creator_code' ||
                 (attribute.key ?? attribute.name) === 'utm_creator_code'
             )?.value ?? null;
 
@@ -276,7 +280,9 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           });
 
           const linkSlug = attributes.find(
-            (attribute: Node) => (attribute.key ?? attribute.name) === 'mi_link'
+            (attribute: Node) =>
+              (attribute.key ?? attribute.name) === 'mi_link' ||
+              (attribute.key ?? attribute.name) === '_mi_link'
           )?.value;
           const tags = raw.tags ?? item.tags ?? [];
 
