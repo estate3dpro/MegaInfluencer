@@ -1,5 +1,21 @@
 import { useState } from "react";
-import { Bell, CheckCheck, ChevronRight, CircleHelp, Clock3, ExternalLink, FileText, LifeBuoy, Mail, MessageCircle, Search, Send, Sparkles } from "lucide-react";
+import {
+  Bell,
+  CheckCheck,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  ExternalLink,
+  FileText,
+  LifeBuoy,
+  Mail,
+  MessageCircle,
+  Search,
+  Send,
+  Sparkles,
+} from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,36 +23,326 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
-const notifications = [
-  { id: 1, title: "Your commission has been approved", message: "₹1,248 from Urban Threads order #UT-10482 is now available for payout.", time: "12 minutes ago", type: "Earnings", read: false, icon: Sparkles, tone: "bg-success/10 text-success" },
-  { id: 2, title: "Content review completed", message: "Urban Threads left feedback on your Festive Edit 2026 reel.", time: "2 hours ago", type: "Campaign", read: false, icon: FileText, tone: "bg-primary/10 text-primary" },
-  { id: 3, title: "New campaign invitation", message: "Glow Theory invited you to collaborate on Everyday Radiance.", time: "Yesterday", type: "Opportunity", read: false, icon: Sparkles, tone: "bg-coral/10 text-coral" },
-  { id: 4, title: "Automation milestone reached", message: "Your Festive lookbook automation has sent 400 messages.", time: "Yesterday", type: "Automation", read: true, icon: MessageCircle, tone: "bg-teal/10 text-teal" },
-  { id: 5, title: "Payout scheduled", message: "Your ₹18,400 payout is scheduled to arrive on September 20.", time: "Sep 14", type: "Earnings", read: true, icon: Clock3, tone: "bg-indigo/10 text-indigo" },
-];
+import {
+  getNotifications,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  NotificationItem,
+} from "@/features/notifications/api/notifications.api";
+import { queryKeys } from "@/lib/query-keys";
 
 export function NotificationsPage() {
-  const [readIds, setReadIds] = useState(() => new Set(notifications.filter((item) => item.read).map((item) => item.id)));
   const [filter, setFilter] = useState("all");
-  const rows = notifications.filter((item) => filter === "all" || (filter === "unread" ? !readIds.has(item.id) : item.type === filter));
-  const unread = notifications.filter((item) => !readIds.has(item.id)).length;
-  return <div className="space-y-6"><PageHeader title="Notifications" description="Stay up to date with campaign, earnings and store activity." actions={<Button variant="outline" onClick={() => setReadIds(new Set(notifications.map((item) => item.id)))} disabled={unread === 0}><CheckCheck className="h-4 w-4" /> Mark all as read</Button>} />
-    <section className="grid gap-4 sm:grid-cols-3"><NoticeStat label="Unread updates" value={String(unread)} detail="Need your attention" icon={Bell} /><NoticeStat label="Campaign updates" value="4" detail="This week" icon={FileText} /><NoticeStat label="Earnings updates" value="2" detail="This month" icon={Sparkles} /></section>
-    <div className="flex flex-wrap gap-2">{[["all", "All notifications"], ["unread", "Unread"], ["Campaign", "Campaigns"], ["Earnings", "Earnings"], ["Automation", "Automation"]].map(([value, label]) => <Button key={value} variant={filter === value ? "default" : "outline"} size="sm" onClick={() => setFilter(value)}>{label}</Button>)}</div>
-    <Card className="shadow-card"><CardContent className="p-0">{rows.map((item) => { const Icon = item.icon; const isRead = readIds.has(item.id); return <button key={item.id} className={`flex w-full items-start gap-4 border-b p-5 text-left last:border-0 ${isRead ? "" : "bg-primary/[0.035]"}`} onClick={() => setReadIds((current) => new Set(current).add(item.id))}><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${item.tone}`}><Icon className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className={`text-sm ${isRead ? "font-medium" : "font-semibold"}`}>{item.title}</p>{!isRead ? <i className="h-2 w-2 rounded-full bg-primary" /> : null}<Badge variant="secondary" className="text-[10px]">{item.type}</Badge></div><p className="mt-1 text-sm leading-5 text-muted-foreground">{item.message}</p><p className="mt-2 text-xs text-muted-foreground">{item.time}</p></div><ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" /></button> })}{rows.length === 0 ? <p className="p-12 text-center text-sm text-muted-foreground">No notifications in this view.</p> : null}</CardContent></Card>
-  </div>;
+  const queryClient = useQueryClient();
+
+  const notificationsQuery = useQuery({
+    queryKey: queryKeys.notifications.list(filter),
+    queryFn: () => getNotifications(filter),
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: markNotificationAsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: markAllNotificationsAsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success("All notifications marked as read");
+    },
+  });
+
+  const notificationsList = notificationsQuery.data ?? [];
+  const unread = notificationsList.filter((n) => !n.readAt && !n.read).length;
+
+  const getNotificationIcon = (kind: string) => {
+    switch (kind.toUpperCase()) {
+      case "EARNINGS":
+      case "COMMISSION":
+        return { icon: Sparkles, tone: "bg-success/10 text-success" };
+      case "CAMPAIGN":
+        return { icon: FileText, tone: "bg-primary/10 text-primary" };
+      case "AUTOMATION":
+        return { icon: MessageCircle, tone: "bg-teal/10 text-teal" };
+      default:
+        return { icon: Bell, tone: "bg-primary/10 text-primary" };
+    }
+  };
+
+  const handleNotificationClick = (item: NotificationItem) => {
+    if (!item.read) {
+      markReadMutation.mutate(item.id);
+    }
+    if (item.link) {
+      window.location.href = item.link;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Notifications"
+        description="Stay up to date with campaign invitations, commission earnings, and store updates."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => markAllReadMutation.mutate()}
+            disabled={unread === 0 || markAllReadMutation.isPending}
+          >
+            <CheckCheck className="h-4 w-4 mr-1.5" /> Mark all as read
+          </Button>
+        }
+      />
+
+      <section className="grid gap-4 sm:grid-cols-3">
+        <NoticeStat label="Unread updates" value={String(unread)} detail="Need your attention" icon={Bell} />
+        <NoticeStat
+          label="Total updates"
+          value={String(notificationsList.length)}
+          detail="All notifications"
+          icon={FileText}
+        />
+        <NoticeStat label="Live status" value="Active" detail="Real-time alerts" icon={Sparkles} />
+      </section>
+
+      <div className="flex flex-wrap gap-2">
+        {([
+          ["all", "All notifications"],
+          ["unread", "Unread"],
+          ["CAMPAIGN", "Campaigns"],
+          ["EARNINGS", "Earnings"],
+          ["AUTOMATION", "Automation"],
+        ] as const).map(([value, label]) => (
+          <Button
+            key={value}
+            variant={filter === value ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter(value)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      <Card className="shadow-card">
+        <CardContent className="p-0">
+          {notificationsList.length > 0 ? (
+            notificationsList.map((item) => {
+              const { icon: Icon, tone } = getNotificationIcon(item.kind);
+              const isRead = item.read;
+              const formattedTime = new Date(item.createdAt).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+
+              return (
+                <button
+                  key={item.id}
+                  className={`flex w-full items-start gap-4 border-b p-5 text-left transition-colors last:border-0 hover:bg-muted/30 ${
+                    isRead ? "" : "bg-primary/[0.035]"
+                  }`}
+                  onClick={() => handleNotificationClick(item)}
+                >
+                  <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${tone}`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className={`text-sm ${isRead ? "font-medium" : "font-semibold text-foreground"}`}>
+                        {item.title}
+                      </p>
+                      {!isRead ? <i className="h-2 w-2 rounded-full bg-primary" /> : null}
+                      <Badge variant="secondary" className="text-[10px] uppercase font-bold">
+                        {item.kind}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm leading-5 text-muted-foreground">{item.message}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{formattedTime}</p>
+                  </div>
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })
+          ) : (
+            <div className="p-12 text-center text-sm text-muted-foreground">
+              <Bell className="mx-auto h-8 w-8 opacity-40 mb-2" />
+              <p className="font-semibold text-foreground">No notifications in this view</p>
+              <p className="text-xs mt-1">You will be notified here whenever there are campaign or commission updates.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 export function SupportPage() {
   const [sent, setSent] = useState(false);
-  return <div className="space-y-6"><PageHeader title="Support" description="Get help with your account, campaigns, payouts and creator tools." />
-    <Card className="overflow-hidden border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent shadow-card"><CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><LifeBuoy className="h-6 w-6" /></span><div className="flex-1"><p className="font-display text-lg font-semibold">How can we help?</p><p className="mt-1 text-sm text-muted-foreground">Our creator support team usually responds within one business day.</p></div><Button variant="outline"><MessageCircle className="h-4 w-4" /> Start a chat</Button></CardContent></Card>
-    <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="h-11 bg-card pl-9" placeholder="Search help articles" /></div>
-    <section className="grid gap-4 md:grid-cols-3"><HelpCard icon={FileText} title="Campaigns" text="Briefs, deliverables, approvals and collaboration guidelines." /><HelpCard icon={Sparkles} title="Earnings & payouts" text="Commission tracking, payment schedules and payout details." /><HelpCard icon={CircleHelp} title="Account & Instagram" text="Profile settings, connection health and automations." /></section>
-    <section className="grid gap-6 lg:grid-cols-3"><Card className="shadow-card lg:col-span-2"><CardHeader className="p-5 pb-3"><CardTitle>Send a support request</CardTitle><p className="mt-1 text-sm text-muted-foreground">Tell us what you need help with and we’ll get back to you.</p></CardHeader><CardContent className="space-y-4 p-5 pt-2">{sent ? <div className="rounded-xl bg-success/10 p-5 text-sm text-success"><p className="font-semibold">Request received</p><p className="mt-1">Your ticket #MGI-4821 has been created. We’ll reply by email shortly.</p></div> : <><Select defaultValue="campaign"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="campaign">Campaign question</SelectItem><SelectItem value="earnings">Earnings or payout</SelectItem><SelectItem value="instagram">Instagram connection</SelectItem><SelectItem value="technical">Technical issue</SelectItem></SelectContent></Select><Input placeholder="Subject" /><Textarea placeholder="Describe your issue, including campaign or order details if relevant." className="min-h-32" /><Button onClick={() => setSent(true)}><Send className="h-4 w-4" /> Submit request</Button></>}</CardContent></Card><Card className="shadow-card"><CardHeader className="p-5 pb-3"><CardTitle>Popular help</CardTitle></CardHeader><CardContent className="space-y-1 p-3 pt-1">{["How do campaign approvals work?", "When will I receive my payout?", "How do I create a tracking link?", "Reconnect my Instagram account"].map((article) => <button key={article} className="flex w-full items-center justify-between rounded-lg p-3 text-left text-sm hover:bg-muted"><span>{article}</span><ChevronRight className="h-4 w-4 text-muted-foreground" /></button>)}</CardContent></Card></section>
-    <Card className="shadow-card"><CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center"><span className="grid h-10 w-10 place-items-center rounded-lg bg-muted text-muted-foreground"><Mail className="h-5 w-5" /></span><div className="flex-1"><p className="font-medium">Need to follow up on a request?</p><p className="mt-1 text-sm text-muted-foreground">Email creator-support@megainfluencer.in and include your ticket number.</p></div><Button variant="outline">View my requests <ExternalLink className="h-4 w-4" /></Button></CardContent></Card>
-  </div>;
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Support"
+        description="Get help with your account, campaigns, payouts and creator tools."
+      />
+      <Card className="overflow-hidden border-primary/20 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent shadow-card">
+        <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
+            <LifeBuoy className="h-6 w-6" />
+          </span>
+          <div className="flex-1">
+            <p className="font-display text-lg font-semibold">How can we help?</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Our creator support team usually responds within one business day.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => (window.location.href = "/influencer/chat")}>
+            <MessageCircle className="h-4 w-4 mr-1.5" /> Start a chat
+          </Button>
+        </CardContent>
+      </Card>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input className="h-11 bg-card pl-9" placeholder="Search help articles" />
+      </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        <HelpCard icon={FileText} title="Campaigns" text="Briefs, deliverables, approvals and collaboration guidelines." />
+        <HelpCard
+          icon={Sparkles}
+          title="Earnings & payouts"
+          text="Commission tracking, payment schedules and payout details."
+        />
+        <HelpCard
+          icon={CircleHelp}
+          title="Account & Instagram"
+          text="Profile settings, connection health and automations."
+        />
+      </section>
+      <section className="grid gap-6 lg:grid-cols-3">
+        <Card className="shadow-card lg:col-span-2">
+          <CardHeader className="p-5 pb-3">
+            <CardTitle>Send a support request</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tell us what you need help with and we’ll get back to you.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 p-5 pt-2">
+            {sent ? (
+              <div className="rounded-xl bg-success/10 p-5 text-sm text-success">
+                <p className="font-semibold">Request received</p>
+                <p className="mt-1">Your ticket #MGI-4821 has been created. We’ll reply by email shortly.</p>
+              </div>
+            ) : (
+              <>
+                <Select defaultValue="campaign">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="campaign">Campaign question</SelectItem>
+                    <SelectItem value="earnings">Earnings or payout</SelectItem>
+                    <SelectItem value="instagram">Instagram connection</SelectItem>
+                    <SelectItem value="technical">Technical issue</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input placeholder="Subject" />
+                <Textarea
+                  placeholder="Describe your issue, including campaign or order details if relevant."
+                  className="min-h-32"
+                />
+                <Button onClick={() => setSent(true)}>
+                  <Send className="h-4 w-4 mr-1.5" /> Submit request
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="shadow-card">
+          <CardHeader className="p-5 pb-3">
+            <CardTitle>Popular help</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 p-3 pt-1">
+            {[
+              "How do campaign approvals work?",
+              "When will I receive my payout?",
+              "How do I create a tracking link?",
+              "Reconnect my Instagram account",
+            ].map((article) => (
+              <button
+                key={article}
+                className="flex w-full items-center justify-between rounded-lg p-3 text-left text-sm hover:bg-muted"
+              >
+                <span>{article}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+      </section>
+      <Card className="shadow-card">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+          <span className="grid h-10 w-10 place-items-center rounded-lg bg-muted text-muted-foreground">
+            <Mail className="h-5 w-5" />
+          </span>
+          <div className="flex-1">
+            <p className="font-medium">Need to follow up on a request?</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Email creator-support@megainfluencer.in and include your ticket number.
+            </p>
+          </div>
+          <Button variant="outline">
+            View my requests <ExternalLink className="h-4 w-4 ml-1.5" />
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
-function NoticeStat({ label, value, detail, icon: Icon }: { label: string; value: string; detail: string; icon: typeof Bell }) { return <Card className="shadow-card"><CardContent className="flex items-center gap-4 p-5"><span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary"><Icon className="h-5 w-5" /></span><div><p className="text-sm text-muted-foreground">{label}</p><p className="font-display text-2xl font-semibold">{value}</p><p className="text-xs text-muted-foreground">{detail}</p></div></CardContent></Card>; }
-function HelpCard({ icon: Icon, title, text }: { icon: typeof Bell; title: string; text: string }) { return <Card className="shadow-card"><CardContent className="p-5"><span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary"><Icon className="h-5 w-5" /></span><p className="mt-4 font-display text-lg font-semibold">{title}</p><p className="mt-1 text-sm leading-6 text-muted-foreground">{text}</p><Button className="mt-4 px-0" variant="link">Browse articles <ChevronRight className="h-4 w-4" /></Button></CardContent></Card>; }
+
+function NoticeStat({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: typeof Bell;
+}) {
+  return (
+    <Card className="shadow-card">
+      <CardContent className="flex items-center gap-4 p-5">
+        <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="font-display text-2xl font-semibold">{value}</p>
+          <p className="text-xs text-muted-foreground">{detail}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function HelpCard({ icon: Icon, title, text }: { icon: typeof Bell; title: string; text: string }) {
+  return (
+    <Card className="shadow-card">
+      <CardContent className="p-5">
+        <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </span>
+        <p className="mt-4 font-display text-lg font-semibold">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">{text}</p>
+        <Button className="mt-4 px-0" variant="link">
+          Browse articles <ChevronRight className="h-4 w-4 ml-1" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

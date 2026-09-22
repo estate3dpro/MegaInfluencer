@@ -16,6 +16,9 @@ import { influencerDashboardRoutes } from '../modules/influencer-dashboard/influ
 import { influencerAnalyticsRoutes } from '../modules/influencer-analytics/influencer-analytics.routes.js';
 import { influencerStoresRoutes } from '../modules/influencer-stores/influencer-stores.routes.js';
 import { influencerProductsRoutes } from '../modules/influencer-products/influencer-products.routes.js';
+import { influencerOrdersRoutes } from '../modules/influencer-orders/influencer-orders.routes.js';
+import { influencerEarningsRoutes } from '../modules/influencer-earnings/influencer-earnings.routes.js';
+import { notificationsRoutes } from '../modules/notifications/notifications.routes.js';
 
 export function registerRoutes(app: FastifyInstance) {
   app.register(healthRoutes);
@@ -35,6 +38,9 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(influencerAnalyticsRoutes, { prefix: '/api/v1' });
   app.register(influencerStoresRoutes, { prefix: '/api/v1' });
   app.register(influencerProductsRoutes, { prefix: '/api/v1' });
+  app.register(influencerOrdersRoutes, { prefix: '/api/v1' });
+  app.register(influencerEarningsRoutes, { prefix: '/api/v1' });
+  app.register(notificationsRoutes, { prefix: '/api/v1' });
   app.register(affiliateTrackingRoutes);
   app.register(instagramWebhookRoutes);
   app.register(affiliateShopifyWebhookRoutes);

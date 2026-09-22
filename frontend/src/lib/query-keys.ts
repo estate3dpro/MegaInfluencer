@@ -19,4 +19,16 @@ export const queryKeys = {
   products: {
     influencer: (scope: string = "all", search: string = "") => ["products", "influencer", scope, search] as const,
   },
+  links: {
+    influencer: (storeId?: string, search?: string) => ["links", "influencer", storeId ?? "all", search ?? ""] as const,
+  },
+  orders: {
+    influencer: (scope: string = "all", status: string = "all", search: string = "") => ["orders", "influencer", scope, status, search] as const,
+  },
+  earnings: {
+    influencer: (scope: string = "all") => ["earnings", "influencer", scope] as const,
+  },
+  notifications: {
+    list: (filter: string = "all") => ["notifications", "list", filter] as const,
+  },
 } as const;

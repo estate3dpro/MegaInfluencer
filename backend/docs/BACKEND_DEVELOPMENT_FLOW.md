@@ -72,20 +72,20 @@ For each module, start with `routes`, `service`, and `schema`; add a repository 
 
 ## 5. Phase roadmap
 
-| Phase | Name | Main outcome | Depends on |
-| --- | --- | --- | --- |
-| 0 | Platform foundation | Safe, observable Fastify API with standard errors and test support. | Existing setup |
-| 1 | Authentication, roles, and organizations | Admin, Store Owner, Influencer identities and tenant boundaries. | Phase 0 |
-| 2 | Shopify store connection and synchronization | Verified manual store connection plus product, collection, and order sync. | Phase 1 |
-| 3 | Influencer discovery and collaboration | Store Owners can find, invite, and manage Influencer relationships. | Phases 1–2 |
-| 4 | Product assignment, requests, and shipment | Influencers receive/promote assigned store products. | Phase 3 |
-| 5 | Content submission and approval | Store Owners review Reels before they are used in campaigns. | Phase 4 |
-| 6 | Instagram automation and referral links | Comment keyword sends a product-specific referral link by DM. | Phases 2, 5 |
-| 7 | Click tracking, order ingestion, and attribution | Purchases are securely matched to an Influencer/referral. | Phase 6 |
-| 8 | Commission rules and earnings | Store-defined payment rules calculate creator earnings. | Phase 7 |
-| 9 | Store and Influencer analytics | Both roles see correct, restricted performance data. | Phase 8 |
-| 10 | Collaboration, customer, and support chat | Three secure communication contexts. | Phases 1, 3–5 |
-| 11 | Operations hardening and future integrations | Reliable production operation; WooCommerce/custom-store readiness. | Phases 0–10 |
+| Phase | Name | Main outcome | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| 0 | Platform foundation | Safe, observable Fastify API with standard errors and test support. | ✅ Complete | Existing setup |
+| 1 | Authentication, roles, and organizations | Admin, Store Owner, Influencer identities and tenant boundaries. | ✅ Complete | Phase 0 |
+| 2 | Shopify store connection and synchronization | Verified manual store connection plus product, collection, and order sync. | ✅ Complete | Phase 1 |
+| 3 | Influencer discovery, collaboration & campaigns | Store Owners can find/manage creators, create campaigns, review applications. | ✅ Complete | Phases 1–2 |
+| 4 | Product assignment and influencer catalog | Assign products/stores to creators; creators browse & request products. | ✅ Complete | Phase 3 |
+| 5 | Content submission and approval | Store Owners review Reels/briefs before they are used in campaigns. | 🔄 Integrated (Campaign Flow) | Phase 4 |
+| 6 | Instagram automation and referral links | Instagram OAuth, post sync, comment-to-DM keyword trigger & referral link generation. | ✅ Complete | Phases 2, 5 |
+| 7 | Click tracking, order ingestion, and attribution | Purchases & clicks securely matched to Influencers via `/r/:code` & Shopify order webhooks. | ✅ Complete | Phase 6 |
+| 8 | Commission rules and earnings | Store-defined commission rates calculate creator earnings and payouts. | ✅ Complete | Phase 7 |
+| 9 | Store and Influencer analytics | Both roles see real-time performance data, conversions, revenue, and charts. | ✅ Complete | Phase 8 |
+| 10 | Collaboration, customer, and support chat | Multi-context real-time chat via `megachatxprasadam` bridge. | ✅ Complete | Phases 1, 3–5 |
+| 11 | Operations hardening and future integrations | Production queues, reconciliation, rate limits, WooCommerce/custom store readiness. | 🔄 In Progress | Phases 0–10 |
 
 ## 6. Phase 0 — Platform foundation
 
@@ -497,10 +497,21 @@ Build after the V1 workflows work:
 - Add indexes for real relationship/filter queries and validate with query plans.
 - Use separately runnable, idempotent backfill jobs for large existing-data changes.
 
-## 19. Current next task
+## 19. Current next task & Roadmap Status
 
-Start with **Phase 0: Platform foundation**.
+All core modules for Phase 0 through Phase 10 are **implemented and active**:
+- **Authentication & Multi-Tenant Identity (Phase 1)**: Active (`/api/v1/auth/*`, `ADMIN`, `STORE_OWNER`, `INFLUENCER`).
+- **Shopify Catalog & Orders Sync (Phase 2)**: Active (`/api/v1/store/products`, `/api/v1/store/orders`, `/api/v1/store/customers`, Admin API / CLI bridge app).
+- **Influencer CRM & Campaign Engine (Phase 3 & 5)**: Active (`/api/v1/campaigns`, `/api/v1/store/creators`, applications, deliverables, assignments).
+- **Product & Store Assignments (Phase 4)**: Active (`/api/v1/product-assignments`, `/api/v1/influencer/stores`, `/api/v1/influencer/products`).
+- **Instagram Automation & Direct Message Tracking (Phase 6)**: Active (`/api/v1/instagram/*`, `/api/v1/instagram-automations/*`, `/webhooks/instagram`).
+- **Referral Tracking & Attribution (Phase 7)**: Active (`/r/:code`, click logging, UTM capturing, `/webhooks/shopify/orders` attribution).
+- **Commission Calculations & Earnings (Phase 8)**: Active (`AffiliateCommission` recording, influencer earnings).
+- **Analytics & Dashboards (Phase 9)**: Active (`/api/v1/influencer/dashboard`, `/api/v1/influencer/analytics`, Store analytics).
+- **Multi-Role Real-Time Chat (Phase 10)**: Active (`megachatxprasadam` bridge integration & frontend chat UI).
 
-> Add a global error handler, request IDs in Pino logs, a test harness, and readiness/health endpoint behavior. Then choose and implement the authentication method for Phase 1.
-
-Do not begin Shopify, collaborations, referrals, or commissions before Phase 1 establishes real authentication and Store Owner/Influencer access rules.
+### Current Focus (Phase 11 — Operations hardening & Scale)
+1. **Background Job Processing**: Add Redis/BullMQ queueing for webhook processing and automated sync reconciliation jobs.
+2. **Reconciliation & Rate Limiting**: Automatic periodic sync checks for missed Shopify order events or Instagram DM delivery failures.
+3. **Automated Payouts**: Direct UPI / RazorpayX integration for instant influencer commission payouts.
+4. **WooCommerce / Custom Stores**: Implement the provider adapter interface for non-Shopify stores.

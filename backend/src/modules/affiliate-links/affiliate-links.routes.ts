@@ -67,6 +67,146 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`; return { link: asLink(link, baseUrl) };
   });
 
+  app.get('/influencer/affiliate-links', async (request) => {
+    const actor = requireRole(request, ['INFLUENCER']);
+    const query = request.query as { search?: string; storeId?: string };
+    const rows = await prisma.affiliateLink.findMany({
+      where: {
+        creatorId: actor.userId,
+        ...(query.storeId ? { organizationId: query.storeId } : {}),
+        ...(query.search ? {
+          OR: [
+            { slug: { contains: query.search, mode: 'insensitive' } },
+            { product: { title: { contains: query.search, mode: 'insensitive' } } },
+            { organization: { name: { contains: query.search, mode: 'insensitive' } } },
+          ],
+        } : {}),
+      },
+      include: {
+        organization: { select: { id: true, name: true, slug: true } },
+        product: { select: { id: true, title: true, imageUrl: true, price: true } },
+        _count: { select: { clicks: true } },
+        commissions: { select: { orderAmount: true, amount: true, status: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
+    return {
+      links: rows.map((row: any) => {
+        const clicks = Number(row._count?.clicks ?? 0);
+        const commissions = (row.commissions ?? []).filter((commission: any) => commission.status !== 'REVERSED');
+        const orders = commissions.length;
+        const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0);
+        const earnings = commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
+
+        return {
+          id: row.id,
+          storeId: row.organizationId,
+          storeName: row.organization?.name ?? 'Store',
+          storeSlug: row.organization?.slug ?? 'store',
+          productId: row.productId,
+          productTitle: row.product?.title ?? null,
+          productImage: row.product?.imageUrl ?? null,
+          productPrice: row.product?.price ?? null,
+          slug: row.slug,
+          url: `${baseUrl}/r/${row.slug}`,
+          targetType: row.targetType,
+          commissionRate: Number(row.commissionRate),
+          status: row.status,
+          clicks,
+          orders,
+          revenue,
+          earnings,
+          conversion: clicks ? `${((orders / clicks) * 100).toFixed(1)}%` : '0.0%',
+          createdAt: row.createdAt,
+        };
+      }),
+    };
+  });
+
+  const createInfluencerLinkSchema = z.object({
+    organizationId: z.string().min(1),
+    productId: z.string().min(1).optional().nullable(),
+    customSlug: z.string().trim().regex(/^[a-zA-Z0-9_-]{3,50}$/, 'Slug must be 3-50 alphanumeric characters').optional().nullable(),
+  });
+
+  app.post('/influencer/affiliate-links', async (request, reply) => {
+    const actor = requireRole(request, ['INFLUENCER']);
+    const input = createInfluencerLinkSchema.parse(request.body);
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: input.organizationId },
+      select: { id: true, shopDomain: true, name: true, slug: true },
+    });
+    if (!organization) throw new AppError('STORE_NOT_FOUND', 'Store not found.', 404);
+
+    const assigned = await prisma.storeInfluencerAssignment.findUnique({
+      where: { organizationId_influencerId: { organizationId: organization.id, influencerId: actor.userId } },
+    });
+    if (!assigned) throw new AppError('NOT_ASSIGNED_TO_STORE', 'You are not assigned to this store.', 403);
+
+    let product = null;
+    if (input.productId) {
+      product = await prisma.shopifyProduct.findFirst({
+        where: { id: input.productId, organizationId: organization.id },
+        select: { id: true, title: true, handle: true, imageUrl: true, price: true },
+      });
+      if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'The selected product does not belong to this store.', 404);
+    }
+
+    await ensureCreatorCode(prisma, actor.userId);
+
+    const linkSlug = input.customSlug || slug();
+    if (input.customSlug) {
+      const existing = await prisma.affiliateLink.findUnique({ where: { slug: input.customSlug } });
+      if (existing) throw new AppError('SLUG_TAKEN', 'This link slug is already taken.', 409);
+    }
+
+    const link = await prisma.affiliateLink.create({
+      data: {
+        organizationId: organization.id,
+        creatorId: actor.userId,
+        productId: product?.id ?? null,
+        targetType: product ? 'PRODUCT' : 'STORE',
+        destinationPath: product?.handle ? `/products/${product.handle}` : '/',
+        commissionRate: 10,
+        slug: linkSlug,
+      },
+      include: {
+        organization: { select: { id: true, name: true, slug: true } },
+        product: { select: { id: true, title: true, imageUrl: true, price: true } },
+        _count: { select: { clicks: true } },
+        commissions: { select: { orderAmount: true, amount: true, status: true } },
+      },
+    });
+
+    const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
+    return reply.code(201).send({
+      link: {
+        id: link.id,
+        storeId: link.organizationId,
+        storeName: link.organization?.name ?? 'Store',
+        storeSlug: link.organization?.slug ?? 'store',
+        productId: link.productId,
+        productTitle: link.product?.title ?? null,
+        productImage: link.product?.imageUrl ?? null,
+        productPrice: link.product?.price ?? null,
+        slug: link.slug,
+        url: `${baseUrl}/r/${link.slug}`,
+        targetType: link.targetType,
+        commissionRate: Number(link.commissionRate),
+        status: link.status,
+        clicks: 0,
+        orders: 0,
+        revenue: 0,
+        earnings: 0,
+        conversion: '0.0%',
+        createdAt: link.createdAt,
+      },
+    });
+  });
+
 };
 
 export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {

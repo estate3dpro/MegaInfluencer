@@ -1,0 +1,142 @@
+import type { FastifyPluginAsync } from 'fastify';
+import { requireRole } from '../../shared/auth/authorization.js';
+
+const inrCurrency = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
+  const prisma = app.prisma as any;
+
+  app.get('/influencer/earnings', async (request) => {
+    const actor = requireRole(request, ['INFLUENCER']);
+    const query = request.query as { scope?: string };
+
+    const where: any = {
+      creatorId: actor.userId,
+    };
+
+    if (query.scope && query.scope !== 'all') {
+      where.organization = {
+        OR: [
+          { slug: query.scope },
+          { id: query.scope },
+        ],
+      };
+    }
+
+    const allCommissions = await prisma.affiliateCommission.findMany({
+      where,
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        shopifyOrder: {
+          select: {
+            name: true,
+            total: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let availableToWithdraw = 0;
+    let pendingApproval = 0;
+    let lifetimeEarnings = 0;
+    let paidEarnings = 0;
+
+    for (const comm of allCommissions) {
+      const amount = Number(comm.amount);
+      if (comm.status === 'APPROVED') {
+        availableToWithdraw += amount;
+        lifetimeEarnings += amount;
+      } else if (comm.status === 'PENDING') {
+        pendingApproval += amount;
+      } else if (comm.status === 'PAID') {
+        paidEarnings += amount;
+        lifetimeEarnings += amount;
+      }
+    }
+
+    // Monthly timeline for the last 6 months
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const timelineMap = new Map<string, { label: string; amount: number; sales: number; count: number }>();
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      timelineMap.set(key, {
+        label: monthNames[d.getMonth()],
+        amount: 0,
+        sales: 0,
+        count: 0,
+      });
+    }
+
+    for (const comm of allCommissions) {
+      if (comm.status === 'REVERSED') continue;
+      const d = new Date(comm.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const entry = timelineMap.get(key);
+      if (entry) {
+        entry.amount += Number(comm.amount);
+        entry.sales += Number(comm.orderAmount);
+        entry.count += 1;
+      }
+    }
+
+    const timeline = [...timelineMap.values()].map((item) => ({
+      month: item.label,
+      earnings: item.amount,
+      earningsFormatted: inrCurrency.format(item.amount),
+      sales: item.sales,
+      orders: item.count,
+    }));
+
+    // Current period vs previous month
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+    const currentPeriodAmount = timelineMap.get(currentMonthKey)?.amount ?? 0;
+    const prevPeriodAmount = timelineMap.get(prevMonthKey)?.amount ?? 0;
+    const percentChange = prevPeriodAmount > 0
+      ? ((currentPeriodAmount - prevPeriodAmount) / prevPeriodAmount) * 100
+      : currentPeriodAmount > 0 ? 100 : 0;
+
+    return {
+      balances: {
+        availableToWithdraw: inrCurrency.format(availableToWithdraw),
+        availableToWithdrawRaw: availableToWithdraw,
+        pendingApproval: inrCurrency.format(pendingApproval),
+        pendingApprovalRaw: pendingApproval,
+        pendingOrdersCount: allCommissions.filter((c: any) => c.status === 'PENDING').length,
+        lifetimeEarnings: inrCurrency.format(lifetimeEarnings),
+        lifetimeEarningsRaw: lifetimeEarnings,
+        paidEarnings: inrCurrency.format(paidEarnings),
+        currentPeriodEarnings: inrCurrency.format(currentPeriodAmount),
+        growthRate: `${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(1)}%`,
+        isGrowthPositive: percentChange >= 0,
+      },
+      timeline,
+      recentCommissions: allCommissions.slice(0, 10).map((comm: any) => ({
+        id: comm.id,
+        orderName: comm.shopifyOrder?.name ?? 'Order',
+        storeName: comm.organization?.name ?? 'Store',
+        amount: inrCurrency.format(Number(comm.amount)),
+        amountRaw: Number(comm.amount),
+        status: comm.status,
+        date: new Date(comm.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      })),
+    };
+  });
+};
