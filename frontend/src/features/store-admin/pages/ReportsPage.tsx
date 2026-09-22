@@ -106,16 +106,17 @@ export function ReportsPage() {
       setDownloadingType("orders");
       const data = await getStoreOrders(1, { all: true });
       const headers = [
-        "Order ID",
+        "Shopify Order ID",
         "Order Name",
         "Date",
         "Customer Email",
-        "Total (INR)",
+        "Order Total (INR)",
         "Financial Status",
         "Fulfillment Status",
-        "Creator Attribution",
+        "Attributed Creator",
+        "Creator Instagram / Code",
         "Commission Status",
-        "Commission (INR)",
+        "Earned Commission (INR)",
       ];
       const rows = data.orders.map((o) => [
         o.id,
@@ -125,12 +126,13 @@ export function ReportsPage() {
         o.total,
         o.financialStatus,
         o.fulfillmentStatus,
-        o.attribution?.creatorName ?? o.creatorCode ?? "Direct / Organic",
+        o.attribution?.creatorName ?? (o.creatorCode ? `@${o.creatorCode}` : "Direct / Organic"),
+        o.attribution?.creator?.instagram ? `@${o.attribution.creator.instagram}` : (o.creatorCode ? `@${o.creatorCode}` : "—"),
         o.attribution?.status ?? "None",
         o.attribution?.amount ?? 0,
       ]);
-      downloadCSV(`orders_report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
-      toast.success("Orders report exported successfully");
+      downloadCSV(`attributed_orders_report_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+      toast.success("Attributed orders report exported successfully");
     } catch {
       toast.error("Failed to export orders report");
     } finally {
@@ -277,12 +279,12 @@ export function ReportsPage() {
   const reportItems = [
     {
       id: "orders",
-      title: "Monthly Sales & Orders Summary",
-      description: "Complete ledger of GMV, order items, taxes, discounts, and creator attribution.",
-      category: "Sales",
-      stats: `${summary.sales.totalOrders} total orders (${formatCurrency(summary.sales.totalGMV)})`,
-      icon: FileBarChart,
-      color: "bg-primary/10 text-primary",
+      title: "Creator Attributed Orders & Performance",
+      description: "Itemized transaction ledger of creator promo codes, tracking link referrals, commissions, and customer purchases.",
+      category: "Attribution",
+      stats: `${summary.sales.attributedOrderCount} creator orders (${formatCurrency(summary.sales.creatorAttributedGMV)} Influencer GMV)`,
+      icon: Sparkles,
+      color: "bg-coral/10 text-coral",
       onExport: handleExportOrders,
     },
     {
@@ -290,9 +292,9 @@ export function ReportsPage() {
       title: "Creator Performance & ROI",
       description: "Attributed sales, referral conversions, and commission earnings breakdown by creator.",
       category: "Influencers",
-      stats: `${summary.creators.totalPartners} creators (${formatCurrency(summary.sales.creatorAttributedGMV)} GMV driven)`,
-      icon: Sparkles,
-      color: "bg-coral/10 text-coral",
+      stats: `${summary.creators.totalPartners} creator partners (${formatCurrency(summary.sales.creatorAttributedGMV)} GMV driven)`,
+      icon: UsersRound,
+      color: "bg-primary/10 text-primary",
       onExport: handleExportCreators,
     },
     {
@@ -319,9 +321,9 @@ export function ReportsPage() {
       id: "customers",
       title: "Customer Acquisition & LTV",
       description: "Customer roster, repeat purchase rates, lifetime spend, and creator source channels.",
-      category: "Customers",
+      category: "Audience",
       stats: `${summary.customers.uniqueCustomerCount} unique buyers`,
-      icon: UsersRound,
+      icon: FileBarChart,
       color: "bg-indigo/10 text-indigo",
       onExport: handleExportCustomers,
     },
@@ -331,7 +333,7 @@ export function ReportsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reports & CSV Exports"
-        description="View live store summaries, generate instant CSV spreadsheets, and schedule automated team digests."
+        description="View platform attribution summaries, generate instant CSV spreadsheets, and schedule automated team digests."
         actions={
           <Button onClick={() => setScheduleDialogOpen(true)} size="sm">
             <Plus className="h-4 w-4" /> Schedule Automated Digest
@@ -345,14 +347,14 @@ export function ReportsPage() {
           <CardContent className="flex min-h-44 flex-col justify-between p-6">
             <div>
               <Badge className="border-0 bg-white/15 text-white hover:bg-white/15">
-                Live Store Snapshot
+                MegaInfluencer Platform Report
               </Badge>
               <h2 className="mt-4 font-display text-xl font-semibold">
-                {summary.storeName} Comprehensive Sales & Attribution Report
+                {summary.storeName} Influencer Performance & Attribution Report
               </h2>
               <p className="mt-1 text-sm text-white/80">
-                {formatCurrency(summary.sales.totalGMV)} across {summary.sales.totalOrders} orders ·{" "}
-                {formatCurrency(summary.sales.creatorAttributedGMV)} driven by influencer partnerships.
+                {formatCurrency(summary.sales.creatorAttributedGMV)} Influencer GMV across {summary.sales.attributedOrderCount} creator-driven orders ·{" "}
+                {formatCurrency(summary.sales.totalCommissions)} commissions accrued.
               </p>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -367,7 +369,7 @@ export function ReportsPage() {
                 ) : (
                   <Download className="h-4 w-4 mr-1" />
                 )}
-                Export Orders CSV
+                Export Attributed Orders CSV
               </Button>
               <Button
                 variant="outline"
@@ -380,7 +382,7 @@ export function ReportsPage() {
                 ) : (
                   <FileSpreadsheet className="h-4 w-4 mr-1" />
                 )}
-                Export Creators CSV
+                Export Creator ROI CSV
               </Button>
             </div>
           </CardContent>

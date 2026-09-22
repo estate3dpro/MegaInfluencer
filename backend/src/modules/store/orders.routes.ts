@@ -248,17 +248,112 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         p.items.map(async (item: Node) => {
           const raw = item.raw ?? item;
           const total = raw.totalPriceSet?.shopMoney;
-          const orderAttributes = raw.customAttributes ?? item.customAttributes ?? [];
+          const orderAttributes = raw.customAttributes ?? item.customAttributes ?? raw.note_attributes ?? [];
           const lineItems = raw.lineItems?.nodes ?? raw.lineItems ?? item.lineItems ?? [];
           const lineAttributes = lineItems.flatMap((line: Node) => line.customAttributes ?? line.properties ?? []);
           const attributes = [...orderAttributes, ...lineAttributes];
-          const trackedCreatorCode =
-            attributes.find(
-              (attribute: Node) =>
-                (attribute.key ?? attribute.name) === 'mi_creator_code' ||
-                (attribute.key ?? attribute.name) === '_mi_creator_code' ||
-                (attribute.key ?? attribute.name) === 'utm_creator_code'
-            )?.value ?? null;
+
+          const getAttr = (key: string) => {
+            const found = attributes.find((attr: Node) => {
+              const k = String(attr?.key ?? attr?.name ?? '').trim().toLowerCase();
+              return k === key.toLowerCase();
+            });
+            return found?.value ? String(found.value).trim() : null;
+          };
+
+          // 1. Direct Attributes
+          let linkSlug = getAttr('mi_link') ?? getAttr('_mi_link');
+          let trackedCreatorCode =
+            getAttr('mi_creator_code') ??
+            getAttr('_mi_creator_code') ??
+            getAttr('utm_creator_code') ??
+            getAttr('creator_code') ??
+            getAttr('creator');
+
+          // 2. Landing site / Referral URL parameter parsing (Crucial for Buy It Now direct checkout)
+          const landingUrl = String(raw.landing_site ?? raw.landingSite ?? raw.referring_site ?? raw.source_url ?? '');
+          if (landingUrl) {
+            if (!linkSlug) {
+              const linkMatch = landingUrl.match(/[?&](?:mi_link|_mi_link)=([a-zA-Z0-9_-]+)/i);
+              if (linkMatch) linkSlug = linkMatch[1];
+            }
+            if (!trackedCreatorCode) {
+              const codeMatch = landingUrl.match(/[?&](?:mi_creator_code|_mi_creator_code|utm_creator_code|creator)=([a-zA-Z0-9_-]+)/i);
+              if (codeMatch) trackedCreatorCode = codeMatch[1];
+            }
+          }
+
+          // 3. Discount Codes / Discount Applications
+          const rawDiscountCodes: string[] = [
+            ...(Array.isArray(raw.discount_codes) ? raw.discount_codes.map((d: any) => String(d.code || '').trim()) : []),
+            ...(Array.isArray(raw.discountApplications?.nodes) ? raw.discountApplications.nodes.map((d: any) => String(d.code || d.title || '').trim()) : []),
+            ...(Array.isArray(raw.discountApplications) ? raw.discountApplications.map((d: any) => String(d.code || d.title || '').trim()) : []),
+            ...(raw.discountCode ? [String(raw.discountCode).trim()] : []),
+          ].filter(Boolean);
+
+          // 4. Tags parsing
+          const tags = raw.tags ?? item.tags ?? [];
+          const tagList: string[] = Array.isArray(tags)
+            ? tags.map((t: any) => String(t).trim())
+            : typeof tags === 'string'
+            ? tags.split(',').map((t: string) => t.trim())
+            : [];
+
+          if (tagList.includes('InfluencerSample')) return;
+
+          // Resolve creator & link
+          let link: any = null;
+          let creator: any = null;
+
+          if (linkSlug) {
+            link = await prisma.affiliateLink.findFirst({
+              where: { organizationId: s.id, slug: String(linkSlug) },
+              select: {
+                id: true,
+                creatorId: true,
+                commissionRate: true,
+                creator: { select: { id: true, creatorCode: true } },
+              },
+            });
+            if (link?.creator) {
+              creator = link.creator;
+              trackedCreatorCode = creator.creatorCode ?? trackedCreatorCode;
+            }
+          }
+
+          if (!link && trackedCreatorCode) {
+            creator = await prisma.user.findFirst({
+              where: {
+                creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' },
+                role: 'INFLUENCER',
+              },
+              select: { id: true, creatorCode: true },
+            });
+            if (creator) {
+              link = await prisma.affiliateLink.findFirst({
+                where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
+                select: { id: true, creatorId: true, commissionRate: true },
+              });
+            }
+          }
+
+          if (!link && rawDiscountCodes.length > 0) {
+            for (const code of rawDiscountCodes) {
+              const matchedCreator = await prisma.user.findFirst({
+                where: { creatorCode: { equals: code, mode: 'insensitive' }, role: 'INFLUENCER' },
+                select: { id: true, creatorCode: true },
+              });
+              if (matchedCreator) {
+                creator = matchedCreator;
+                trackedCreatorCode = creator.creatorCode;
+                link = await prisma.affiliateLink.findFirst({
+                  where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
+                  select: { id: true, creatorId: true, commissionRate: true },
+                });
+                break;
+              }
+            }
+          }
 
           const d = {
             shopifyId: item.shopifyGid ?? raw.id,
@@ -269,7 +364,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             financialStatus: item.financialStatus ?? raw.displayFinancialStatus ?? null,
             fulfillmentStatus: raw.displayFulfillmentStatus ?? null,
             processedAt: item.shopifyCreatedAt ?? raw.processedAt ? new Date(item.shopifyCreatedAt ?? raw.processedAt) : null,
-            creatorCode: trackedCreatorCode,
+            creatorCode: trackedCreatorCode ?? null,
             payload: raw as Prisma.InputJsonValue,
           };
 
@@ -279,53 +374,45 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             update: d,
           });
 
-          const linkSlug = attributes.find(
-            (attribute: Node) =>
-              (attribute.key ?? attribute.name) === 'mi_link' ||
-              (attribute.key ?? attribute.name) === '_mi_link'
-          )?.value;
-          const tags = raw.tags ?? item.tags ?? [];
-
-          if (!linkSlug || tags.includes('InfluencerSample')) return;
-
-          const link = await prisma.affiliateLink.findFirst({
-            where: { organizationId: s.id, slug: String(linkSlug) },
-            select: {
-              id: true,
-              creatorId: true,
-              commissionRate: true,
-              creator: { select: { creatorCode: true } },
-            },
-          });
-
-          if (!link) return;
-
-          const creatorCode = link.creator?.creatorCode ?? trackedCreatorCode;
-          if (creatorCode !== trackedCreatorCode) {
-            await prisma.shopifyOrder.update({
-              where: { id: order.id },
-              data: { creatorCode },
+          // If creator is found, ensure affiliate link exists and commission is created
+          if (creator && !link) {
+            link = await prisma.affiliateLink.create({
+              data: {
+                organizationId: s.id,
+                creatorId: creator.id,
+                targetType: 'STORE',
+                destinationPath: '/',
+                commissionRate: 10,
+                slug: `link_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
+              },
+              select: { id: true, creatorId: true, commissionRate: true },
             });
           }
 
-          const amount = Number(d.total ?? 0);
-          const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
-          const status = isRefunded ? 'REVERSED' : 'PENDING';
+          if (link && creator) {
+            const amount = Number(d.total ?? 0);
+            const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
+            const status = isRefunded ? 'REVERSED' : 'PENDING';
 
-          await prisma.affiliateCommission.upsert({
-            where: { shopifyOrderId: order.id },
-            create: {
-              organizationId: s.id,
-              linkId: link.id,
-              creatorId: link.creatorId,
-              shopifyOrderId: order.id,
-              orderAmount: amount,
-              commissionRate: link.commissionRate,
-              amount: (amount * Number(link.commissionRate)) / 100,
-              status,
-            },
-            update: { status: isRefunded ? 'REVERSED' : undefined },
-          });
+            await prisma.affiliateCommission.upsert({
+              where: { shopifyOrderId: order.id },
+              create: {
+                organizationId: s.id,
+                linkId: link.id,
+                creatorId: link.creatorId ?? creator.id,
+                shopifyOrderId: order.id,
+                orderAmount: amount,
+                commissionRate: link.commissionRate ?? 10,
+                amount: (amount * Number(link.commissionRate ?? 10)) / 100,
+                status,
+              },
+              update: {
+                orderAmount: amount,
+                amount: (amount * Number(link.commissionRate ?? 10)) / 100,
+                status: isRefunded ? 'REVERSED' : undefined,
+              },
+            });
+          }
         })
       );
       synced += p.items.length;
@@ -477,5 +564,100 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { ok: true, commission: updated };
+  });
+
+  // POST /store/orders/:orderId/attribute - Manually attribute or re-assign order to a creator
+  const attributeOrderSchema = z.object({
+    creatorId: z.string().nullable().optional(),
+    commissionRate: z.number().min(0).max(100).optional(),
+  });
+
+  app.post('/store/orders/:orderId/attribute', async (req) => {
+    const a = requireRole(req, ['STORE_OWNER']);
+    const s = await storeFor(app, a.userId);
+    const { orderId } = req.params as { orderId: string };
+    const { creatorId, commissionRate: customRate } = attributeOrderSchema.parse(req.body);
+
+    const order = await prisma.shopifyOrder.findFirst({
+      where: { id: orderId, organizationId: s.id },
+    });
+
+    if (!order) {
+      throw new AppError('ORDER_NOT_FOUND', 'Order not found.', 404);
+    }
+
+    if (!creatorId) {
+      // Remove attribution
+      await prisma.shopifyOrder.update({
+        where: { id: order.id },
+        data: { creatorCode: null },
+      });
+      await prisma.affiliateCommission.deleteMany({
+        where: { shopifyOrderId: order.id },
+      });
+      return { ok: true, attributed: false };
+    }
+
+    const creator = await prisma.user.findFirst({
+      where: { id: creatorId, role: 'INFLUENCER' },
+      select: { id: true, creatorCode: true, displayName: true },
+    });
+
+    if (!creator) {
+      throw new AppError('CREATOR_NOT_FOUND', 'Selected creator not found.', 404);
+    }
+
+    // Find or create affiliate link for this creator
+    let link = await prisma.affiliateLink.findFirst({
+      where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
+    });
+
+    const rate = customRate ?? (link ? Number(link.commissionRate) : 10);
+
+    if (!link) {
+      link = await prisma.affiliateLink.create({
+        data: {
+          organizationId: s.id,
+          creatorId: creator.id,
+          targetType: 'STORE',
+          destinationPath: '/',
+          commissionRate: rate,
+          slug: `link_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
+        },
+      });
+    }
+
+    const amount = Number(order.total || 0);
+    const isRefunded = /refund/i.test(order.financialStatus || '');
+    const commissionAmount = (amount * rate) / 100;
+
+    await prisma.shopifyOrder.update({
+      where: { id: order.id },
+      data: { creatorCode: creator.creatorCode },
+    });
+
+    const commission = await prisma.affiliateCommission.upsert({
+      where: { shopifyOrderId: order.id },
+      create: {
+        organizationId: s.id,
+        linkId: link.id,
+        creatorId: creator.id,
+        shopifyOrderId: order.id,
+        orderAmount: amount,
+        commissionRate: rate,
+        amount: commissionAmount,
+        status: isRefunded ? 'REVERSED' : 'APPROVED',
+      },
+      update: {
+        creatorId: creator.id,
+        linkId: link.id,
+        orderAmount: amount,
+        commissionRate: rate,
+        amount: commissionAmount,
+        status: isRefunded ? 'REVERSED' : 'APPROVED',
+      },
+    });
+
+    return { ok: true, attributed: true, creator, commission };
   });
 };

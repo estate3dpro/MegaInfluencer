@@ -152,3 +152,16 @@ export async function updateOrderCommissionStatus(
 export async function syncStoreOrders() {
   return (await apiClient.post<{ synced: number }>("/store/orders/sync")).data;
 }
+
+export async function attributeStoreOrder(
+  orderId: string,
+  payload: { creatorId?: string | null; commissionRate?: number }
+) {
+  return (
+    await apiClient.post<{ ok: boolean; commission: any; creator: any }>(
+      `/store/orders/${orderId}/attribute`,
+      payload
+    )
+  ).data;
+}
+

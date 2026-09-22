@@ -356,14 +356,37 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       return found?.value ? String(found.value).trim() : null;
     };
 
-    const linkSlug = getAttr('mi_link') ?? getAttr('_mi_link');
-    let trackedCreatorCode = getAttr('mi_creator_code') ?? getAttr('_mi_creator_code') ?? getAttr('utm_creator_code');
+    // 1. Direct Attributes
+    let linkSlug = getAttr('mi_link') ?? getAttr('_mi_link');
+    let trackedCreatorCode =
+      getAttr('mi_creator_code') ??
+      getAttr('_mi_creator_code') ??
+      getAttr('utm_creator_code') ??
+      getAttr('creator_code') ??
+      getAttr('creator');
 
-    const discountCodes: string[] = Array.isArray(payload.discount_codes)
-      ? payload.discount_codes.map((d: any) => String(d.code || '').trim()).filter(Boolean)
-      : [];
+    // 2. Landing site / Referral URL parameter parsing (Crucial for Buy It Now direct checkout)
+    const landingUrl = String(payload.landing_site ?? payload.landing_site_ref ?? payload.referring_site ?? payload.source_url ?? '');
+    if (landingUrl) {
+      if (!linkSlug) {
+        const linkMatch = landingUrl.match(/[?&](?:mi_link|_mi_link)=([a-zA-Z0-9_-]+)/i);
+        if (linkMatch) linkSlug = linkMatch[1];
+      }
+      if (!trackedCreatorCode) {
+        const codeMatch = landingUrl.match(/[?&](?:mi_creator_code|_mi_creator_code|utm_creator_code|creator)=([a-zA-Z0-9_-]+)/i);
+        if (codeMatch) trackedCreatorCode = codeMatch[1];
+      }
+    }
 
-    // Check tags (skip influencer samples from commission calculation if marked)
+    // 3. Discount Codes / Discount Applications
+    const discountCodes: string[] = [
+      ...(Array.isArray(payload.discount_codes) ? payload.discount_codes.map((d: any) => String(d.code || '').trim()) : []),
+      ...(Array.isArray(payload.discount_applications) ? payload.discount_applications.map((d: any) => String(d.code || d.title || '').trim()) : []),
+      ...(Array.isArray(payload.discountApplications) ? payload.discountApplications.map((d: any) => String(d.code || d.title || '').trim()) : []),
+      ...(payload.discount_code ? [String(payload.discount_code).trim()] : []),
+    ].filter(Boolean);
+
+    // 4. Tags parsing
     const rawTags = payload.tags;
     const tagList = Array.isArray(rawTags)
       ? rawTags
@@ -389,7 +412,10 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
 
     if (!link && trackedCreatorCode) {
       creator = await prisma.user.findFirst({
-        where: { creatorCode: trackedCreatorCode, role: 'INFLUENCER' },
+        where: {
+          creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' },
+          role: 'INFLUENCER',
+        },
         select: { id: true, creatorCode: true },
       });
       if (creator) {
@@ -459,6 +485,21 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     );
     const commissionStatus = isCancelledOrRefunded ? 'REVERSED' : 'PENDING';
 
+    // Auto-create affiliate link if creator is matched but has no link yet
+    if (creator && !link && !isSampleOrder) {
+      link = await prisma.affiliateLink.create({
+        data: {
+          organizationId: organization.id,
+          creatorId: creator.id,
+          targetType: 'STORE',
+          destinationPath: '/',
+          commissionRate: 10,
+          slug: `link_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
+        },
+        select: { id: true, creatorId: true, commissionRate: true },
+      });
+    }
+
     // If attributed and not an internal sample, upsert commission
     if (link && !isSampleOrder) {
       const orderAmount = subtotal > 0 ? subtotal : Number(total || 0);
@@ -473,7 +514,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           creatorId: link.creatorId ?? creator?.id ?? null,
           shopifyOrderId: order.id,
           orderAmount,
-          commissionRate: link.commissionRate,
+          commissionRate: link.commissionRate ?? 10,
           amount,
           status: commissionStatus,
         },

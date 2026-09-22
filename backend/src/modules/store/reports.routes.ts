@@ -80,6 +80,8 @@ export const storeReportsRoutes: FastifyPluginAsync = async (app) => {
     const validCommissions = commissions.filter((c: any) => c.status !== 'REVERSED');
     const totalCommissions = validCommissions.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
     const creatorGMV = validCommissions.reduce((sum: number, c: any) => sum + Number(c.orderAmount || 0), 0);
+    const attributedOrderCount = validCommissions.length;
+    const avgCreatorOrderValue = attributedOrderCount > 0 ? creatorGMV / attributedOrderCount : 0;
 
     const totalInventoryUnits = products.reduce((sum: number, p: any) => sum + (p.inventoryTotal || 0), 0);
     const lowStockCount = products.filter((p: any) => (p.inventoryTotal || 0) < 10).length;
@@ -88,12 +90,13 @@ export const storeReportsRoutes: FastifyPluginAsync = async (app) => {
       storeName: org.name,
       shopDomain: org.shopDomain,
       sales: {
+        creatorAttributedGMV: creatorGMV,
+        attributedOrderCount,
+        totalCommissions,
+        avgCreatorOrderValue,
         totalGMV,
         totalOrders,
         avgOrderValue,
-        creatorAttributedGMV: creatorGMV,
-        totalCommissions,
-        attributedOrderCount: validCommissions.length,
       },
       inventory: {
         totalProducts: products.length,

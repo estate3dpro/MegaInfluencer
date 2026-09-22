@@ -26,11 +26,32 @@ import {
   Share2,
   BadgeCheck,
   RotateCcw,
+  Edit3,
+  UserCheck,
+  UserX,
+  Link2,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +62,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Route } from "@/routes/store-admin/orders/$orderId";
-import { getStoreOrderDetails, updateOrderCommissionStatus } from "../api/orders.api";
+import { getStoreOrderDetails, updateOrderCommissionStatus, attributeStoreOrder } from "../api/orders.api";
+import { getStoreCreators } from "../api/creators.api";
 
 function formatMoney(amount: number | string | null | undefined, currency = "INR") {
   const num = Number(amount ?? 0);
@@ -56,10 +78,18 @@ export function OrderDetailsPage() {
   const { orderId } = Route.useParams();
   const queryClient = useQueryClient();
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isAttributionModalOpen, setIsAttributionModalOpen] = useState(false);
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string>("none");
+  const [customRate, setCustomRate] = useState<string>("10");
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["store", "order", orderId],
     queryFn: () => getStoreOrderDetails(orderId),
+  });
+
+  const { data: creators = [] } = useQuery({
+    queryKey: ["store", "creators"],
+    queryFn: getStoreCreators,
   });
 
   const commissionStatusMutation = useMutation({
@@ -74,6 +104,35 @@ export function OrderDetailsPage() {
       toast.error(err.response?.data?.message || "Failed to update commission status.");
     },
   });
+
+  const attributionMutation = useMutation({
+    mutationFn: (payload: { creatorId: string | null; commissionRate: number }) =>
+      attributeStoreOrder(orderId, payload),
+    onSuccess: (res) => {
+      toast.success(res.creator ? `Order attributed to ${res.creator.displayName || "creator"}` : "Order creator attribution cleared");
+      setIsAttributionModalOpen(false);
+      void refetch();
+      void queryClient.invalidateQueries({ queryKey: ["store", "orders"] });
+      void queryClient.invalidateQueries({ queryKey: ["store", "commissions"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || "Failed to attribute order.");
+    },
+  });
+
+  const handleOpenAttributionModal = () => {
+    const existingCreatorId = data?.order?.commission?.creator?.id;
+    setSelectedCreatorId(existingCreatorId || "none");
+    setCustomRate(String(data?.order?.commission?.rate || 10));
+    setIsAttributionModalOpen(true);
+  };
+
+  const handleSaveAttribution = () => {
+    const creatorId = selectedCreatorId === "none" ? null : selectedCreatorId;
+    const rate = Math.max(0, Math.min(100, Number(customRate) || 10));
+    attributionMutation.mutate({ creatorId, commissionRate: rate });
+  };
+
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -170,6 +229,15 @@ export function OrderDetailsPage() {
         } · Customer: ${order.email ?? "Guest Checkout"}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenAttributionModal}
+              className="border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <UserCheck className="h-4 w-4 mr-1.5" />
+              {commission?.creator ? "Edit Attribution" : "Attribute Creator"}
+            </Button>
             {shopifyAdminUrl ? (
               <Button variant="outline" size="sm" asChild>
                 <a href={shopifyAdminUrl} target="_blank" rel="noreferrer">
@@ -221,6 +289,83 @@ export function OrderDetailsPage() {
           </div>
         }
       />
+
+      {/* Manual Attribution Dialog */}
+      <Dialog open={isAttributionModalOpen} onOpenChange={setIsAttributionModalOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-primary" />
+              <span>Attribute Order to Influencer</span>
+            </DialogTitle>
+            <DialogDescription>
+              Assign a creator to this order or fix direct checkout / &ldquo;Buy It Now&rdquo; attributions.
+              Commissions will be recalculated automatically based on this order total ({formatMoney(order.total, order.currency)}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="space-y-2">
+              <Label htmlFor="creator-select">Select Creator / Influencer</Label>
+              <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
+                <SelectTrigger id="creator-select">
+                  <SelectValue placeholder="Choose a creator..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <span className="text-muted-foreground italic">— No Influencer / Unattributed —</span>
+                  </SelectItem>
+                  {creators.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.displayName || "Unnamed Creator"} {c.creatorCode ? `(@${c.creatorCode})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedCreatorId !== "none" && (
+              <div className="space-y-2">
+                <Label htmlFor="commission-rate">Commission Rate (%)</Label>
+                <Input
+                  id="commission-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={customRate}
+                  onChange={(e) => setCustomRate(e.target.value)}
+                  placeholder="e.g. 10"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Estimated Payout:{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatMoney((Number(order.total) * (Number(customRate) || 0)) / 100, order.currency)}
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsAttributionModalOpen(false)}
+              disabled={attributionMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveAttribution}
+              disabled={attributionMutation.isPending}
+              className="bg-primary text-primary-foreground"
+            >
+              {attributionMutation.isPending ? "Updating..." : "Save Attribution"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       {/* 4 Metric KPI Cards */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -428,12 +573,22 @@ export function OrderDetailsPage() {
 
           {/* Marketing & Creator Attribution Tracker */}
           <Card className="border-border/60 shadow-sm">
-            <CardHeader className="pb-3 border-b">
+            <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-coral" />
                 <span>Marketing & Creator Attribution</span>
               </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenAttributionModal}
+                className="h-8 text-xs border-primary/30 text-primary hover:bg-primary/10"
+              >
+                <Edit3 className="h-3.5 w-3.5 mr-1.5" />
+                {commission?.creator ? "Re-assign Creator" : "Assign Creator"}
+              </Button>
             </CardHeader>
+
             <CardContent className="p-5 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border p-4 bg-muted/20 space-y-2">
