@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeIndianRupee,
   CheckCircle2,
@@ -24,6 +24,7 @@ import {
   getAdminCommissions,
   getAdminDashboard,
   getAdminOrders,
+  updateAdminCommissionStatus,
 } from "../api/overview.api";
 
 function formatCurrency(amount: number) {
@@ -278,9 +279,21 @@ export function CommissionsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
+  const client = useQueryClient();
   const query = useQuery({
     queryKey: ["admin", "commissions", search, statusFilter],
     queryFn: () => getAdminCommissions({ search, status: statusFilter }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "PENDING" | "APPROVED" | "PAID" | "REVERSED" }) =>
+      updateAdminCommissionStatus(id, status),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["admin", "commissions"] });
+      client.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+      toast.success("Commission status updated");
+    },
+    onError: () => toast.error("Could not update commission status"),
   });
 
   const commissions = query.data?.commissions ?? [];
@@ -426,20 +439,21 @@ export function CommissionsPage() {
                 <th className="px-5 py-3 font-medium">Rate</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 text-right font-medium">Commission Amount</th>
+                <th className="px-5 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {query.isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b last:border-0">
-                    <td colSpan={7} className="px-5 py-4">
+                    <td colSpan={8} className="px-5 py-4">
                       <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
                     </td>
                   </tr>
                 ))
               ) : commissions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                     No commissions records found.
                   </td>
                 </tr>
@@ -479,6 +493,42 @@ export function CommissionsPage() {
                     </td>
                     <td className="px-5 py-3.5 text-right font-bold text-emerald-600 dark:text-emerald-400">
                       {formatCurrency(c.amount)}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex justify-end gap-1">
+                        {c.status === "PENDING" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2 border-teal/40 text-teal hover:bg-teal/10"
+                            disabled={updateMutation.isPending}
+                            onClick={() => updateMutation.mutate({ id: c.id, status: "APPROVED" })}
+                          >
+                            Approve
+                          </Button>
+                        ) : null}
+                        {c.status === "APPROVED" ? (
+                          <Button
+                            size="sm"
+                            className="h-6 text-xs px-2 bg-teal hover:bg-teal/90 text-teal-foreground"
+                            disabled={updateMutation.isPending}
+                            onClick={() => updateMutation.mutate({ id: c.id, status: "PAID" })}
+                          >
+                            Mark Paid
+                          </Button>
+                        ) : null}
+                        {c.status !== "REVERSED" && c.status !== "PAID" ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 text-xs px-2 text-muted-foreground hover:text-destructive"
+                            disabled={updateMutation.isPending}
+                            onClick={() => updateMutation.mutate({ id: c.id, status: "REVERSED" })}
+                          >
+                            Reverse
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))

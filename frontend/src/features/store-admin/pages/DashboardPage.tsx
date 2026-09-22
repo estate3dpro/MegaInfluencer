@@ -68,34 +68,34 @@ export function DashboardPage() {
     iconClass: string;
   }> = [
     {
-      label: "Total sales",
-      value: formatCurrency(data?.metrics.totalSales.value ?? 0),
-      change: data?.metrics.totalSales.change ?? 0,
-      detail: "vs. last month",
-      icon: BadgeIndianRupee,
-      iconClass: "bg-primary/10 text-primary",
-    },
-    {
-      label: "Orders",
-      value: String(data?.metrics.totalOrders.value ?? 0),
-      change: data?.metrics.totalOrders.change ?? 0,
-      detail: "vs. last month",
-      icon: ShoppingBag,
-      iconClass: "bg-teal/10 text-teal",
-    },
-    {
-      label: "Creator sales",
-      value: formatCurrency(data?.metrics.creatorSales.value ?? 0),
+      label: "Influencer Sales (GMV)",
+      value: formatCurrency(data?.metrics.creatorSales.value ?? data?.metrics.totalSales.value ?? 0),
       change: data?.metrics.creatorSales.change ?? 0,
-      detail: "from affiliate links",
+      detail: "from creator affiliate links",
       icon: Sparkles,
       iconClass: "bg-coral/10 text-coral",
     },
     {
-      label: "Active creators",
+      label: "Attributed Orders",
+      value: String(data?.metrics.totalOrders.value ?? 0),
+      change: data?.metrics.totalOrders.change ?? 0,
+      detail: "driven by creator partners",
+      icon: ShoppingBag,
+      iconClass: "bg-primary/10 text-primary",
+    },
+    {
+      label: "Commissions Accrued",
+      value: formatCurrency((data?.metrics as any)?.commissions?.value ?? 0),
+      change: (data?.metrics as any)?.commissions?.change ?? 0,
+      detail: "payable to creators",
+      icon: BadgeIndianRupee,
+      iconClass: "bg-teal/10 text-teal",
+    },
+    {
+      label: "Active Creators",
       value: String(data?.metrics.activeCreators.value ?? 0),
       change: data?.metrics.activeCreators.change ?? 0,
-      detail: "joined this month",
+      detail: "generating link traffic",
       icon: UsersRound,
       iconClass: "bg-indigo/10 text-indigo",
     },
@@ -103,16 +103,16 @@ export function DashboardPage() {
 
   const channelData = [
     {
-      label: "Direct store",
-      amount: formatCurrency(data?.channelBreakdown.directSales ?? 0),
-      percentage: data?.channelBreakdown.directPercentage ?? 100,
-      className: "bg-primary",
-    },
-    {
       label: "Creator links",
       amount: formatCurrency(data?.channelBreakdown.creatorSales ?? 0),
       percentage: data?.channelBreakdown.creatorPercentage ?? 0,
       className: "bg-coral",
+    },
+    {
+      label: "Direct / Organic store",
+      amount: formatCurrency(data?.channelBreakdown.directSales ?? 0),
+      percentage: data?.channelBreakdown.directPercentage ?? 100,
+      className: "bg-primary",
     },
   ];
 
@@ -196,11 +196,11 @@ export function DashboardPage() {
         <Card className="shadow-card xl:col-span-2">
           <CardHeader className="flex-row items-start justify-between space-y-0 p-5 pb-2">
             <div>
-              <CardTitle>Sales performance</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">Daily sales for the last 30 days</p>
+              <CardTitle>Influencer Sales Performance</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Daily creator-attributed sales and orders for the last 30 days</p>
             </div>
-            <Badge variant="secondary" className="font-medium">
-              Last 30 days
+            <Badge variant="outline" className="border-coral/30 bg-coral/10 text-coral font-medium">
+              Attributed Performance
             </Badge>
           </CardHeader>
           <CardContent className="h-[282px] p-3 pt-5 sm:p-5 sm:pt-5">
@@ -451,7 +451,7 @@ function SalesPerformanceTooltip({
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ value?: number; payload?: { day?: string; date?: string; orders?: number } }>;
+  payload?: Array<{ value?: number; payload?: { day?: string; date?: string; orders?: number; creatorOrders?: number } }>;
 }) {
   const value = payload?.[0]?.value;
   const point = payload?.[0]?.payload;
@@ -459,12 +459,12 @@ function SalesPerformanceTooltip({
   if (!active || typeof value !== "number") return null;
 
   return (
-    <div className="rounded-xl bg-neutral-950 px-3.5 py-2 text-xs font-semibold text-white shadow-xl">
+    <div className="rounded-xl bg-neutral-950 px-3.5 py-2.5 text-xs font-semibold text-white shadow-xl">
       <p className="text-white/70 text-[10px] uppercase tracking-wider">{point?.date || `Day ${point?.day}`}</p>
-      <p className="text-sm font-bold mt-0.5">{compactCurrency.format(value)}</p>
-      {point?.orders !== undefined ? (
-        <p className="text-[11px] font-normal text-white/80">{point.orders} {point.orders === 1 ? "order" : "orders"}</p>
-      ) : null}
+      <p className="text-sm font-bold mt-0.5 text-coral">{compactCurrency.format(value)}</p>
+      <p className="text-[11px] font-normal text-white/80 mt-0.5">
+        Attributed: {point?.creatorOrders ?? point?.orders ?? 0} {(point?.creatorOrders ?? point?.orders) === 1 ? "order" : "orders"}
+      </p>
     </div>
   );
 }

@@ -194,3 +194,11 @@ export async function getAdminSocial(params?: { search?: string }) {
 export async function getAdminAnalytics() {
   return (await apiClient.get<AdminAnalyticsData>("/admin/analytics")).data;
 }
+
+export async function updateUserStatus(userId: string, status: "ACTIVE" | "SUSPENDED") {
+  return (await apiClient.patch<{ user: any }>(`/admin/users/${userId}/status`, { status })).data;
+}
+
+export async function updateAdminCommissionStatus(commissionId: string, status: "PENDING" | "APPROVED" | "PAID" | "REVERSED") {
+  return (await apiClient.patch<{ ok: boolean; commission: any }>(`/store/commissions/${commissionId}/status`, { status })).data;
+}

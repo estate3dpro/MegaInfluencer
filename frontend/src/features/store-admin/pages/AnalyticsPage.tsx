@@ -235,7 +235,7 @@ export function AnalyticsPage() {
                     yAxisId="right"
                     type="monotone"
                     dataKey="orders"
-                    name="Orders Placed"
+                    name="Attributed Orders"
                     stroke="#3b82f6"
                     strokeWidth={2.5}
                     fill="url(#salesFill)"

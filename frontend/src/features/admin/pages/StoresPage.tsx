@@ -72,6 +72,9 @@ function connectionState(store: Store) {
 
 export function StoresPage() {
   const client = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [platformFilter, setPlatformFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [editor, setEditor] = useState<Store | null | undefined>();
   const [assigning, setAssigning] = useState<Store | null>(null);
   const stores = useQuery({ queryKey: ["admin", "stores"], queryFn: getStores });
@@ -84,47 +87,136 @@ export function StoresPage() {
       setEditor(undefined);
     },
   });
+
+  const allStores = stores.data ?? [];
+  const filteredStores = allStores.filter((s) => {
+    const matchesSearch = `${s.name} ${s.category || ""} ${s.shopDomain || ""} ${s.owner.displayName}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase());
+    if (!matchesSearch) return false;
+    if (platformFilter !== "ALL" && s.platform !== platformFilter) return false;
+    if (statusFilter !== "ALL" && s.connectionStatus !== statusFilter) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Stores"
-        description="Manage commerce partners, owner access, connections and creator distribution."
+        title="Merchant Stores & Brands"
+        description="Manage commerce partners, owner access credentials, Shopify connections, and creator distribution."
         actions={
-          <Button onClick={() => setEditor(null)}>
-            <Plus className="h-4 w-4" /> Add store
+          <Button onClick={() => setEditor(null)} size="sm">
+            <Plus className="h-4 w-4 mr-1" /> Add Commerce Store
           </Button>
         }
       />
-      <section className="grid gap-4 md:grid-cols-3">
-        {[
-          [
-            "Active stores",
-            stores.data?.filter((store) => connectionState(store).ready).length ?? "—",
-            Link2,
-          ],
-          [
-            "Creator assignments",
-            stores.data?.reduce((n, s) => n + s._count.assignments, 0) ?? "—",
-            UsersRound,
-          ],
-          ["Total partners", stores.data?.length ?? "—", StoreIcon],
-        ].map(([label, value, Icon]) => {
-          const MetricIcon = Icon as typeof Link2;
-          return (
-            <Card key={label as string} className="shadow-none">
-              <CardContent className="flex items-center justify-between p-5">
-                <div>
-                  <p className="text-sm text-muted-foreground">{label as string}</p>
-                  <p className="mt-2 text-2xl font-semibold">{value as string | number}</p>
-                </div>
-                <MetricIcon className="h-5 w-5 text-primary" />
-              </CardContent>
-            </Card>
-          );
-        })}
+      <section className="grid gap-4 sm:grid-cols-3">
+        <Card className="shadow-card">
+          <CardContent className="flex items-center justify-between p-5">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Connected Stores</p>
+              <p className="mt-2 font-display text-2xl font-semibold">
+                {allStores.filter((s) => connectionState(s).ready).length}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Operating with active sync</p>
+            </div>
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-teal/10 text-teal">
+              <Link2 className="h-5 w-5" />
+            </span>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardContent className="flex items-center justify-between p-5">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Creator Assignments</p>
+              <p className="mt-2 font-display text-2xl font-semibold">
+                {allStores.reduce((n, s) => n + s._count.assignments, 0)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Across brand rosters</p>
+            </div>
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+              <UsersRound className="h-5 w-5" />
+            </span>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card">
+          <CardContent className="flex items-center justify-between p-5">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Total Retail Stores</p>
+              <p className="mt-2 font-display text-2xl font-semibold">{allStores.length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Registered on platform</p>
+            </div>
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-indigo/10 text-indigo">
+              <StoreIcon className="h-5 w-5" />
+            </span>
+          </CardContent>
+        </Card>
       </section>
+
+      {/* Search & Filter Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative min-w-64 flex-1 max-w-md">
+          <Input
+            className="h-9 text-sm"
+            placeholder="Search stores by name, domain, category, owner..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <div className="flex rounded-lg border bg-muted/30 p-0.5">
+            {(
+              [
+                { id: "ALL", label: "All Platforms" },
+                { id: "SHOPIFY", label: "Shopify" },
+                { id: "WOOCOMMERCE", label: "WooCommerce" },
+                { id: "CUSTOM", label: "Custom" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setPlatformFilter(t.id)}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  platformFilter === t.id
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex rounded-lg border bg-muted/30 p-0.5">
+            {(
+              [
+                { id: "ALL", label: "All Status" },
+                { id: "CONNECTED", label: "Connected" },
+                { id: "PENDING", label: "Pending" },
+                { id: "DISABLED", label: "Disabled" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setStatusFilter(t.id)}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  statusFilter === t.id
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
-        {stores.data?.map((store) => {
+        {filteredStores.map((store) => {
           const connection = connectionState(store);
           return <Card key={store.id} className="overflow-hidden shadow-none">
             <div className="h-1 bg-primary" />

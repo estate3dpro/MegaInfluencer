@@ -253,7 +253,25 @@ export function ProductDetailsPage() {
         <Card className="border-border/60 shadow-sm">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Revenue</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Creator Attributed GMV</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight text-coral">
+                {formatMoney(metrics.creatorRevenue, product.currency ?? "INR")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
+                <Sparkles className="h-3 w-3 text-coral" />
+                <span>{metrics.creatorOrders} affiliate orders</span>
+              </p>
+            </div>
+            <div className="grid h-12 w-12 place-items-center rounded-xl bg-coral/10 text-coral">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Store Total Revenue</p>
               <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">
                 {formatMoney(metrics.totalRevenue, product.currency ?? "INR")}
               </p>
@@ -264,24 +282,6 @@ export function ProductDetailsPage() {
             </div>
             <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary/10 text-primary">
               <DollarSign className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60 shadow-sm">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Creator Revenue</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-emerald-600">
-                {formatMoney(metrics.creatorRevenue, product.currency ?? "INR")}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
-                <Sparkles className="h-3 w-3 text-emerald-600" />
-                <span>{metrics.creatorOrders} affiliate orders</span>
-              </p>
-            </div>
-            <div className="grid h-12 w-12 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
-              <TrendingUp className="h-6 w-6" />
             </div>
           </CardContent>
         </Card>

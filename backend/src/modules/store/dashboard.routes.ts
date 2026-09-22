@@ -150,6 +150,8 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
       items.reduce((acc, item) => acc + Number(item.total || 0), 0);
     const sumAmount = (items: Array<{ orderAmount: unknown }>) =>
       items.reduce((acc, item) => acc + Number(item.orderAmount || 0), 0);
+    const sumComms = (items: Array<{ amount: unknown }>) =>
+      items.reduce((acc, item) => acc + Number(item.amount || 0), 0);
 
     const currentTotalSales = sumTotal(currentMonthOrders);
     const previousTotalSales = sumTotal(previousMonthOrders);
@@ -158,31 +160,24 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
 
     const currentCreatorSales = sumAmount(currentMonthCommissions);
     const previousCreatorSales = sumAmount(previousMonthCommissions);
+    const currentCreatorOrders = currentMonthCommissions.length;
+    const previousCreatorOrders = previousMonthCommissions.length;
+    const currentCommissionsAmount = sumComms(currentMonthCommissions);
+    const previousCommissionsAmount = sumComms(previousMonthCommissions);
 
     const calcPercentChange = (current: number, previous: number) => {
       if (previous === 0) return current > 0 ? 100 : 0;
       return Number((((current - previous) / previous) * 100).toFixed(1));
     };
 
-    // Build 30-day performance map
-    const dailyMap = new Map<string, { date: string; day: string; sales: number; orders: number; creatorSales: number }>();
+    // Build 30-day performance map (Defaulted to our system's creator-attributed performance)
+    const dailyMap = new Map<string, { date: string; day: string; sales: number; orders: number; creatorSales: number; creatorOrders: number; storeSales: number; storeOrders: number }>();
     for (let i = 0; i < 30; i++) {
       const d = new Date(thirtyDaysAgo);
       d.setDate(thirtyDaysAgo.getDate() + i);
       const isoDate = d.toISOString().slice(0, 10);
       const dayLabel = String(d.getDate()).padStart(2, '0');
-      dailyMap.set(isoDate, { date: isoDate, day: dayLabel, sales: 0, orders: 0, creatorSales: 0 });
-    }
-
-    for (const order of last30DaysOrders) {
-      if (order.processedAt) {
-        const iso = order.processedAt.toISOString().slice(0, 10);
-        const existing = dailyMap.get(iso);
-        if (existing) {
-          existing.sales += Number(order.total || 0);
-          existing.orders += 1;
-        }
-      }
+      dailyMap.set(isoDate, { date: isoDate, day: dayLabel, sales: 0, orders: 0, creatorSales: 0, creatorOrders: 0, storeSales: 0, storeOrders: 0 });
     }
 
     for (const comm of last30DaysCommissions) {
@@ -190,7 +185,22 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
         const iso = comm.createdAt.toISOString().slice(0, 10);
         const existing = dailyMap.get(iso);
         if (existing) {
-          existing.creatorSales += Number(comm.orderAmount || 0);
+          const amt = Number(comm.orderAmount || 0);
+          existing.sales += amt; // Our system's creator sales
+          existing.creatorSales += amt;
+          existing.orders += 1; // Our system's creator orders
+          existing.creatorOrders += 1;
+        }
+      }
+    }
+
+    for (const order of last30DaysOrders) {
+      if (order.processedAt) {
+        const iso = order.processedAt.toISOString().slice(0, 10);
+        const existing = dailyMap.get(iso);
+        if (existing) {
+          existing.storeSales += Number(order.total || 0);
+          existing.storeOrders += 1;
         }
       }
     }
@@ -242,20 +252,28 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
       },
       metrics: {
         totalSales: {
-          value: currentTotalSales,
-          change: calcPercentChange(currentTotalSales, previousTotalSales),
+          value: currentCreatorSales, // Creator Attributed GMV generated through our platform
+          change: calcPercentChange(currentCreatorSales, previousCreatorSales),
         },
         totalOrders: {
-          value: currentTotalOrders,
-          change: calcPercentChange(currentTotalOrders, previousTotalOrders),
+          value: currentCreatorOrders, // Creator Attributed Orders generated through our platform
+          change: calcPercentChange(currentCreatorOrders, previousCreatorOrders),
         },
         creatorSales: {
           value: currentCreatorSales,
           change: calcPercentChange(currentCreatorSales, previousCreatorSales),
         },
+        commissions: {
+          value: currentCommissionsAmount,
+          change: calcPercentChange(currentCommissionsAmount, previousCommissionsAmount),
+        },
         activeCreators: {
           value: activeCreatorsCount,
           change: newCreatorsThisMonthCount,
+        },
+        storeWide: {
+          totalSales: currentTotalSales,
+          totalOrders: currentTotalOrders,
         },
       },
       channelBreakdown: {

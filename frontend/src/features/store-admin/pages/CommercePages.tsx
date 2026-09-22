@@ -545,25 +545,25 @@ export function OrdersPage() {
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          label="Total Orders"
-          value={ordersQuery.isLoading ? "..." : String(totalOrdersCount)}
-          hint="Across all channels"
+          label="Creator Attributed GMV"
+          value={ordersQuery.isLoading ? "..." : formatCurrency(creatorSalesAmount, allOrders[0]?.currency ?? "INR")}
+          hint="From influencer links & campaigns"
+          icon={Sparkles}
+          iconClass="bg-coral/10 text-coral"
+        />
+        <SummaryCard
+          label="Attributed Orders"
+          value={ordersQuery.isLoading ? "..." : String(summary?.creatorOrdersCount ?? allOrders.filter((o) => o.creatorCode).length)}
+          hint="Influencer driven conversions"
           icon={ShoppingBag}
           iconClass="bg-primary/10 text-primary"
         />
         <SummaryCard
-          label="Total Sales Volume"
+          label="Store Total GMV"
           value={ordersQuery.isLoading ? "..." : formatCurrency(totalSalesAmount, allOrders[0]?.currency ?? "INR")}
-          hint="Total order revenue"
+          hint={`Across ${totalOrdersCount} store orders`}
           icon={BadgeIndianRupee}
-          iconClass="bg-emerald-500/10 text-emerald-600"
-        />
-        <SummaryCard
-          label="Creator Attributed"
-          value={ordersQuery.isLoading ? "..." : formatCurrency(creatorSalesAmount, allOrders[0]?.currency ?? "INR")}
-          hint={`${summary?.creatorOrdersCount ?? 0} influencer orders`}
-          icon={Sparkles}
-          iconClass="bg-indigo-500/10 text-indigo-600"
+          iconClass="bg-teal/10 text-teal"
         />
         <SummaryCard
           label="Needs Fulfillment"

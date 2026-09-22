@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Blocks,
   CheckCircle2,
   Download,
   FileBarChart,
   LifeBuoy,
+  Loader2,
   Search,
   Settings,
   ShieldCheck,
   Store,
+  UserCheck,
   UserCog,
   UsersRound,
+  UserX,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { getAdminDashboard, getAdminOrders, getAdminUsers } from "../api/overview.api";
+import { getAdminDashboard, getAdminOrders, getAdminUsers, updateUserStatus } from "../api/overview.api";
 
 function downloadCSV(filename: string, headers: string[], rows: (string | number)[][]) {
   const csvContent =
@@ -42,10 +45,30 @@ function downloadCSV(filename: string, headers: string[], rows: (string | number
 export function UsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
+  const [mutatingUserId, setMutatingUserId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["admin", "users", search, roleFilter],
     queryFn: () => getAdminUsers({ search, role: roleFilter }),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ userId, status }: { userId: string; status: "ACTIVE" | "SUSPENDED" }) => {
+      setMutatingUserId(userId);
+      return updateUserStatus(userId, status);
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "influencers"] });
+      toast.success(`User status updated to ${vars.status}`);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || "Failed to update user status");
+    },
+    onSettled: () => {
+      setMutatingUserId(null);
+    },
   });
 
   const users = query.data?.users ?? [];
@@ -137,79 +160,116 @@ export function UsersPage() {
                 <th className="px-5 py-3 font-medium">Role</th>
                 <th className="px-5 py-3 font-medium">Associated Store / Handle</th>
                 <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 text-right font-medium">Registered Date</th>
+                <th className="px-5 py-3 font-medium">Registered Date</th>
+                <th className="px-5 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {query.isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b last:border-0">
-                    <td colSpan={5} className="px-5 py-4">
+                    <td colSpan={6} className="px-5 py-4">
                       <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
                     </td>
                   </tr>
                 ))
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
                     No users found matching criteria.
                   </td>
                 </tr>
               ) : (
-                users.map((user) => (
-                  <tr key={user.id} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
-                    <td className="px-5 py-3.5">
-                      <p className="font-semibold text-foreground">{user.name}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <Badge
-                        variant={
-                          user.role === "ADMIN"
-                            ? "default"
-                            : user.role === "STORE_OWNER"
-                            ? "outline"
-                            : "secondary"
-                        }
-                        className={
-                          user.role === "ADMIN"
-                            ? "bg-primary text-primary-foreground text-xs"
-                            : user.role === "STORE_OWNER"
-                            ? "border-teal/30 bg-teal/5 text-teal text-xs"
-                            : "text-xs"
-                        }
-                      >
-                        {user.role}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">
-                      {user.storeName ? (
-                        <span className="font-medium text-foreground">{user.storeName}</span>
-                      ) : user.instagramUsername ? (
-                        <span className="font-medium text-pink-600 dark:text-pink-400">
-                          @{user.instagramUsername}
-                        </span>
-                      ) : user.creatorCode ? (
-                        <span className="font-mono text-primary font-semibold">@{user.creatorCode}</span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <Badge
-                        variant={user.status === "ACTIVE" ? "outline" : "secondary"}
-                        className={user.status === "ACTIVE" ? "border-teal/30 bg-teal/5 text-teal text-xs" : "text-xs"}
-                      >
-                        {user.status}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-xs text-muted-foreground">
-                      {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(
-                        new Date(user.createdAt)
-                      )}
-                    </td>
-                  </tr>
-                ))
+                users.map((user) => {
+                  const isMutating = mutatingUserId === user.id && statusMutation.isPending;
+                  const isActive = user.status === "ACTIVE";
+
+                  return (
+                    <tr key={user.id} className="border-b last:border-0 hover:bg-muted/15 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <p className="font-semibold text-foreground">{user.name}</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <Badge
+                          variant={
+                            user.role === "ADMIN"
+                              ? "default"
+                              : user.role === "STORE_OWNER"
+                              ? "outline"
+                              : "secondary"
+                          }
+                          className={
+                            user.role === "ADMIN"
+                              ? "bg-primary text-primary-foreground text-xs"
+                              : user.role === "STORE_OWNER"
+                              ? "border-teal/30 bg-teal/5 text-teal text-xs"
+                              : "text-xs"
+                          }
+                        >
+                          {user.role}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">
+                        {user.storeName ? (
+                          <span className="font-medium text-foreground">{user.storeName}</span>
+                        ) : user.instagramUsername ? (
+                          <span className="font-medium text-pink-600 dark:text-pink-400">
+                            @{user.instagramUsername}
+                          </span>
+                        ) : user.creatorCode ? (
+                          <span className="font-mono text-primary font-semibold">@{user.creatorCode}</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <Badge
+                          variant={isActive ? "outline" : "destructive"}
+                          className={isActive ? "border-teal/30 bg-teal/5 text-teal text-xs" : "text-xs"}
+                        >
+                          {user.status}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-muted-foreground">
+                        {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(
+                          new Date(user.createdAt)
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        {user.role === "ADMIN" ? (
+                          <span className="text-xs text-muted-foreground italic">Protected</span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant={isActive ? "outline" : "default"}
+                            disabled={isMutating}
+                            className={`h-7 px-2.5 text-xs ${
+                              isActive
+                                ? "hover:border-destructive hover:text-destructive"
+                                : "bg-teal text-teal-foreground hover:bg-teal/90"
+                            }`}
+                            onClick={() =>
+                              statusMutation.mutate({
+                                userId: user.id,
+                                status: isActive ? "SUSPENDED" : "ACTIVE",
+                              })
+                            }
+                          >
+                            {isMutating ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : isActive ? (
+                              <UserX className="mr-1.5 h-3.5 w-3.5 text-destructive" />
+                            ) : (
+                              <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            {isActive ? "Suspend" : "Activate"}
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
