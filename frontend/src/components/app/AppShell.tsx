@@ -158,11 +158,6 @@ export function AppShell({ role, children }: { role: Role; children?: ReactNode 
                       <UserRound className="h-4 w-4" /> Profile
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to={paths.preferences}>
-                      <Settings className="h-4 w-4" /> Preferences
-                    </Link>
-                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={handleSignOut}>
                     <LogOut className="h-4 w-4" /> Sign out
