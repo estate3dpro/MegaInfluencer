@@ -30,7 +30,8 @@ export function buildApp() {
         : { level: config.logLevel },
   });
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (request, body, done) => {
-    if (['/webhooks/instagram', '/webhooks/shopify/orders'].includes(request.url.split('?')[0])) return done(null, body);
+    const urlPath = request.url.split('?')[0].replace(/\/+$/, '');
+    if (['/webhooks/instagram', '/webhooks/shopify/orders'].includes(urlPath)) return done(null, body);
     try {
       done(null, JSON.parse(body.toString('utf8')));
     } catch (error) {

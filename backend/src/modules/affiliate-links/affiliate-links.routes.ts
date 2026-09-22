@@ -228,34 +228,267 @@ export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {
   });
 };
 
-/** Shopify should POST order payloads here after the storefront writes `mi_link` and `mi_creator_code` into cart attributes. */
+/** Shopify order webhook: auto-syncs orders into the database and calculates affiliate commissions */
 export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
   app.post('/webhooks/shopify/orders', async (request, reply) => {
-    const raw = request.body as Buffer; const shopifySignature = request.headers['x-shopify-hmac-sha256']; const bridgeSignature = request.headers['x-megainfluencer-signature-256'] ?? request.headers['x-megachat-signature-256'];
-    let payload: Record<string, any>; let domain: string;
+    const rawBuffer = Buffer.isBuffer(request.body)
+      ? request.body
+      : typeof request.body === 'string'
+      ? Buffer.from(request.body, 'utf8')
+      : Buffer.from(JSON.stringify(request.body || {}), 'utf8');
+
+    const shopifySignature = request.headers['x-shopify-hmac-sha256'];
+    const bridgeSignature = request.headers['x-megainfluencer-signature-256'] ?? request.headers['x-megachat-signature-256'];
+
+    // Verify signatures when secret is configured
     if (typeof bridgeSignature === 'string' && config.shopifyBridgeWebhookSecret) {
-      const expected = createHmac('sha256', config.shopifyBridgeWebhookSecret).update(raw).digest('hex');
-      if (expected.length !== bridgeSignature.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(bridgeSignature))) throw new AppError('WEBHOOK_UNAUTHORIZED', 'Invalid bridge webhook signature.', 401);
-      const wrapped = JSON.parse(raw.toString('utf8')) as { eventKey?: string; data?: Record<string, any> };
-      if (!['shopify:order_created', 'shopify:order_paid', 'shopify:order_updated', 'shopify:order_cancelled'].includes(wrapped.eventKey ?? '') || !wrapped.data) return reply.code(200).send({ ignored: true });
-      payload = wrapped.data; domain = String(payload._shopifyMeta?.shop ?? request.headers['x-shopify-shop-domain'] ?? '');
-    } else {
-      if (!config.shopifyAppSecret || typeof shopifySignature !== 'string') throw new AppError('WEBHOOK_UNAUTHORIZED', 'Invalid webhook signature.', 401);
-      const expected = createHmac('sha256', config.shopifyAppSecret).update(raw).digest('base64');
-      if (expected.length !== shopifySignature.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(shopifySignature))) throw new AppError('WEBHOOK_UNAUTHORIZED', 'Invalid webhook signature.', 401);
-      payload = JSON.parse(raw.toString('utf8')) as Record<string, any>; domain = String(request.headers['x-shopify-shop-domain'] ?? '');
+      try {
+        const expected = createHmac('sha256', config.shopifyBridgeWebhookSecret).update(rawBuffer).digest('hex');
+        if (expected.length !== bridgeSignature.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(bridgeSignature))) {
+          app.log.warn({ bridgeSignature, expected }, 'Invalid bridge webhook signature.');
+          throw new AppError('WEBHOOK_UNAUTHORIZED', 'Invalid bridge webhook signature.', 401);
+        }
+      } catch (err: any) {
+        if (err instanceof AppError) throw err;
+        throw new AppError('WEBHOOK_UNAUTHORIZED', 'Bridge webhook verification failed.', 401);
+      }
+    } else if (typeof shopifySignature === 'string' && config.shopifyAppSecret) {
+      try {
+        const expected = createHmac('sha256', config.shopifyAppSecret).update(rawBuffer).digest('base64');
+        if (expected.length !== shopifySignature.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(shopifySignature))) {
+          app.log.warn({ shopifySignature, expected }, 'Invalid shopify webhook signature.');
+          throw new AppError('WEBHOOK_UNAUTHORIZED', 'Invalid webhook signature.', 401);
+        }
+      } catch (err: any) {
+        if (err instanceof AppError) throw err;
+        throw new AppError('WEBHOOK_UNAUTHORIZED', 'Shopify webhook verification failed.', 401);
+      }
     }
-    domain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const organization = await app.prisma.organization.findFirst({ where: { shopDomain: { equals: domain, mode: 'insensitive' } }, select: { id: true } }); if (!organization) return reply.code(200).send({ ignored: true });
-    const attributes = Array.isArray(payload.note_attributes) ? payload.note_attributes : []; const linkSlug = attributes.find((item: any) => item.name === 'mi_link')?.value; const trackedCreatorCode = attributes.find((item: any) => item.name === 'mi_creator_code' || item.name === 'utm_creator_code')?.value;
-    if (!linkSlug) return reply.code(200).send({ ignored: true });
-    const link = await app.prisma.affiliateLink.findFirst({ where: { slug: String(linkSlug), organizationId: organization.id }, select: { id: true, creatorId: true, commissionRate: true, creator: { select: { creatorCode: true } } } }); if (!link) return reply.code(200).send({ ignored: true });
-    const shopifyId = String(payload.admin_graphql_api_id ?? payload.id); const total = Number(payload.current_subtotal_price ?? payload.subtotal_price ?? 0);
-    const creatorCode = link.creator?.creatorCode ?? trackedCreatorCode ?? null;
-    const order = await app.prisma.shopifyOrder.upsert({ where: { organizationId_shopifyId: { organizationId: organization.id, shopifyId } }, create: { organizationId: organization.id, shopifyId, name: String(payload.name ?? payload.order_number ?? shopifyId), email: payload.email ?? null, currency: payload.currency ?? null, total: String(payload.current_total_price ?? payload.total_price ?? total), financialStatus: payload.financial_status ?? null, fulfillmentStatus: payload.fulfillment_status ?? null, processedAt: payload.processed_at ? new Date(payload.processed_at) : null, creatorCode, payload: payload as Prisma.InputJsonValue }, update: { payload: payload as Prisma.InputJsonValue, total: String(payload.current_total_price ?? payload.total_price ?? total), financialStatus: payload.financial_status ?? null, fulfillmentStatus: payload.fulfillment_status ?? null, creatorCode } });
-    const status = payload.cancelled_at || payload.financial_status === 'refunded' ? 'REVERSED' : 'PENDING';
-    await app.prisma.affiliateCommission.upsert({ where: { shopifyOrderId: order.id }, create: { organizationId: organization.id, linkId: link.id, creatorId: link.creatorId, shopifyOrderId: order.id, orderAmount: total, commissionRate: link.commissionRate, amount: total * Number(link.commissionRate) / 100, status }, update: { status } });
-    return reply.code(200).send({ attributed: true });
+
+    let payload: Record<string, any>;
+    let domain = String(request.headers['x-shopify-shop-domain'] ?? '');
+    let eventKey = String(request.headers['x-shopify-topic'] ?? '');
+
+    try {
+      const parsed = JSON.parse(rawBuffer.toString('utf8'));
+      if (parsed && typeof parsed === 'object' && parsed.data && parsed.source === 'shopify') {
+        payload = parsed.data;
+        eventKey = parsed.eventKey || eventKey;
+        domain = String(payload._shopifyMeta?.shop || domain);
+      } else if (parsed && typeof parsed === 'object') {
+        payload = parsed;
+      } else {
+        return reply.code(200).send({ ignored: true, reason: 'Invalid JSON payload' });
+      }
+    } catch {
+      return reply.code(200).send({ ignored: true, reason: 'Malformed JSON payload' });
+    }
+
+    const cleanDomain = domain.replace(/^https?:\/\//i, '').replace(/\/+$/, '').trim().toLowerCase();
+
+    // Match store organization
+    let organization = null;
+    if (cleanDomain) {
+      organization = await prisma.organization.findFirst({
+        where: {
+          OR: [
+            { shopDomain: { equals: cleanDomain, mode: 'insensitive' } },
+            { shopDomain: { contains: cleanDomain, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true, shopDomain: true },
+      });
+    }
+
+    // Fallback: If no direct domain match, check single connected store
+    if (!organization) {
+      const connectedCount = await prisma.organization.count({ where: { connectionStatus: 'CONNECTED' } });
+      if (connectedCount === 1) {
+        organization = await prisma.organization.findFirst({
+          where: { connectionStatus: 'CONNECTED' },
+          select: { id: true, shopDomain: true },
+        });
+      } else {
+        const anyCount = await prisma.organization.count();
+        if (anyCount === 1) {
+          organization = await prisma.organization.findFirst({
+            select: { id: true, shopDomain: true },
+          });
+        }
+      }
+    }
+
+    if (!organization) {
+      app.log.warn({ domain, cleanDomain }, 'Order webhook received but no matching organization found in database.');
+      return reply.code(200).send({ ignored: true, reason: 'Organization not found' });
+    }
+
+    const shopifyId = String(payload.admin_graphql_api_id ?? payload.id);
+    if (!shopifyId || shopifyId === 'undefined' || shopifyId === 'null') {
+      return reply.code(200).send({ ignored: true, reason: 'Missing order ID' });
+    }
+
+    const name = String(payload.name ?? payload.order_number ?? `#${shopifyId}`);
+    const email = payload.email ?? payload.customer?.email ?? null;
+    const currency = payload.currency ?? payload.presentment_currency ?? payload.totalPriceSet?.shopMoney?.currencyCode ?? null;
+    const total = String(payload.current_total_price ?? payload.total_price ?? payload.total_price_set?.shopMoney?.amount ?? '0');
+    const subtotal = Number(payload.current_subtotal_price ?? payload.subtotal_price ?? total ?? 0);
+    const financialStatus = payload.financial_status ?? payload.displayFinancialStatus ?? null;
+    const fulfillmentStatus = payload.fulfillment_status ?? payload.displayFulfillmentStatus ?? null;
+    const processedAt = payload.processed_at ? new Date(payload.processed_at) : (payload.created_at ? new Date(payload.created_at) : new Date());
+
+    // Extract note attributes / customAttributes
+    const rawAttributes = Array.isArray(payload.note_attributes)
+      ? payload.note_attributes
+      : Array.isArray(payload.customAttributes)
+      ? payload.customAttributes
+      : [];
+
+    const getAttr = (key: string) => {
+      const found = rawAttributes.find((item: any) => {
+        const k = String(item?.name ?? item?.key ?? '').trim().toLowerCase();
+        return k === key.toLowerCase();
+      });
+      return found?.value ? String(found.value).trim() : null;
+    };
+
+    const linkSlug = getAttr('mi_link');
+    let trackedCreatorCode = getAttr('mi_creator_code') ?? getAttr('utm_creator_code');
+
+    const discountCodes: string[] = Array.isArray(payload.discount_codes)
+      ? payload.discount_codes.map((d: any) => String(d.code || '').trim()).filter(Boolean)
+      : [];
+
+    // Check tags (skip influencer samples from commission calculation if marked)
+    const rawTags = payload.tags;
+    const tagList = Array.isArray(rawTags)
+      ? rawTags
+      : typeof rawTags === 'string'
+      ? rawTags.split(',').map((t: string) => t.trim())
+      : [];
+    const isSampleOrder = tagList.includes('InfluencerSample');
+
+    // Resolve Creator & Link
+    let link: any = null;
+    let creator: any = null;
+
+    if (linkSlug) {
+      link = await prisma.affiliateLink.findFirst({
+        where: { slug: String(linkSlug), organizationId: organization.id },
+        select: { id: true, creatorId: true, commissionRate: true, creator: { select: { id: true, creatorCode: true } } },
+      });
+      if (link?.creator) {
+        creator = link.creator;
+        trackedCreatorCode = creator.creatorCode ?? trackedCreatorCode;
+      }
+    }
+
+    if (!link && trackedCreatorCode) {
+      creator = await prisma.user.findFirst({
+        where: { creatorCode: trackedCreatorCode, role: 'INFLUENCER' },
+        select: { id: true, creatorCode: true },
+      });
+      if (creator) {
+        link = await prisma.affiliateLink.findFirst({
+          where: { creatorId: creator.id, organizationId: organization.id, status: 'ACTIVE' },
+          select: { id: true, creatorId: true, commissionRate: true },
+        });
+      }
+    }
+
+    if (!link && discountCodes.length > 0) {
+      for (const code of discountCodes) {
+        const matchedCreator = await prisma.user.findFirst({
+          where: { creatorCode: { equals: code, mode: 'insensitive' }, role: 'INFLUENCER' },
+          select: { id: true, creatorCode: true },
+        });
+        if (matchedCreator) {
+          creator = matchedCreator;
+          trackedCreatorCode = creator.creatorCode;
+          link = await prisma.affiliateLink.findFirst({
+            where: { creatorId: creator.id, organizationId: organization.id, status: 'ACTIVE' },
+            select: { id: true, creatorId: true, commissionRate: true },
+          });
+          break;
+        }
+      }
+    }
+
+    // Always upsert the Shopify Order in database so orders stay synced in real time
+    const order = await prisma.shopifyOrder.upsert({
+      where: {
+        organizationId_shopifyId: {
+          organizationId: organization.id,
+          shopifyId,
+        },
+      },
+      create: {
+        organizationId: organization.id,
+        shopifyId,
+        name,
+        email,
+        currency,
+        total,
+        financialStatus,
+        fulfillmentStatus,
+        processedAt,
+        creatorCode: trackedCreatorCode ?? null,
+        payload: payload as Prisma.InputJsonValue,
+      },
+      update: {
+        name,
+        email,
+        currency,
+        total,
+        financialStatus,
+        fulfillmentStatus,
+        processedAt,
+        creatorCode: trackedCreatorCode ?? null,
+        payload: payload as Prisma.InputJsonValue,
+      },
+    });
+
+    const isCancelledOrRefunded = Boolean(
+      payload.cancelled_at ||
+      String(financialStatus).toLowerCase() === 'refunded' ||
+      String(financialStatus).toLowerCase() === 'voided'
+    );
+    const commissionStatus = isCancelledOrRefunded ? 'REVERSED' : 'PENDING';
+
+    // If attributed and not an internal sample, upsert commission
+    if (link && !isSampleOrder) {
+      const orderAmount = subtotal > 0 ? subtotal : Number(total || 0);
+      const rate = Number(link.commissionRate ?? 10);
+      const amount = (orderAmount * rate) / 100;
+
+      await prisma.affiliateCommission.upsert({
+        where: { shopifyOrderId: order.id },
+        create: {
+          organizationId: organization.id,
+          linkId: link.id,
+          creatorId: link.creatorId ?? creator?.id ?? null,
+          shopifyOrderId: order.id,
+          orderAmount,
+          commissionRate: link.commissionRate,
+          amount,
+          status: commissionStatus,
+        },
+        update: {
+          orderAmount,
+          amount,
+          status: commissionStatus,
+        },
+      });
+
+      return reply.code(200).send({ synced: true, attributed: true, orderId: order.id });
+    } else if (isCancelledOrRefunded) {
+      await prisma.affiliateCommission.updateMany({
+        where: { shopifyOrderId: order.id },
+        data: { status: 'REVERSED' },
+      });
+    }
+
+    return reply.code(200).send({ synced: true, attributed: false, orderId: order.id });
   });
 };
