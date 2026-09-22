@@ -18,6 +18,7 @@ import {
   LifeBuoy,
   Link2,
   Megaphone,
+  MessageCircle,
   Package,
   Receipt,
   Settings,
@@ -97,8 +98,9 @@ export const influencerNav: NavGroup[] = [
   {
     label: "Account",
     items: [
+      { title: "Chat", url: "/influencer/chat", icon: MessageCircle },
       { title: "Notifications", url: "/influencer/notifications", icon: Bell },
-      { title: "Support", url: "/influencer/support", icon: LifeBuoy },
+      { title: "Help & Support", url: "/influencer/support", icon: LifeBuoy },
     ],
   },
 ];
@@ -138,6 +140,13 @@ export const storeAdminNav: NavGroup[] = [
       { title: "Settings", url: "/store-admin/settings", icon: Settings },
     ],
   },
+  {
+    label: "Communication",
+    items: [
+      { title: "Chat", url: "/store-admin/chat", icon: MessageCircle },
+      { title: "Help & Support", url: "/store-admin/support", icon: LifeBuoy },
+    ],
+  },
 ];
 
 export const adminNav: NavGroup[] = [
@@ -175,6 +184,7 @@ export const adminNav: NavGroup[] = [
     items: [
       { title: "Users & Roles", url: "/admin/users", icon: UserCog },
       { title: "Integrations", url: "/admin/integrations", icon: Blocks },
+      { title: "Chat", url: "/admin/chat", icon: MessageCircle },
       { title: "Support Desk", url: "/admin/support", icon: LifeBuoy },
       { title: "Reports", url: "/admin/reports", icon: FileBarChart },
       { title: "Settings", url: "/admin/settings", icon: Gauge },
