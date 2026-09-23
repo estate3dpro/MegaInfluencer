@@ -158,7 +158,7 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
         replyInstagramAccountId: event.instagramAccountId,
       }, 'Instagram automation account IDs differ; using webhook account ID for private reply');
     }
-    if (!matchesKeywords(event.commentText, automation.keywords, automation.wholeWordMatch)) {
+    if (!(automation as any).replyToAnyComment && !matchesKeywords(event.commentText, automation.keywords, automation.wholeWordMatch)) {
       summary.skipped += 1;
       app.log.info({ ...logContext, keywords: automation.keywords, wholeWordMatch: automation.wholeWordMatch }, 'Instagram automation skipped: comment did not match keywords');
       continue;

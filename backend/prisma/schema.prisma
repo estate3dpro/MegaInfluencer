@@ -190,6 +190,7 @@ model InstagramAutomation {
   keywords       String[]
   dmMessage      String
   wholeWordMatch Boolean                   @default(true)
+  replyToAnyComment Boolean                 @default(false)
   replyOnDuplicateCommentWebhook Boolean   @default(false)
   status         InstagramAutomationStatus @default(ACTIVE)
   deliveries     InstagramAutomationDelivery[]

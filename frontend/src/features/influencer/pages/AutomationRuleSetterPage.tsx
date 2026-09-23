@@ -41,6 +41,7 @@ export function AutomationRuleSetterPage() {
     "Hey {username}! Thanks for your comment — here’s the link you asked for: ",
   );
   const [wholeWordMatch, setWholeWordMatch] = useState(true);
+  const [replyToAnyComment, setReplyToAnyComment] = useState(false);
   const [replyOnDuplicateCommentWebhook, setReplyOnDuplicateCommentWebhook] = useState(false);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
@@ -84,6 +85,7 @@ export function AutomationRuleSetterPage() {
         keywords: finalKeywords,
         dmMessage: message.trim(),
         wholeWordMatch,
+        replyToAnyComment,
         replyOnDuplicateCommentWebhook,
       });
       await navigate({ to: "/influencer/instagram-automation" });
@@ -156,9 +158,17 @@ export function AutomationRuleSetterPage() {
           >
             <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-4">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
-                  <Image className="h-4 w-4" />
-                </span>
+                {selectedPost?.thumbnail_url || selectedPost?.media_url ? (
+                  <img
+                    src={selectedPost.thumbnail_url ?? selectedPost.media_url}
+                    alt=""
+                    className="h-12 w-12 rounded-lg object-cover"
+                  />
+                ) : (
+                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+                    <Image className="h-4 w-4" />
+                  </span>
+                )}
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
                     {selectedPost?.caption?.trim() ||
@@ -245,6 +255,15 @@ export function AutomationRuleSetterPage() {
                 </span>
               </span>
               <Switch checked={wholeWordMatch} onCheckedChange={setWholeWordMatch} />
+            </label>
+            <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border bg-muted/30 p-3.5">
+              <span>
+                <span className="block text-sm font-medium">Reply to any comment</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Send the DM for every comment on this post, without requiring a keyword.
+                </span>
+              </span>
+              <Switch checked={replyToAnyComment} onCheckedChange={setReplyToAnyComment} />
             </label>
             <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border bg-muted/30 p-3.5">
               <span>

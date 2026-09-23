@@ -10,6 +10,7 @@ export const createInstagramAutomationSchema = z.object({
   ),
   dmMessage: z.string().trim().min(1).max(1000),
   wholeWordMatch: z.boolean().default(true),
+  replyToAnyComment: z.boolean().default(false),
   replyOnDuplicateCommentWebhook: z.boolean().default(false),
 });
 
