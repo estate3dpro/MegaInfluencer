@@ -21,6 +21,7 @@ import { Route as AdminAttributionRouteImport } from './routes/admin/attribution
 import { Route as AdminBrandsRouteImport } from './routes/admin/brands'
 import { Route as AdminCampaignsRouteImport } from './routes/admin/campaigns'
 import { Route as AdminCommissionsRouteImport } from './routes/admin/commissions'
+import { Route as AdminCreatorsRouteImport } from './routes/admin/creators'
 import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
 import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
 import { Route as AdminInfluencersRouteImport } from './routes/admin/influencers'
@@ -57,6 +58,7 @@ import { Route as StoreAdminAffiliateRouteImport } from './routes/store-admin/af
 import { Route as StoreAdminAnalyticsRouteImport } from './routes/store-admin/analytics'
 import { Route as StoreAdminCampaignsRouteImport } from './routes/store-admin/campaigns'
 import { Route as StoreAdminCommissionsRouteImport } from './routes/store-admin/commissions'
+import { Route as StoreAdminCreatorDirectoryRouteImport } from './routes/store-admin/creator-directory'
 import { Route as StoreAdminCreatorsRouteImport } from './routes/store-admin/creators'
 import { Route as StoreAdminCustomersRouteImport } from './routes/store-admin/customers'
 import { Route as StoreAdminDashboardRouteImport } from './routes/store-admin/dashboard'
@@ -143,6 +145,11 @@ const AdminCampaignsRoute = AdminCampaignsRouteImport.update({
 const AdminCommissionsRoute = AdminCommissionsRouteImport.update({
   id: '/commissions',
   path: '/commissions',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCreatorsRoute = AdminCreatorsRouteImport.update({
+  id: '/creators',
+  path: '/creators',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
@@ -326,6 +333,12 @@ const StoreAdminCommissionsRoute = StoreAdminCommissionsRouteImport.update({
   path: '/commissions',
   getParentRoute: () => StoreAdminRoute,
 } as any)
+const StoreAdminCreatorDirectoryRoute =
+  StoreAdminCreatorDirectoryRouteImport.update({
+    id: '/creator-directory',
+    path: '/creator-directory',
+    getParentRoute: () => StoreAdminRoute,
+  } as any)
 const StoreAdminCreatorsRoute = StoreAdminCreatorsRouteImport.update({
   id: '/creators',
   path: '/creators',
@@ -484,6 +497,7 @@ export interface FileRoutesByFullPath {
   '/admin/brands': typeof AdminBrandsRoute
   '/admin/campaigns': typeof AdminCampaignsRoute
   '/admin/commissions': typeof AdminCommissionsRoute
+  '/admin/creators': typeof AdminCreatorsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/influencers': typeof AdminInfluencersRouteWithChildren
@@ -518,6 +532,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
   '/store-admin/campaigns': typeof StoreAdminCampaignsRouteWithChildren
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
+  '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
@@ -558,6 +573,7 @@ export interface FileRoutesByTo {
   '/admin/brands': typeof AdminBrandsRoute
   '/admin/campaigns': typeof AdminCampaignsRoute
   '/admin/commissions': typeof AdminCommissionsRoute
+  '/admin/creators': typeof AdminCreatorsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
@@ -588,6 +604,7 @@ export interface FileRoutesByTo {
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
+  '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
@@ -629,6 +646,7 @@ export interface FileRoutesById {
   '/admin/brands': typeof AdminBrandsRoute
   '/admin/campaigns': typeof AdminCampaignsRoute
   '/admin/commissions': typeof AdminCommissionsRoute
+  '/admin/creators': typeof AdminCreatorsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/influencers': typeof AdminInfluencersRouteWithChildren
@@ -663,6 +681,7 @@ export interface FileRoutesById {
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
   '/store-admin/campaigns': typeof StoreAdminCampaignsRouteWithChildren
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
+  '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
@@ -708,6 +727,7 @@ export interface FileRouteTypes {
     | '/admin/brands'
     | '/admin/campaigns'
     | '/admin/commissions'
+    | '/admin/creators'
     | '/admin/dashboard'
     | '/admin/finance'
     | '/admin/influencers'
@@ -742,6 +762,7 @@ export interface FileRouteTypes {
     | '/store-admin/analytics'
     | '/store-admin/campaigns'
     | '/store-admin/commissions'
+    | '/store-admin/creator-directory'
     | '/store-admin/creators'
     | '/store-admin/customers'
     | '/store-admin/dashboard'
@@ -782,6 +803,7 @@ export interface FileRouteTypes {
     | '/admin/brands'
     | '/admin/campaigns'
     | '/admin/commissions'
+    | '/admin/creators'
     | '/admin/dashboard'
     | '/admin/finance'
     | '/admin/integrations'
@@ -812,6 +834,7 @@ export interface FileRouteTypes {
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
     | '/store-admin/commissions'
+    | '/store-admin/creator-directory'
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
@@ -852,6 +875,7 @@ export interface FileRouteTypes {
     | '/admin/brands'
     | '/admin/campaigns'
     | '/admin/commissions'
+    | '/admin/creators'
     | '/admin/dashboard'
     | '/admin/finance'
     | '/admin/influencers'
@@ -886,6 +910,7 @@ export interface FileRouteTypes {
     | '/store-admin/analytics'
     | '/store-admin/campaigns'
     | '/store-admin/commissions'
+    | '/store-admin/creator-directory'
     | '/store-admin/creators'
     | '/store-admin/customers'
     | '/store-admin/dashboard'
@@ -1011,6 +1036,13 @@ declare module '@tanstack/react-router' {
       path: '/commissions'
       fullPath: '/admin/commissions'
       preLoaderRoute: typeof AdminCommissionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/creators': {
+      id: '/admin/creators'
+      path: '/creators'
+      fullPath: '/admin/creators'
+      preLoaderRoute: typeof AdminCreatorsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/dashboard': {
@@ -1265,6 +1297,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StoreAdminCommissionsRouteImport
       parentRoute: typeof StoreAdminRoute
     }
+    '/store-admin/creator-directory': {
+      id: '/store-admin/creator-directory'
+      path: '/creator-directory'
+      fullPath: '/store-admin/creator-directory'
+      preLoaderRoute: typeof StoreAdminCreatorDirectoryRouteImport
+      parentRoute: typeof StoreAdminRoute
+    }
     '/store-admin/creators': {
       id: '/store-admin/creators'
       path: '/creators'
@@ -1477,6 +1516,7 @@ interface AdminRouteChildren {
   AdminBrandsRoute: typeof AdminBrandsRoute
   AdminCampaignsRoute: typeof AdminCampaignsRoute
   AdminCommissionsRoute: typeof AdminCommissionsRoute
+  AdminCreatorsRoute: typeof AdminCreatorsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminFinanceRoute: typeof AdminFinanceRoute
   AdminInfluencersRoute: typeof AdminInfluencersRouteWithChildren
@@ -1502,6 +1542,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminBrandsRoute: AdminBrandsRoute,
   AdminCampaignsRoute: AdminCampaignsRoute,
   AdminCommissionsRoute: AdminCommissionsRoute,
+  AdminCreatorsRoute: AdminCreatorsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminFinanceRoute: AdminFinanceRoute,
   AdminInfluencersRoute: AdminInfluencersRouteWithChildren,
@@ -1658,6 +1699,7 @@ interface StoreAdminRouteChildren {
   StoreAdminAnalyticsRoute: typeof StoreAdminAnalyticsRoute
   StoreAdminCampaignsRoute: typeof StoreAdminCampaignsRouteWithChildren
   StoreAdminCommissionsRoute: typeof StoreAdminCommissionsRoute
+  StoreAdminCreatorDirectoryRoute: typeof StoreAdminCreatorDirectoryRoute
   StoreAdminCreatorsRoute: typeof StoreAdminCreatorsRouteWithChildren
   StoreAdminCustomersRoute: typeof StoreAdminCustomersRoute
   StoreAdminDashboardRoute: typeof StoreAdminDashboardRoute
@@ -1677,6 +1719,7 @@ const StoreAdminRouteChildren: StoreAdminRouteChildren = {
   StoreAdminAnalyticsRoute: StoreAdminAnalyticsRoute,
   StoreAdminCampaignsRoute: StoreAdminCampaignsRouteWithChildren,
   StoreAdminCommissionsRoute: StoreAdminCommissionsRoute,
+  StoreAdminCreatorDirectoryRoute: StoreAdminCreatorDirectoryRoute,
   StoreAdminCreatorsRoute: StoreAdminCreatorsRouteWithChildren,
   StoreAdminCustomersRoute: StoreAdminCustomersRoute,
   StoreAdminDashboardRoute: StoreAdminDashboardRoute,

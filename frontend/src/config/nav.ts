@@ -116,6 +116,7 @@ export const storeAdminNav: NavGroup[] = [
     label: "Creators",
     items: [
       { title: "Creators", url: "/store-admin/creators", icon: Sparkles },
+      { title: "All Creators", url: "/store-admin/creator-directory", icon: Users2 },
       { title: "Campaigns", url: "/store-admin/campaigns", icon: Megaphone },
       { title: "Affiliate", url: "/store-admin/affiliate", icon: Filter },
       { title: "Commissions", url: "/store-admin/commissions", icon: CircleDollarSign },
@@ -145,6 +146,7 @@ export const adminNav: NavGroup[] = [
     label: "Ecosystem",
     items: [
       { title: "Influencers", url: "/admin/influencers", icon: Sparkles },
+      { title: "All Creators", url: "/admin/creators", icon: Users2 },
       { title: "Stores", url: "/admin/stores", icon: StoreIcon },
       { title: "Brands", url: "/admin/brands", icon: Building2 },
       { title: "Products", url: "/admin/products", icon: Boxes },
