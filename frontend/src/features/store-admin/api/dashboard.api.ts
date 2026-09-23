@@ -53,8 +53,6 @@ export type StoreDashboardResponse = {
   };
   channelBreakdown: {
     totalSales: number;
-    directSales: number;
-    directPercentage: number;
     creatorSales: number;
     creatorPercentage: number;
   };

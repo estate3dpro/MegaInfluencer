@@ -103,16 +103,10 @@ export function DashboardPage() {
 
   const channelData = [
     {
-      label: "Creator links",
+      label: "MegaInfluencer attributed",
       amount: formatCurrency(data?.channelBreakdown.creatorSales ?? 0),
       percentage: data?.channelBreakdown.creatorPercentage ?? 0,
       className: "bg-coral",
-    },
-    {
-      label: "Direct / Organic store",
-      amount: formatCurrency(data?.channelBreakdown.directSales ?? 0),
-      percentage: data?.channelBreakdown.directPercentage ?? 100,
-      className: "bg-primary",
     },
   ];
 
@@ -124,7 +118,7 @@ export function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={`${greeting}, ${ownerName}`}
-        description={`Here’s how ${storeName} is performing today.`}
+        description={`Here’s how ${storeName} is performing through MegaInfluencer today.`}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -256,25 +250,25 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Sales by Channel Card */}
+        {/* Platform-attributed sales card */}
         <Card className="shadow-card">
           <CardHeader className="p-5 pb-3">
-            <CardTitle>Sales by channel</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Where your revenue comes from</p>
+            <CardTitle>Platform-attributed sales</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Revenue tracked through MegaInfluencer</p>
           </CardHeader>
           <CardContent className="space-y-6 p-5 pt-3">
             <div className="grid place-items-center py-1">
               <div
                 className="grid h-32 w-32 place-items-center rounded-full"
                 style={{
-                  background: `conic-gradient(var(--primary) 0 ${data?.channelBreakdown.directPercentage ?? 100}%, var(--coral) ${data?.channelBreakdown.directPercentage ?? 100}% 100%)`,
+                  background: "conic-gradient(var(--coral) 0 100%)",
                 }}
               >
                 <div className="grid h-24 w-24 place-items-center rounded-full bg-card text-center">
                   <span className="font-display text-xl font-semibold">
-                    {compactCurrency.format(data?.metrics.totalSales.value ?? 0)}
+                    {compactCurrency.format(data?.channelBreakdown.totalSales ?? 0)}
                   </span>
-                  <span className="-mt-1 text-[11px] text-muted-foreground">total sales</span>
+                  <span className="-mt-1 text-[11px] text-muted-foreground">platform sales</span>
                 </div>
               </div>
             </div>
@@ -308,7 +302,7 @@ export function DashboardPage() {
           <CardHeader className="flex-row items-center justify-between space-y-0 p-5">
             <div>
               <CardTitle>Recent orders</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">Your latest customer purchases</p>
+              <p className="mt-1 text-sm text-muted-foreground">Latest purchases attributed through MegaInfluencer</p>
             </div>
             <Button asChild variant="ghost" size="sm" className="-mr-2 text-primary">
               <Link to="/store-admin/orders">
@@ -330,7 +324,7 @@ export function DashboardPage() {
               ))
             ) : recentOrders.length === 0 ? (
               <div className="border-t p-8 text-center text-sm text-muted-foreground">
-                No orders yet. They will appear here automatically when synced.
+                No platform-attributed orders yet. They will appear here automatically when synced.
               </div>
             ) : (
               recentOrders.map((order) => (

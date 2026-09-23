@@ -31,7 +31,9 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
     const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const thirtyDaysAgo = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29));
 
-    // 1. Fetch Orders for Current Month & Previous Month
+    // 1. Fetch only orders attributed through MegaInfluencer. Shopify still
+    // stores every synced order, but direct-store data does not appear in this
+    // creator-commerce dashboard.
     const [
       currentMonthOrders,
       previousMonthOrders,
@@ -41,7 +43,6 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
       newCreatorsThisMonthCount,
       currentMonthCommissions,
       previousMonthCommissions,
-      last30DaysCommissions,
       topCommissionsByCreator,
       totalProductsCount,
     ] = await Promise.all([
@@ -50,6 +51,7 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
         where: {
           organizationId: organization.id,
           processedAt: { gte: monthStart },
+          creatorCode: { not: null },
         },
         select: { total: true, financialStatus: true, processedAt: true, creatorCode: true },
       }),
@@ -58,6 +60,7 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
         where: {
           organizationId: organization.id,
           processedAt: { gte: previousMonthStart, lt: monthStart },
+          creatorCode: { not: null },
         },
         select: { total: true },
       }),
@@ -66,12 +69,13 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
         where: {
           organizationId: organization.id,
           processedAt: { gte: thirtyDaysAgo },
+          creatorCode: { not: null },
         },
         select: { total: true, processedAt: true, creatorCode: true },
       }),
       // Recent 5 orders
       prisma.shopifyOrder.findMany({
-        where: { organizationId: organization.id },
+        where: { organizationId: organization.id, creatorCode: { not: null } },
         orderBy: { processedAt: 'desc' },
         take: 5,
         select: {
@@ -116,15 +120,6 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
         },
         select: { amount: true, orderAmount: true },
       }),
-      // Last 30 days commissions
-      prisma.affiliateCommission.findMany({
-        where: {
-          organizationId: organization.id,
-          createdAt: { gte: thirtyDaysAgo },
-          status: { not: 'REVERSED' },
-        },
-        select: { amount: true, orderAmount: true, createdAt: true },
-      }),
       // Top performing creators
       prisma.affiliateCommission.groupBy({
         by: ['creatorId'],
@@ -158,10 +153,10 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
     const currentTotalOrders = currentMonthOrders.length;
     const previousTotalOrders = previousMonthOrders.length;
 
-    const currentCreatorSales = sumAmount(currentMonthCommissions);
-    const previousCreatorSales = sumAmount(previousMonthCommissions);
-    const currentCreatorOrders = currentMonthCommissions.length;
-    const previousCreatorOrders = previousMonthCommissions.length;
+    const currentCreatorSales = currentTotalSales;
+    const previousCreatorSales = previousTotalSales;
+    const currentCreatorOrders = currentTotalOrders;
+    const previousCreatorOrders = previousTotalOrders;
     const currentCommissionsAmount = sumComms(currentMonthCommissions);
     const previousCommissionsAmount = sumComms(previousMonthCommissions);
 
@@ -170,28 +165,14 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
       return Number((((current - previous) / previous) * 100).toFixed(1));
     };
 
-    // Build 30-day performance map (Defaulted to our system's creator-attributed performance)
-    const dailyMap = new Map<string, { date: string; day: string; sales: number; orders: number; creatorSales: number; creatorOrders: number; storeSales: number; storeOrders: number }>();
+    // Build a 30-day timeline from platform-attributed Shopify orders only.
+    const dailyMap = new Map<string, { date: string; day: string; sales: number; orders: number; creatorSales: number; creatorOrders: number }>();
     for (let i = 0; i < 30; i++) {
       const d = new Date(thirtyDaysAgo);
       d.setDate(thirtyDaysAgo.getDate() + i);
       const isoDate = d.toISOString().slice(0, 10);
       const dayLabel = String(d.getDate()).padStart(2, '0');
-      dailyMap.set(isoDate, { date: isoDate, day: dayLabel, sales: 0, orders: 0, creatorSales: 0, creatorOrders: 0, storeSales: 0, storeOrders: 0 });
-    }
-
-    for (const comm of last30DaysCommissions) {
-      if (comm.createdAt) {
-        const iso = comm.createdAt.toISOString().slice(0, 10);
-        const existing = dailyMap.get(iso);
-        if (existing) {
-          const amt = Number(comm.orderAmount || 0);
-          existing.sales += amt; // Our system's creator sales
-          existing.creatorSales += amt;
-          existing.orders += 1; // Our system's creator orders
-          existing.creatorOrders += 1;
-        }
-      }
+      dailyMap.set(isoDate, { date: isoDate, day: dayLabel, sales: 0, orders: 0, creatorSales: 0, creatorOrders: 0 });
     }
 
     for (const order of last30DaysOrders) {
@@ -199,8 +180,11 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
         const iso = order.processedAt.toISOString().slice(0, 10);
         const existing = dailyMap.get(iso);
         if (existing) {
-          existing.storeSales += Number(order.total || 0);
-          existing.storeOrders += 1;
+          const amount = Number(order.total || 0);
+          existing.sales += amount;
+          existing.orders += 1;
+          existing.creatorSales += amount;
+          existing.creatorOrders += 1;
         }
       }
     }
@@ -237,11 +221,6 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
       };
     });
 
-    // Channel breakdown
-    const directSales = Math.max(0, currentTotalSales - currentCreatorSales);
-    const directPercentage = currentTotalSales > 0 ? Math.round((directSales / currentTotalSales) * 100) : 100;
-    const creatorPercentage = currentTotalSales > 0 ? Math.round((currentCreatorSales / currentTotalSales) * 100) : 0;
-
     return {
       store: {
         name: organization.name,
@@ -271,17 +250,11 @@ export const storeDashboardRoutes: FastifyPluginAsync = async (app) => {
           value: activeCreatorsCount,
           change: newCreatorsThisMonthCount,
         },
-        storeWide: {
-          totalSales: currentTotalSales,
-          totalOrders: currentTotalOrders,
-        },
       },
       channelBreakdown: {
         totalSales: currentTotalSales,
-        directSales,
-        directPercentage,
-        creatorSales: currentCreatorSales,
-        creatorPercentage,
+        creatorSales: currentTotalSales,
+        creatorPercentage: currentTotalSales > 0 ? 100 : 0,
       },
       performance: Array.from(dailyMap.values()),
       recentOrders: recentOrders.map((order: any) => ({
