@@ -69,6 +69,11 @@ enum InstagramManualReplyStatus {
   FAILED
 }
 
+enum InstagramDirectMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
 enum CampaignStatus {
   DRAFT
   PUBLISHED
@@ -116,6 +121,8 @@ model User {
   instagramAutomations  InstagramAutomation[]
   instagramCommentConversations InstagramCommentConversation[] @relation("InstagramConversationInfluencer")
   instagramManualReplies InstagramManualReply[] @relation("InstagramManualReplySender")
+  instagramDirectConversations InstagramDirectConversation[] @relation("InstagramDirectConversationInfluencer")
+  instagramDirectMessages InstagramDirectMessage[] @relation("InstagramDirectMessageSender")
   instagramOAuthStates  InstagramOAuthState[]  @relation("InstagramOAuthStateInfluencer")
   instagramLoginTickets InstagramLoginTicket[]
   authSessions          AuthSession[]
@@ -269,6 +276,37 @@ model InstagramManualReply {
 
   @@index([conversationId, createdAt])
   @@index([senderUserId, createdAt])
+}
+
+model InstagramDirectConversation {
+  id                   String   @id @default(cuid())
+  influencerId         String
+  instagramParticipantId String
+  participantUsername  String?
+  instagramAccountId   String
+  lastMessageAt         DateTime @default(now())
+  influencer           User     @relation("InstagramDirectConversationInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
+  messages             InstagramDirectMessage[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([influencerId, instagramParticipantId])
+  @@index([influencerId, lastMessageAt])
+}
+
+model InstagramDirectMessage {
+  id                   String                        @id @default(cuid())
+  conversationId       String
+  instagramMessageId   String?                       @unique
+  senderUserId         String?
+  direction            InstagramDirectMessageDirection
+  messageText          String
+  sentAt               DateTime
+  conversation         InstagramDirectConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender               User?                         @relation("InstagramDirectMessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                      @default(now())
+
+  @@index([conversationId, sentAt])
 }
 
 model Organization {

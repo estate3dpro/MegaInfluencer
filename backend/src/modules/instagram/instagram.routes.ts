@@ -7,6 +7,7 @@ import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, excha
 import { exchangeLoginTicketSchema, mediaQuerySchema, oauthCallbackQuerySchema, webhookVerificationSchema } from './instagram.schema.js';
 import { config } from '../../config/env.js';
 import { processInstagramCommentAutomations } from '../instagram-automations/instagram-comment-automation.service.js';
+import { processInstagramDirectMessages } from '../instagram-direct-inbox/instagram-direct-inbox.service.js';
 
 export const instagramAuthRoutes: FastifyPluginAsync = async (app) => {
   app.get('/auth/instagram', async (_request, reply) => reply.redirect(await beginInstagramOAuth(app, 'LOGIN')));
@@ -95,8 +96,11 @@ export const instagramWebhookRoutes: FastifyPluginAsync = async (app) => {
     if (duplicate) {
       request.log.info({ payloadBytes: rawBody.length }, 'Duplicate Instagram webhook received; evaluating automation duplicate-reply settings');
     }
-    const processing = await processInstagramCommentAutomations(app, payload);
-    request.log.info({ duplicate, ...processing }, 'Instagram webhook processed');
-    return reply.status(200).send({ received: true, duplicate, ...processing });
+    const [processing, directMessages] = await Promise.all([
+      processInstagramCommentAutomations(app, payload),
+      processInstagramDirectMessages(app, payload),
+    ]);
+    request.log.info({ duplicate, ...processing, directMessages }, 'Instagram webhook processed');
+    return reply.status(200).send({ received: true, duplicate, ...processing, directMessages });
   });
 };

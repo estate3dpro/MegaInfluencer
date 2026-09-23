@@ -139,3 +139,18 @@ export async function sendInstagramPrivateReply(
   });
   return parseResponse<{ recipient_id?: string; message_id?: string }>(response);
 }
+
+/** Send a normal DM after the customer has started a conversation. */
+export async function sendInstagramDirectMessage(
+  accessToken: string,
+  instagramUserId: string,
+  recipientId: string,
+  message: string,
+) {
+  const response = await fetch(`${messagingGraphUrl}/${instagramUserId}/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken.trim()}` },
+    body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } }),
+  });
+  return parseResponse<{ recipient_id?: string; message_id?: string }>(response);
+}

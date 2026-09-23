@@ -16,6 +16,7 @@ import { identityRoutes } from '../modules/identity/identity.routes.js';
 import { influencerInstagramRoutes, instagramAuthRoutes, instagramWebhookRoutes } from '../modules/instagram/instagram.routes.js';
 import { instagramAutomationRoutes } from '../modules/instagram-automations/instagram-automations.routes.js';
 import { instagramInboxRoutes } from '../modules/instagram-inbox/instagram-inbox.routes.js';
+import { instagramDirectInboxRoutes } from '../modules/instagram-direct-inbox/instagram-direct-inbox.routes.js';
 import { campaignRoutes } from '../modules/campaigns/campaigns.routes.js';
 import { affiliateLinkRoutes, affiliateShopifyWebhookRoutes, affiliateTrackingRoutes } from '../modules/affiliate-links/affiliate-links.routes.js';
 import { influencerDashboardRoutes } from '../modules/influencer-dashboard/influencer-dashboard.routes.js';
@@ -44,6 +45,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(influencerInstagramRoutes, { prefix: '/api/v1' });
   app.register(instagramAutomationRoutes, { prefix: '/api/v1' });
   app.register(instagramInboxRoutes, { prefix: '/api/v1' });
+  app.register(instagramDirectInboxRoutes, { prefix: '/api/v1' });
   app.register(campaignRoutes, { prefix: '/api/v1' });
   app.register(affiliateLinkRoutes, { prefix: '/api/v1' });
   app.register(influencerDashboardRoutes, { prefix: '/api/v1' });
