@@ -45,6 +45,7 @@ import { Route as InfluencerDashboardRouteImport } from './routes/influencer/das
 import { Route as InfluencerDiscoverRouteImport } from './routes/influencer/discover'
 import { Route as InfluencerEarningsRouteImport } from './routes/influencer/earnings'
 import { Route as InfluencerInstagramAutomationRouteImport } from './routes/influencer/instagram-automation'
+import { Route as InfluencerInstagramInboxRouteImport } from './routes/influencer/instagram-inbox'
 import { Route as InfluencerLinksRouteImport } from './routes/influencer/links'
 import { Route as InfluencerNotificationsRouteImport } from './routes/influencer/notifications'
 import { Route as InfluencerOrdersRouteImport } from './routes/influencer/orders'
@@ -63,6 +64,7 @@ import { Route as StoreAdminCreatorsRouteImport } from './routes/store-admin/cre
 import { Route as StoreAdminCustomersRouteImport } from './routes/store-admin/customers'
 import { Route as StoreAdminDashboardRouteImport } from './routes/store-admin/dashboard'
 import { Route as StoreAdminDiscountsRouteImport } from './routes/store-admin/discounts'
+import { Route as StoreAdminInstagramInboxRouteImport } from './routes/store-admin/instagram-inbox'
 import { Route as StoreAdminIntegrationsRouteImport } from './routes/store-admin/integrations'
 import { Route as StoreAdminOrdersRouteImport } from './routes/store-admin/orders'
 import { Route as StoreAdminProductsRouteImport } from './routes/store-admin/products'
@@ -268,6 +270,12 @@ const InfluencerInstagramAutomationRoute =
     path: '/instagram-automation',
     getParentRoute: () => InfluencerRoute,
   } as any)
+const InfluencerInstagramInboxRoute =
+  InfluencerInstagramInboxRouteImport.update({
+    id: '/instagram-inbox',
+    path: '/instagram-inbox',
+    getParentRoute: () => InfluencerRoute,
+  } as any)
 const InfluencerLinksRoute = InfluencerLinksRouteImport.update({
   id: '/links',
   path: '/links',
@@ -359,6 +367,12 @@ const StoreAdminDiscountsRoute = StoreAdminDiscountsRouteImport.update({
   path: '/discounts',
   getParentRoute: () => StoreAdminRoute,
 } as any)
+const StoreAdminInstagramInboxRoute =
+  StoreAdminInstagramInboxRouteImport.update({
+    id: '/instagram-inbox',
+    path: '/instagram-inbox',
+    getParentRoute: () => StoreAdminRoute,
+  } as any)
 const StoreAdminIntegrationsRoute = StoreAdminIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
@@ -520,6 +534,7 @@ export interface FileRoutesByFullPath {
   '/influencer/discover': typeof InfluencerDiscoverRoute
   '/influencer/earnings': typeof InfluencerEarningsRoute
   '/influencer/instagram-automation': typeof InfluencerInstagramAutomationRouteWithChildren
+  '/influencer/instagram-inbox': typeof InfluencerInstagramInboxRoute
   '/influencer/links': typeof InfluencerLinksRoute
   '/influencer/notifications': typeof InfluencerNotificationsRoute
   '/influencer/orders': typeof InfluencerOrdersRoute
@@ -537,6 +552,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
+  '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
   '/store-admin/integrations': typeof StoreAdminIntegrationsRoute
   '/store-admin/orders': typeof StoreAdminOrdersRouteWithChildren
   '/store-admin/products': typeof StoreAdminProductsRouteWithChildren
@@ -593,6 +609,7 @@ export interface FileRoutesByTo {
   '/influencer/dashboard': typeof InfluencerDashboardRoute
   '/influencer/discover': typeof InfluencerDiscoverRoute
   '/influencer/earnings': typeof InfluencerEarningsRoute
+  '/influencer/instagram-inbox': typeof InfluencerInstagramInboxRoute
   '/influencer/links': typeof InfluencerLinksRoute
   '/influencer/notifications': typeof InfluencerNotificationsRoute
   '/influencer/orders': typeof InfluencerOrdersRoute
@@ -608,6 +625,7 @@ export interface FileRoutesByTo {
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
+  '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
   '/store-admin/integrations': typeof StoreAdminIntegrationsRoute
   '/store-admin/reports': typeof StoreAdminReportsRoute
   '/store-admin/settings': typeof StoreAdminSettingsRoute
@@ -669,6 +687,7 @@ export interface FileRoutesById {
   '/influencer/discover': typeof InfluencerDiscoverRoute
   '/influencer/earnings': typeof InfluencerEarningsRoute
   '/influencer/instagram-automation': typeof InfluencerInstagramAutomationRouteWithChildren
+  '/influencer/instagram-inbox': typeof InfluencerInstagramInboxRoute
   '/influencer/links': typeof InfluencerLinksRoute
   '/influencer/notifications': typeof InfluencerNotificationsRoute
   '/influencer/orders': typeof InfluencerOrdersRoute
@@ -686,6 +705,7 @@ export interface FileRoutesById {
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
+  '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
   '/store-admin/integrations': typeof StoreAdminIntegrationsRoute
   '/store-admin/orders': typeof StoreAdminOrdersRouteWithChildren
   '/store-admin/products': typeof StoreAdminProductsRouteWithChildren
@@ -750,6 +770,7 @@ export interface FileRouteTypes {
     | '/influencer/discover'
     | '/influencer/earnings'
     | '/influencer/instagram-automation'
+    | '/influencer/instagram-inbox'
     | '/influencer/links'
     | '/influencer/notifications'
     | '/influencer/orders'
@@ -767,6 +788,7 @@ export interface FileRouteTypes {
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
+    | '/store-admin/instagram-inbox'
     | '/store-admin/integrations'
     | '/store-admin/orders'
     | '/store-admin/products'
@@ -823,6 +845,7 @@ export interface FileRouteTypes {
     | '/influencer/dashboard'
     | '/influencer/discover'
     | '/influencer/earnings'
+    | '/influencer/instagram-inbox'
     | '/influencer/links'
     | '/influencer/notifications'
     | '/influencer/orders'
@@ -838,6 +861,7 @@ export interface FileRouteTypes {
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
+    | '/store-admin/instagram-inbox'
     | '/store-admin/integrations'
     | '/store-admin/reports'
     | '/store-admin/settings'
@@ -898,6 +922,7 @@ export interface FileRouteTypes {
     | '/influencer/discover'
     | '/influencer/earnings'
     | '/influencer/instagram-automation'
+    | '/influencer/instagram-inbox'
     | '/influencer/links'
     | '/influencer/notifications'
     | '/influencer/orders'
@@ -915,6 +940,7 @@ export interface FileRouteTypes {
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
+    | '/store-admin/instagram-inbox'
     | '/store-admin/integrations'
     | '/store-admin/orders'
     | '/store-admin/products'
@@ -1206,6 +1232,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InfluencerInstagramAutomationRouteImport
       parentRoute: typeof InfluencerRoute
     }
+    '/influencer/instagram-inbox': {
+      id: '/influencer/instagram-inbox'
+      path: '/instagram-inbox'
+      fullPath: '/influencer/instagram-inbox'
+      preLoaderRoute: typeof InfluencerInstagramInboxRouteImport
+      parentRoute: typeof InfluencerRoute
+    }
     '/influencer/links': {
       id: '/influencer/links'
       path: '/links'
@@ -1330,6 +1363,13 @@ declare module '@tanstack/react-router' {
       path: '/discounts'
       fullPath: '/store-admin/discounts'
       preLoaderRoute: typeof StoreAdminDiscountsRouteImport
+      parentRoute: typeof StoreAdminRoute
+    }
+    '/store-admin/instagram-inbox': {
+      id: '/store-admin/instagram-inbox'
+      path: '/instagram-inbox'
+      fullPath: '/store-admin/instagram-inbox'
+      preLoaderRoute: typeof StoreAdminInstagramInboxRouteImport
       parentRoute: typeof StoreAdminRoute
     }
     '/store-admin/integrations': {
@@ -1605,6 +1645,7 @@ interface InfluencerRouteChildren {
   InfluencerDiscoverRoute: typeof InfluencerDiscoverRoute
   InfluencerEarningsRoute: typeof InfluencerEarningsRoute
   InfluencerInstagramAutomationRoute: typeof InfluencerInstagramAutomationRouteWithChildren
+  InfluencerInstagramInboxRoute: typeof InfluencerInstagramInboxRoute
   InfluencerLinksRoute: typeof InfluencerLinksRoute
   InfluencerNotificationsRoute: typeof InfluencerNotificationsRoute
   InfluencerOrdersRoute: typeof InfluencerOrdersRoute
@@ -1624,6 +1665,7 @@ const InfluencerRouteChildren: InfluencerRouteChildren = {
   InfluencerEarningsRoute: InfluencerEarningsRoute,
   InfluencerInstagramAutomationRoute:
     InfluencerInstagramAutomationRouteWithChildren,
+  InfluencerInstagramInboxRoute: InfluencerInstagramInboxRoute,
   InfluencerLinksRoute: InfluencerLinksRoute,
   InfluencerNotificationsRoute: InfluencerNotificationsRoute,
   InfluencerOrdersRoute: InfluencerOrdersRoute,
@@ -1704,6 +1746,7 @@ interface StoreAdminRouteChildren {
   StoreAdminCustomersRoute: typeof StoreAdminCustomersRoute
   StoreAdminDashboardRoute: typeof StoreAdminDashboardRoute
   StoreAdminDiscountsRoute: typeof StoreAdminDiscountsRoute
+  StoreAdminInstagramInboxRoute: typeof StoreAdminInstagramInboxRoute
   StoreAdminIntegrationsRoute: typeof StoreAdminIntegrationsRoute
   StoreAdminOrdersRoute: typeof StoreAdminOrdersRouteWithChildren
   StoreAdminProductsRoute: typeof StoreAdminProductsRouteWithChildren
@@ -1724,6 +1767,7 @@ const StoreAdminRouteChildren: StoreAdminRouteChildren = {
   StoreAdminCustomersRoute: StoreAdminCustomersRoute,
   StoreAdminDashboardRoute: StoreAdminDashboardRoute,
   StoreAdminDiscountsRoute: StoreAdminDiscountsRoute,
+  StoreAdminInstagramInboxRoute: StoreAdminInstagramInboxRoute,
   StoreAdminIntegrationsRoute: StoreAdminIntegrationsRoute,
   StoreAdminOrdersRoute: StoreAdminOrdersRouteWithChildren,
   StoreAdminProductsRoute: StoreAdminProductsRouteWithChildren,

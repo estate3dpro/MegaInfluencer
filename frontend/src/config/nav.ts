@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   Link2,
   Megaphone,
+  MessageCircle,
   Package,
   Receipt,
   Settings,
@@ -80,6 +81,7 @@ export const influencerNav: NavGroup[] = [
       { title: "Discover", url: "/influencer/discover", icon: Compass },
       // { title: "Campaigns", url: "/influencer/campaigns", icon: Megaphone },
       { title: "Instagram Automation", url: "/influencer/instagram-automation", icon: Instagram },
+      { title: "Instagram Inbox", url: "/influencer/instagram-inbox", icon: MessageCircle },
     ],
   },
   {
@@ -117,6 +119,7 @@ export const storeAdminNav: NavGroup[] = [
     items: [
       { title: "Creators", url: "/store-admin/creators", icon: Sparkles },
       { title: "All Creators", url: "/store-admin/creator-directory", icon: Users2 },
+      { title: "Instagram Inbox", url: "/store-admin/instagram-inbox", icon: MessageCircle },
       { title: "Campaigns", url: "/store-admin/campaigns", icon: Megaphone },
       { title: "Affiliate", url: "/store-admin/affiliate", icon: Filter },
       { title: "Commissions", url: "/store-admin/commissions", icon: CircleDollarSign },

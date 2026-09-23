@@ -103,6 +103,13 @@ export async function manuallyAssign(app: FastifyInstance, userId: string, campa
   });
 }
 
+export async function unassign(app: FastifyInstance, userId: string, campaignId: string, influencerId: string) {
+  const campaign = await own(app, userId, campaignId);
+  const deleted = await app.prisma.campaignAssignment.deleteMany({ where: { campaignId, influencerId } });
+  if (!deleted.count) throw new AppError('CAMPAIGN_ASSIGNMENT_NOT_FOUND', 'Creator is not assigned to this campaign.', 404);
+  await app.prisma.notification.create({ data: { userId: influencerId, title: 'Campaign assignment removed', message: `You are no longer assigned to ${campaign.title}.`, kind: 'CAMPAIGN', link: '/influencer/campaigns' } });
+}
+
 export async function update(app: FastifyInstance, userId: string, id: string, input: Input) {
   await own(app, userId, id);
   return app.prisma.campaign.update({ where: { id }, data: input });

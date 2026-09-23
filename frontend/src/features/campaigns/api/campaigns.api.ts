@@ -54,7 +54,12 @@ export type CampaignApplication = {
   proposedRate: number | null;
   status: "PENDING" | "ACCEPTED" | "DECLINED" | "WITHDRAWN";
   createdAt: string;
-  influencer: { id: string; displayName: string; email: string | null; instagramConnection?: { username: string } | null };
+  influencer: {
+    id: string;
+    displayName: string;
+    email: string | null;
+    instagramConnection?: { username: string } | null;
+  };
 };
 export type CampaignInfluencer = {
   id: string;
@@ -78,17 +83,45 @@ export const updateCampaign = async ({ id, input }: { id: string; input: Campaig
   (await apiClient.patch<{ campaign: Campaign }>(`/store/campaigns/${id}`, input)).data.campaign;
 export const publishCampaign = async (id: string) =>
   (await apiClient.post<{ campaign: Campaign }>(`/store/campaigns/${id}/publish`)).data.campaign;
-export const setCampaignStatus = async ({ id, status }: { id: string; status: "PUBLISHED" | "PAUSED" }) =>
-  (await apiClient.patch<{ campaign: Campaign }>(`/store/campaigns/${id}/status`, { status })).data.campaign;
+export const setCampaignStatus = async ({
+  id,
+  status,
+}: {
+  id: string;
+  status: "PUBLISHED" | "PAUSED";
+}) =>
+  (await apiClient.patch<{ campaign: Campaign }>(`/store/campaigns/${id}/status`, { status })).data
+    .campaign;
 export const deleteCampaign = async (id: string) => apiClient.delete(`/store/campaigns/${id}`);
 export const getCampaignInfluencers = async (id: string) =>
-  (await apiClient.get<{ influencers: CampaignInfluencer[] }>(`/store/campaigns/${id}/influencers`)).data.influencers;
-export const assignCampaignInfluencer = async ({ campaignId, influencerId }: { campaignId: string; influencerId: string }) =>
-  apiClient.post(`/store/campaigns/${campaignId}/assignments`, { influencerId });
+  (await apiClient.get<{ influencers: CampaignInfluencer[] }>(`/store/campaigns/${id}/influencers`))
+    .data.influencers;
+export const assignCampaignInfluencer = async ({
+  campaignId,
+  influencerId,
+}: {
+  campaignId: string;
+  influencerId: string;
+}) => apiClient.post(`/store/campaigns/${campaignId}/assignments`, { influencerId });
+export const unassignCampaignInfluencer = async ({
+  campaignId,
+  influencerId,
+}: {
+  campaignId: string;
+  influencerId: string;
+}) => apiClient.delete(`/store/campaigns/${campaignId}/assignments/${influencerId}`);
 export const getCampaignApplications = async (id: string) =>
-  (await apiClient.get<{ items: CampaignApplication[] }>(`/store/campaigns/${id}/applications`)).data.items;
-export const decideCampaignApplication = async ({ campaignId, applicationId, decision }: { campaignId: string; applicationId: string; decision: "accept" | "decline" }) =>
-  apiClient.post(`/store/campaigns/${campaignId}/applications/${applicationId}/${decision}`);
+  (await apiClient.get<{ items: CampaignApplication[] }>(`/store/campaigns/${id}/applications`))
+    .data.items;
+export const decideCampaignApplication = async ({
+  campaignId,
+  applicationId,
+  decision,
+}: {
+  campaignId: string;
+  applicationId: string;
+  decision: "accept" | "decline";
+}) => apiClient.post(`/store/campaigns/${campaignId}/applications/${applicationId}/${decision}`);
 export const getDiscoverCampaigns = async () =>
   (await apiClient.get<{ items: Campaign[] }>("/influencer/discover-campaigns")).data.items;
 export const applyCampaign = async (id: string, pitch: string) =>

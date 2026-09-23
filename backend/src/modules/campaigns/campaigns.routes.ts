@@ -30,6 +30,12 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     const { influencerId } = parseOrThrow(influencerIdBodySchema, request.body);
     return reply.status(201).send({ assignment: await service.manuallyAssign(app, auth.userId, campaignId, influencerId) });
   });
+  app.delete('/store/campaigns/:campaignId/assignments/:influencerId', async (request, reply) => {
+    const auth = requireRole(request, ['STORE_OWNER']);
+    const { campaignId, influencerId } = parseOrThrow(idSchema.extend({ influencerId: z.string().cuid() }), request.params);
+    await service.unassign(app, auth.userId, campaignId, influencerId);
+    return reply.status(204).send();
+  });
   app.post('/store/campaigns', async (request, reply) => {
     const auth = requireRole(request, ['STORE_OWNER']);
     const input = parseOrThrow(campaignInputSchema, request.body);

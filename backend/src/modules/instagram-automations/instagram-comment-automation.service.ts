@@ -109,10 +109,45 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
   const summary = { matchingAutomations: 0, sent: 0, failed: 0, skipped: 0 };
   app.log.info(commentLog(event), 'Instagram comment received');
 
-  const automations = await app.prisma.instagramAutomation.findMany({
-    where: { instagramPostId: event.mediaId, status: 'ACTIVE' },
+  // First load every rule for the post. A paused rule still identifies the
+  // creator who owns a comment, so their comment remains available in the
+  // manual inbox even if it does not trigger an automated DM.
+  const postAutomations = await app.prisma.instagramAutomation.findMany({
+    where: { instagramPostId: event.mediaId },
     include: { influencer: { include: { instagramConnection: true } } },
   });
+
+  const directConnection = event.instagramAccountId
+    ? await app.prisma.instagramConnection.findUnique({
+        where: { instagramUserId: event.instagramAccountId },
+        select: { influencerId: true },
+      })
+    : null;
+  const inboxInfluencerId = directConnection?.influencerId ?? postAutomations[0]?.influencerId;
+  if (inboxInfluencerId) {
+    await app.prisma.instagramCommentConversation.upsert({
+      where: { instagramCommentId: event.commentId },
+      create: {
+        influencerId: inboxInfluencerId,
+        instagramCommentId: event.commentId,
+        commenterId: event.commenterId,
+        commenterUsername: event.commenterName,
+        commentText: event.commentText,
+        instagramMediaId: event.mediaId,
+        instagramAccountId: event.instagramAccountId,
+      },
+      update: {
+        commenterUsername: event.commenterName,
+        commentText: event.commentText,
+        instagramAccountId: event.instagramAccountId,
+      },
+    });
+    app.log.info({ ...commentLog(event), inboxInfluencerId }, 'Instagram comment saved to manual inbox');
+  } else {
+    app.log.warn(commentLog(event), 'Instagram comment could not be assigned to an inbox');
+  }
+
+  const automations = postAutomations.filter((automation) => automation.status === 'ACTIVE');
 
   if (!automations.length) {
     app.log.info(commentLog(event), 'No active Instagram automation exists for this post');

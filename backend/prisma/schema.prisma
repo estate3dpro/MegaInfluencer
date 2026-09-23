@@ -63,6 +63,12 @@ enum InstagramAutomationDeliveryStatus {
   SKIPPED
 }
 
+enum InstagramManualReplyStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 enum CampaignStatus {
   DRAFT
   PUBLISHED
@@ -108,6 +114,8 @@ model User {
   productAssignments    ProductInfluencerAssignment[] @relation("ProductAssignedInfluencer")
   instagramConnection   InstagramConnection?
   instagramAutomations  InstagramAutomation[]
+  instagramCommentConversations InstagramCommentConversation[] @relation("InstagramConversationInfluencer")
+  instagramManualReplies InstagramManualReply[] @relation("InstagramManualReplySender")
   instagramOAuthStates  InstagramOAuthState[]  @relation("InstagramOAuthStateInfluencer")
   instagramLoginTickets InstagramLoginTicket[]
   authSessions          AuthSession[]
@@ -221,6 +229,46 @@ model InstagramAutomationDelivery {
   @@index([automationId, createdAt])
   @@index([automationId, commentId])
   @@index([status, createdAt])
+}
+
+// A durable inbox record is created for every recognised Instagram comment.
+// It is intentionally independent from automation deliveries: a comment can
+// be replied to manually even when no automation rule sends a DM.
+model InstagramCommentConversation {
+  id                 String   @id @default(cuid())
+  influencerId       String
+  instagramCommentId String   @unique
+  commenterId        String
+  commenterUsername  String?
+  commentText        String
+  instagramMediaId   String
+  instagramAccountId String?
+  influencer         User     @relation("InstagramConversationInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
+  manualReplies      InstagramManualReply[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([influencerId, updatedAt])
+  @@index([instagramMediaId])
+}
+
+model InstagramManualReply {
+  id                String                     @id @default(cuid())
+  conversationId    String
+  senderUserId      String
+  senderRole        UserRole
+  message           String
+  status            InstagramManualReplyStatus @default(PENDING)
+  providerMessageId String?
+  errorMessage      String?
+  sentAt            DateTime?
+  conversation      InstagramCommentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender            User                       @relation("InstagramManualReplySender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  @@index([conversationId, createdAt])
+  @@index([senderUserId, createdAt])
 }
 
 model Organization {
