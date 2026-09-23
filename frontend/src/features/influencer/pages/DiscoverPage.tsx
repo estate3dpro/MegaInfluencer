@@ -71,7 +71,24 @@ export function DiscoverPage() {
 
 function Opportunity({ campaign, onPreview, onApply }: { campaign: Campaign; onPreview: () => void; onApply: () => void }) {
   const applied = campaign.applications?.[0];
-  return <Card className="group overflow-hidden shadow-card transition-shadow hover:shadow-lg"><div className="relative h-40 overflow-hidden bg-muted"><img src={campaign.imageUrl} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" /><div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" /><span className="absolute bottom-4 left-4 grid h-10 w-10 place-items-center rounded-xl bg-white/90 text-sm font-bold text-foreground">{campaign.organization?.name.slice(0, 2).toUpperCase()}</span></div><CardContent className="p-5"><p className="text-sm text-muted-foreground">{campaign.organization?.name}</p><div className="mt-1 flex items-start justify-between gap-3"><h2 className="font-display text-lg font-semibold">{campaign.title}</h2><Badge variant="outline">{campaign.category}</Badge></div><p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{campaign.brief}</p><div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-muted/55 p-3 text-sm"><div><p className="text-xs text-muted-foreground">Compensation</p><p className="mt-1 truncate font-semibold">{budget(campaign)}</p></div><div><p className="text-xs text-muted-foreground">Deliverables</p><p className="mt-1 truncate font-semibold">{campaign.deliverables}</p></div></div><p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />Apply by {new Date(campaign.applicationDeadline).toLocaleDateString()}</p><div className="mt-4 grid grid-cols-2 gap-2"><Button variant="outline" onClick={onPreview}><Eye className="h-4 w-4" />Preview</Button>{applied?.status === "ACCEPTED" ? <Button asChild><Link to="/influencer/products">Go to products <ArrowUpRight className="h-4 w-4" /></Link></Button> : applied ? <Button disabled variant="outline">{applied.status}</Button> : <Button onClick={onApply}>Apply <ArrowUpRight className="h-4 w-4" /></Button>}</div></CardContent></Card>;
+  return (
+    <Card className="group overflow-hidden shadow-card transition-shadow hover:shadow-lg">
+      <div className="relative h-40 overflow-hidden bg-muted">
+        <img src={campaign.imageUrl} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <span className="absolute bottom-4 left-4 grid h-10 w-10 place-items-center rounded-xl bg-white/90 text-sm font-bold text-foreground">{campaign.organization?.name.slice(0, 2).toUpperCase()}</span>
+      </div>
+      <CardContent className="p-5">
+        <p className="text-sm text-muted-foreground">{campaign.organization?.name}</p>
+        <div className="mt-1 flex items-start justify-between gap-3"><h2 className="font-display text-lg font-semibold">{campaign.title}</h2><Badge variant="outline">{campaign.category}</Badge></div>
+        <p className="mt-3 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{campaign.brief}</p>
+        {campaign.product ? <div className="mt-3 flex items-center gap-3 rounded-xl border bg-muted/35 p-3"><img src={campaign.product.imageUrl || campaign.imageUrl} alt="" className="h-11 w-11 rounded-lg object-cover" /><div className="min-w-0"><p className="text-xs text-muted-foreground">Campaign product</p><p className="truncate text-sm font-semibold">{campaign.product.title}</p>{campaign.product.price ? <p className="text-xs text-primary">{campaign.product.price}</p> : null}</div></div> : null}
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-muted/55 p-3 text-sm"><div><p className="text-xs text-muted-foreground">Compensation</p><p className="mt-1 truncate font-semibold">{budget(campaign)}</p></div><div><p className="text-xs text-muted-foreground">Deliverables</p><p className="mt-1 truncate font-semibold">{campaign.deliverables}</p></div></div>
+        <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" />Apply by {new Date(campaign.applicationDeadline).toLocaleDateString()}</p>
+        <div className="mt-4 grid grid-cols-2 gap-2"><Button variant="outline" onClick={onPreview}><Eye className="h-4 w-4" />Preview</Button>{applied?.status === "ACCEPTED" ? <Button asChild><Link to="/influencer/products">Go to products <ArrowUpRight className="h-4 w-4" /></Link></Button> : applied ? <Button disabled variant="outline">{applied.status}</Button> : <Button onClick={onApply}>Apply <ArrowUpRight className="h-4 w-4" /></Button>}</div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function CampaignPreview({ campaign, onOpenChange, onApply }: { campaign: Campaign | null; onOpenChange: (open: boolean) => void; onApply: () => void }) {
