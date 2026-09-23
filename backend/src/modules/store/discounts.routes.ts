@@ -4,40 +4,6 @@ import { z } from 'zod';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 
-let discountTableEnsured = false;
-async function ensureDiscountTable(prisma: any) {
-  if (discountTableEnsured) return;
-  try {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "DiscountCode" (
-          "id" TEXT NOT NULL,
-          "organizationId" TEXT NOT NULL,
-          "code" TEXT NOT NULL,
-          "description" TEXT,
-          "discountType" TEXT NOT NULL DEFAULT 'PERCENTAGE',
-          "value" DECIMAL(10,2) NOT NULL DEFAULT 10,
-          "currency" TEXT NOT NULL DEFAULT 'INR',
-          "creatorId" TEXT,
-          "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-          "startsAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
-          "expiresAt" TIMESTAMP(3),
-          "usageLimit" INTEGER,
-          "usageCount" INTEGER NOT NULL DEFAULT 0,
-          "totalSavings" DECIMAL(12,2) NOT NULL DEFAULT 0,
-          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT "DiscountCode_pkey" PRIMARY KEY ("id")
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS "DiscountCode_organizationId_code_key" ON "DiscountCode"("organizationId", "code");
-      CREATE INDEX IF NOT EXISTS "DiscountCode_organizationId_status_idx" ON "DiscountCode"("organizationId", "status");
-      CREATE INDEX IF NOT EXISTS "DiscountCode_creatorId_idx" ON "DiscountCode"("creatorId");
-    `);
-    discountTableEnsured = true;
-  } catch (err) {
-    console.error('Failed to ensure DiscountCode table:', err);
-  }
-}
-
 const createDiscountSchema = z.object({
   code: z
     .string()
@@ -70,8 +36,6 @@ export const storeDiscountsRoutes: FastifyPluginAsync = async (app) => {
     const org = await storeFor(actor.userId);
     const q = req.query as { search?: string; status?: string };
     const search = q.search?.trim().toUpperCase();
-
-    await ensureDiscountTable(prisma);
 
     // 1. Fetch created discounts from DB
     let customDiscounts: any[] = [];
@@ -322,8 +286,6 @@ export const storeDiscountsRoutes: FastifyPluginAsync = async (app) => {
     const org = await storeFor(actor.userId);
     const input = createDiscountSchema.parse(req.body);
 
-    await ensureDiscountTable(prisma);
-
     const id = `disc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const newDiscount = await prisma.$queryRaw`
@@ -350,8 +312,6 @@ export const storeDiscountsRoutes: FastifyPluginAsync = async (app) => {
     const { discountId } = req.params as { discountId: string };
     const body = req.body as { status?: 'ACTIVE' | 'DISABLED' | 'EXPIRED'; expiresAt?: string };
 
-    await ensureDiscountTable(prisma);
-
     await prisma.$executeRaw`
       UPDATE "DiscountCode"
       SET "status" = COALESCE(${body.status || null}, "status"),
@@ -367,8 +327,6 @@ export const storeDiscountsRoutes: FastifyPluginAsync = async (app) => {
     const actor = requireRole(req, ['STORE_OWNER']);
     const org = await storeFor(actor.userId);
     const { discountId } = req.params as { discountId: string };
-
-    await ensureDiscountTable(prisma);
 
     await prisma.$executeRaw`
       DELETE FROM "DiscountCode"
