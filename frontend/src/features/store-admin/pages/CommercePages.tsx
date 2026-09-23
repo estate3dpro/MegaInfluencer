@@ -486,7 +486,7 @@ export function ProductsPage() {
 // -------------------------------------------------------------
 export function OrdersPage() {
   const [orderSearch, setOrderSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "PAID" | "UNFULFILLED" | "CREATOR_ONLY" | "REFUNDED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PAID" | "UNFULFILLED" | "REFUNDED">("ALL");
   const [orderPage, setOrderPage] = useState(1);
 
   const normalizedOrderSearch = orderSearch.trim();
@@ -497,7 +497,6 @@ export function OrdersPage() {
         search: normalizedOrderSearch || undefined,
         financialStatus: statusFilter === "PAID" ? "PAID" : statusFilter === "REFUNDED" ? "REFUNDED" : undefined,
         fulfillmentStatus: statusFilter === "UNFULFILLED" ? "UNFULFILLED" : undefined,
-        creatorOnly: statusFilter === "CREATOR_ONLY",
       }),
   });
 
@@ -519,8 +518,8 @@ export function OrdersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Store Orders & Attribution"
-        description="All live Shopify customer orders with instant creator tracking tags, commission status, and fulfillment state."
+        title="Platform Orders & Attribution"
+        description="Orders attributed through MegaInfluencer creator links, campaigns, and tracking tags."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -545,23 +544,23 @@ export function OrdersPage() {
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          label="Creator Attributed GMV"
+          label="Platform Attributed GMV"
           value={ordersQuery.isLoading ? "..." : formatCurrency(creatorSalesAmount, allOrders[0]?.currency ?? "INR")}
           hint="From influencer links & campaigns"
           icon={Sparkles}
           iconClass="bg-coral/10 text-coral"
         />
         <SummaryCard
-          label="Attributed Orders"
+          label="Platform Orders"
           value={ordersQuery.isLoading ? "..." : String(summary?.creatorOrdersCount ?? allOrders.filter((o) => o.creatorCode).length)}
           hint="Influencer driven conversions"
           icon={ShoppingBag}
           iconClass="bg-primary/10 text-primary"
         />
         <SummaryCard
-          label="Store Total GMV"
+          label="Platform GMV"
           value={ordersQuery.isLoading ? "..." : formatCurrency(totalSalesAmount, allOrders[0]?.currency ?? "INR")}
-          hint={`Across ${totalOrdersCount} store orders`}
+          hint={`Across ${totalOrdersCount} platform orders`}
           icon={BadgeIndianRupee}
           iconClass="bg-teal/10 text-teal"
         />
@@ -591,9 +590,8 @@ export function OrdersPage() {
         <div className="flex rounded-lg border bg-muted/30 p-0.5">
           {(
             [
-              { id: "ALL", label: "All Orders" },
+              { id: "ALL", label: "Platform Orders" },
               { id: "PAID", label: "Paid" },
-              { id: "CREATOR_ONLY", label: "Creator Orders" },
               { id: "UNFULFILLED", label: "To Fulfill" },
               { id: "REFUNDED", label: "Refunded" },
             ] as const
@@ -641,7 +639,7 @@ export function OrdersPage() {
             ) : allOrders.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
-                  No orders found matching your filters.
+                  No platform-attributed orders found matching your filters.
                 </td>
               </tr>
             ) : (
@@ -785,7 +783,7 @@ export function OrdersPage() {
 export function CustomersPage() {
   const [customerPage, setCustomerPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"ALL" | "REPEAT" | "SINGLE" | "CREATOR_ATTRIBUTED">("ALL");
+  const [filter, setFilter] = useState<"ALL" | "REPEAT" | "SINGLE">("ALL");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
   const query = useQuery({
@@ -818,19 +816,19 @@ export function CustomersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Store Customers"
-        description="Profiles, order frequencies, lifetime spending, and creator attribution derived from synced customer purchases."
+        description="Customers and purchase history acquired through MegaInfluencer creator links, campaigns, and tracking tags."
       />
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          label="Total Customers"
+          label="Platform Customers"
           value={query.isLoading ? "..." : String(totalCustomers)}
           hint="Unique buyer profiles"
           icon={UsersRound}
           iconClass="bg-primary/10 text-primary"
         />
         <SummaryCard
-          label="Lifetime Spend"
+          label="Platform Lifetime Spend"
           value={query.isLoading ? "..." : formatCurrency(totalLifetimeSpend, customerRows[0]?.currency ?? "INR")}
           hint={summary?.averageCustomerSpend ? `Avg LTV: ${formatCurrency(summary.averageCustomerSpend)}` : "Cumulative purchases"}
           icon={BadgeIndianRupee}
@@ -869,9 +867,8 @@ export function CustomersPage() {
         <div className="flex rounded-lg border bg-muted/30 p-0.5">
           {(
             [
-              { id: "ALL", label: "All Buyers" },
+              { id: "ALL", label: "Platform Buyers" },
               { id: "REPEAT", label: "Repeat Buyers" },
-              { id: "CREATOR_ATTRIBUTED", label: "Creator Referred" },
               { id: "SINGLE", label: "Single Order" },
             ] as const
           ).map((t) => (
@@ -917,7 +914,7 @@ export function CustomersPage() {
             ) : customerRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
-                  No customers found matching your search or filters.
+                  No platform-acquired customers found matching your search or filters.
                 </td>
               </tr>
             ) : (
@@ -1116,7 +1113,7 @@ export function CustomersPage() {
               {/* Full Chronological Order History */}
               <div className="space-y-3">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                  <span>Order History ({selectedCustomer.orderHistory.length})</span>
+                  <span>Platform Order History ({selectedCustomer.orderHistory.length})</span>
                 </h4>
 
                 <div className="space-y-3">

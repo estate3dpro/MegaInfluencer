@@ -74,7 +74,9 @@ async function fetchOrderPage(store: Awaited<ReturnType<typeof storeFor>>, after
 export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
 
-  // GET /store/orders - Paginated order list with search, status filters & creator attribution
+  // GET /store/orders - Only orders attributed through this platform. Shopify
+  // continues to sync and store all orders; direct-store orders are not
+  // exposed in the creator-commerce workspace.
   app.get('/store/orders', async (req) => {
     const a = requireRole(req, ['STORE_OWNER']);
     const s = await storeFor(app, a.userId);
@@ -84,7 +86,6 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       search?: string;
       financialStatus?: string;
       fulfillmentStatus?: string;
-      creatorOnly?: string;
     };
 
     const page = Math.max(1, Number(q.page) || 1);
@@ -93,6 +94,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
 
     const where: Prisma.ShopifyOrderWhereInput = {
       organizationId: s.id,
+      creatorCode: { not: null },
       ...(search
         ? {
             OR: [
@@ -115,7 +117,6 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             }
           : { fulfillmentStatus: { in: ['FULFILLED', 'fulfilled'] } }
         : {}),
-      ...(q.creatorOnly === 'true' ? { creatorCode: { not: null } } : {}),
     };
 
     const [rows, total, allOrdersSummary] = await Promise.all([
@@ -147,7 +148,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       }),
       prisma.shopifyOrder.count({ where }),
       prisma.shopifyOrder.findMany({
-        where: { organizationId: s.id },
+        where: { organizationId: s.id, creatorCode: { not: null } },
         select: {
           total: true,
           financialStatus: true,
@@ -429,7 +430,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
     const { orderId } = req.params as { orderId: string };
 
     const order = await prisma.shopifyOrder.findFirst({
-      where: { id: orderId, organizationId: s.id },
+      where: { id: orderId, organizationId: s.id, creatorCode: { not: null } },
       include: {
         affiliateCommissions: {
           include: {

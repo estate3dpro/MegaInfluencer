@@ -83,7 +83,7 @@ export async function getStoreCustomers(
   page = 1,
   options: {
     search?: string;
-    filter?: "ALL" | "REPEAT" | "SINGLE" | "CREATOR_ATTRIBUTED";
+    filter?: "ALL" | "REPEAT" | "SINGLE";
   } = {}
 ) {
   return (

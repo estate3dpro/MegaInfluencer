@@ -14,7 +14,9 @@ export const storeCustomersRoutes: FastifyPluginAsync = async (app) => {
     return org;
   }
 
-  // GET /store/customers - List aggregated customers with search, LTV stats & filters
+  // GET /store/customers - Only customers and orders acquired through this
+  // platform. Direct Shopify customers remain stored for sync integrity but
+  // are not exposed in the creator-commerce workspace.
   app.get('/store/customers', async (req) => {
     const actor = requireRole(req, ['STORE_OWNER']);
     const org = await storeFor(actor.userId);
@@ -22,7 +24,7 @@ export const storeCustomersRoutes: FastifyPluginAsync = async (app) => {
       page?: string;
       limit?: string;
       search?: string;
-      filter?: 'ALL' | 'REPEAT' | 'SINGLE' | 'CREATOR_ATTRIBUTED';
+      filter?: 'ALL' | 'REPEAT' | 'SINGLE';
     };
 
     const page = Math.max(1, Number(q.page) || 1);
@@ -34,6 +36,7 @@ export const storeCustomersRoutes: FastifyPluginAsync = async (app) => {
       where: {
         organizationId: org.id,
         email: { not: null },
+        creatorCode: { not: null },
       },
       orderBy: { processedAt: 'desc' },
       select: {
@@ -156,8 +159,6 @@ export const storeCustomersRoutes: FastifyPluginAsync = async (app) => {
       all = all.filter((c) => c.isRepeatBuyer);
     } else if (filter === 'SINGLE') {
       all = all.filter((c) => c.ordersCount === 1);
-    } else if (filter === 'CREATOR_ATTRIBUTED') {
-      all = all.filter((c) => Boolean(c.attributedCreatorCode));
     }
 
     // Default Sort by Lifetime Spend descending
@@ -205,6 +206,7 @@ export const storeCustomersRoutes: FastifyPluginAsync = async (app) => {
       where: {
         organizationId: org.id,
         email: { equals: decodedEmail, mode: 'insensitive' },
+        creatorCode: { not: null },
       },
       orderBy: { processedAt: 'desc' },
       include: {

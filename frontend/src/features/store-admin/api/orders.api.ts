@@ -114,7 +114,6 @@ export async function getStoreOrders(
     search?: string;
     financialStatus?: string;
     fulfillmentStatus?: string;
-    creatorOnly?: boolean;
   } = {}
 ) {
   return (
@@ -130,7 +129,6 @@ export async function getStoreOrders(
         search: options.search || undefined,
         financialStatus: options.financialStatus || undefined,
         fulfillmentStatus: options.fulfillmentStatus || undefined,
-        creatorOnly: options.creatorOnly ? "true" : undefined,
       },
     })
   ).data;
