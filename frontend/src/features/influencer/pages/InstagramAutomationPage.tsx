@@ -69,11 +69,14 @@ export function InstagramAutomationPage() {
       name: rule.name,
       trigger: `Comment contains “${rule.keywords.join("” or “")}”`,
       action: "Send a personalized direct message",
-      sent: 0,
+      sent: rule.sentCount,
       rate: "—",
       active: rule.status === "ACTIVE",
     })) ?? [];
   const connection = connectionQuery.data;
+  const totalSent = displayedRules.reduce((sum, rule) => sum + rule.sent, 0);
+  const totalDeliveries =
+    automationsQuery.data?.reduce((sum, rule) => sum + rule.deliveryCount, 0) ?? 0;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -118,15 +121,30 @@ export function InstagramAutomationPage() {
         </CardContent>
       </Card>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={MessageCircle} label="Messages sent" value="742" detail="Last 30 days" />
-        <Metric icon={Users} label="Conversations started" value="518" detail="+16.4% this month" />
+        <Metric
+          icon={MessageCircle}
+          label="Messages sent"
+          value={String(totalSent)}
+          detail="Successfully delivered"
+        />
+        <Metric
+          icon={Users}
+          label="Delivery attempts"
+          value={String(totalDeliveries)}
+          detail="From your automation rules"
+        />
         <Metric
           icon={MousePointerClick}
           label="Link clicks"
-          value="286"
-          detail="From automated DMs"
+          value="—"
+          detail="Click tracking is not available yet"
         />
-        <Metric icon={Heart} label="Response rate" value="84%" detail="Above creator average" />
+        <Metric
+          icon={Heart}
+          label="Response rate"
+          value="—"
+          detail="Reply tracking is not available yet"
+        />
       </section>
       <section className="grid gap-6 xl:grid-cols-3">
         <Card className="shadow-card xl:col-span-2">
@@ -194,10 +212,19 @@ export function InstagramAutomationPage() {
             <p className="mt-1 text-sm text-muted-foreground">Automation performance today</p>
           </CardHeader>
           <CardContent className="space-y-4 p-5 pt-2">
-            <Event icon={MessageCircle} text="Sent lookbook to Ananya R." time="2 min ago" />
-            <Event icon={MousePointerClick} text="Product link clicked from DM" time="14 min ago" />
-            <Event icon={Heart} text="New reply to skincare routine" time="32 min ago" />
-            <Event icon={Eye} text="Lookbook automation viewed" time="1 hr ago" />
+            {displayedRules
+              .filter((rule) => rule.sent > 0)
+              .map((rule) => (
+                <Event
+                  key={rule.id}
+                  icon={MessageCircle}
+                  text={`${rule.sent} message${rule.sent === 1 ? "" : "s"} sent by ${rule.name}`}
+                  time="Recorded from webhook deliveries"
+                />
+              ))}
+            {!displayedRules.some((rule) => rule.sent > 0) ? (
+              <p className="text-sm text-muted-foreground">No automation deliveries yet.</p>
+            ) : null}
           </CardContent>
         </Card>
       </section>

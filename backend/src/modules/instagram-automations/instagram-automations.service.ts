@@ -22,26 +22,42 @@ const automationSelect = {
   updatedAt: true,
 } as const;
 
+const automationWithDeliveriesSelect = {
+  ...automationSelect,
+  deliveries: { select: { status: true } },
+} as const;
+
+function withDeliveryStats(automation: any) {
+  const deliveries = automation.deliveries ?? [];
+  const { deliveries: _deliveries, ...rule } = automation;
+  return {
+    ...rule,
+    deliveryCount: deliveries.length,
+    sentCount: deliveries.filter((delivery: any) => delivery.status === 'SENT').length,
+  };
+}
+
 function labelForPost(post: { caption?: string; media_type: string }) {
   const caption = post.caption?.trim().replace(/\s+/g, ' ');
   return caption ? caption.slice(0, 120) : `${post.media_type.toLowerCase()} post`;
 }
 
 export async function listInstagramAutomations(app: FastifyInstance, influencerId: string) {
-  return app.prisma.instagramAutomation.findMany({
+  const automations = await app.prisma.instagramAutomation.findMany({
     where: { influencerId },
-    select: automationSelect,
+    select: automationWithDeliveriesSelect,
     orderBy: { createdAt: 'desc' },
   });
+  return automations.map(withDeliveryStats);
 }
 
 export async function getInstagramAutomation(app: FastifyInstance, influencerId: string, automationId: string) {
   const automation = await app.prisma.instagramAutomation.findFirst({
     where: { id: automationId, influencerId },
-    select: automationSelect,
+    select: automationWithDeliveriesSelect,
   });
   if (!automation) throw new AppError('AUTOMATION_NOT_FOUND', 'Automation rule was not found.', 404);
-  return automation;
+  return withDeliveryStats(automation);
 }
 
 export async function createInstagramAutomation(app: FastifyInstance, influencerId: string, input: CreateAutomationInput) {

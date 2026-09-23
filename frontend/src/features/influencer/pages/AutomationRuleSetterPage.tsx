@@ -15,6 +15,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +33,8 @@ export function AutomationRuleSetterPage() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [postId, setPostId] = useState<string>();
+  const [postPickerOpen, setPostPickerOpen] = useState(false);
+  const [draftPostId, setDraftPostId] = useState<string>();
   const [keywordDraft, setKeywordDraft] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
   const [message, setMessage] = useState(
@@ -145,46 +154,33 @@ export function AutomationRuleSetterPage() {
             title="Choose the post to listen to"
             description="Comments on this Instagram post can start the conversation."
           >
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(postsQuery.data ?? []).map((post) => (
-                <button
-                  key={post.id}
-                  type="button"
-                  onClick={() => setPostId(post.id)}
-                  className={cn(
-                    "group relative overflow-hidden rounded-xl border text-left transition-all hover:border-primary/50",
-                    postId === post.id ? "border-primary ring-2 ring-primary/20" : "border-border",
-                  )}
-                >
-                  <div className="relative flex aspect-square items-end bg-gradient-to-br from-primary/70 via-fuchsia-500/70 to-orange-400/70 p-3">
-                    {post.thumbnail_url || post.media_url ? (
-                      <img
-                        src={post.thumbnail_url ?? post.media_url}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                    ) : null}
-                    <span className="relative rounded-md bg-black/35 p-1.5 text-white">
-                      <Image className="h-4 w-4" />
-                    </span>
-                  </div>
-                  <div className="p-3">
-                    <p className="line-clamp-1 text-sm font-medium">
-                      {post.caption?.trim() || `${post.media_type} post`}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {post.timestamp
-                        ? new Date(post.timestamp).toLocaleDateString()
-                        : "Instagram post"}
-                    </p>
-                  </div>
-                  {postId === post.id ? (
-                    <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground">
-                      <Check className="h-4 w-4" />
-                    </span>
-                  ) : null}
-                </button>
-              ))}
+            <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <Image className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {selectedPost?.caption?.trim() ||
+                      (selectedPost ? `${selectedPost.media_type} post` : "No post selected")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedPost?.timestamp
+                      ? new Date(selectedPost.timestamp).toLocaleDateString()
+                      : "Choose one Instagram post"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDraftPostId(postId);
+                  setPostPickerOpen(true);
+                }}
+              >
+                Select post
+              </Button>
             </div>
             {postsQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading posts from Instagram…</p>
@@ -252,7 +248,9 @@ export function AutomationRuleSetterPage() {
             </label>
             <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border bg-muted/30 p-3.5">
               <span>
-                <span className="block text-sm font-medium">Reply again to duplicate comment webhooks</span>
+                <span className="block text-sm font-medium">
+                  Reply again to duplicate comment webhooks
+                </span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   {replyOnDuplicateCommentWebhook
                     ? "A Meta redelivery of the exact same comment can send another DM."
@@ -337,6 +335,61 @@ export function AutomationRuleSetterPage() {
           </p>
         </aside>
       </div>
+      <Dialog open={postPickerOpen} onOpenChange={setPostPickerOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Select an Instagram post</DialogTitle>
+          </DialogHeader>
+          <div className="grid max-h-[60vh] gap-3 overflow-y-auto sm:grid-cols-3">
+            {(postsQuery.data ?? []).map((post) => (
+              <button
+                key={post.id}
+                type="button"
+                onClick={() => setDraftPostId(post.id)}
+                className={cn(
+                  "relative overflow-hidden rounded-xl border text-left",
+                  draftPostId === post.id
+                    ? "border-primary ring-2 ring-primary/20"
+                    : "border-border",
+                )}
+              >
+                <div className="relative aspect-square bg-muted">
+                  {post.thumbnail_url || post.media_url ? (
+                    <img
+                      src={post.thumbnail_url ?? post.media_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                </div>
+                <p className="line-clamp-2 p-3 text-sm font-medium">
+                  {post.caption?.trim() || `${post.media_type} post`}
+                </p>
+                {draftPostId === post.id ? (
+                  <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-4 w-4" />
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPostPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!draftPostId}
+              onClick={() => {
+                setPostId(draftPostId);
+                setPostPickerOpen(false);
+              }}
+            >
+              Confirm post
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   );
 }

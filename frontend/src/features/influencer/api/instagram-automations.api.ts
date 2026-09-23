@@ -13,6 +13,8 @@ export type InstagramAutomation = {
   status: "ACTIVE" | "PAUSED";
   createdAt: string;
   updatedAt: string;
+  deliveryCount: number;
+  sentCount: number;
 };
 
 export type CreateInstagramAutomationInput = {
