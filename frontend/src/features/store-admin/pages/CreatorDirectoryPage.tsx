@@ -44,6 +44,14 @@ function creatorInitials(name: string) {
   );
 }
 
+function formatCount(value?: number | null) {
+  if (typeof value !== "number") return "—";
+  return new Intl.NumberFormat("en-IN", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
 function isStoreCreator(
   creator: DirectoryCreator,
 ): creator is StoreCreator & { connectedToStore: true } {
@@ -177,15 +185,15 @@ export function CreatorDirectoryPage() {
                   <div className="mt-4 grid grid-cols-3 divide-x rounded-xl border bg-muted/30 text-center">
                     <div className="px-2 py-3">
                       <p className="text-sm font-semibold">
-                        {connected ? (creator.totalOrders ?? 0) : "—"}
+                        {formatCount(creator.instagramFollowersCount)}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">Orders</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">Followers</p>
                     </div>
                     <div className="px-2 py-3">
                       <p className="text-sm font-semibold">
-                        {connected ? (creator.activeLinks ?? 0) : "—"}
+                        {formatCount(creator.instagramMediaCount)}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">Links</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">Posts</p>
                     </div>
                     <div className="px-2 py-3">
                       <p className="text-sm font-semibold">{creator.creatorCode ?? "—"}</p>

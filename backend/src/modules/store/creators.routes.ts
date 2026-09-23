@@ -29,7 +29,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
             status: true,
             creatorCode: true,
             createdAt: true,
-            instagramConnection: { select: { username: true, displayName: true, status: true } },
+            instagramConnection: { select: { username: true, displayName: true, status: true, encryptedAccessToken: true } },
             affiliateLinks: {
               where: { organizationId: org.id },
               select: { id: true, status: true },
@@ -44,13 +44,22 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return {
-      creators: rows.map((row: any) => {
+      creators: await Promise.all(rows.map(async (row: any) => {
         const inf = row.influencer;
         const commissions = (inf.affiliateCommissions ?? []).filter((c: any) => c.status !== 'REVERSED');
         const totalSales = commissions.reduce((sum: number, c: any) => sum + Number(c.orderAmount || 0), 0);
         const totalCommissions = commissions.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
         const totalOrders = commissions.length;
         const activeLinks = (inf.affiliateLinks ?? []).filter((l: any) => l.status === 'ACTIVE').length;
+
+        let instagramStatistics = null;
+        if (inf.instagramConnection?.status === 'ACTIVE') {
+          try {
+            instagramStatistics = await getInstagramProfile(decryptToken(inf.instagramConnection.encryptedAccessToken));
+          } catch {
+            /* Instagram statistics are optional and should not block the creator directory. */
+          }
+        }
 
         return {
           id: inf.id,
@@ -61,12 +70,14 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           assignedAt: row.createdAt,
           instagramUsername: inf.instagramConnection?.username ?? null,
           instagramStatus: inf.instagramConnection?.status ?? null,
+          instagramFollowersCount: instagramStatistics?.followers_count ?? null,
+          instagramMediaCount: instagramStatistics?.media_count ?? null,
           totalSales,
           totalOrders,
           totalCommissions,
           activeLinks,
         };
-      }),
+      })),
     };
   });
 
@@ -91,18 +102,31 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
         displayName: true,
         email: true,
         creatorCode: true,
-        instagramConnection: { select: { username: true, displayName: true, status: true } },
+        instagramConnection: { select: { username: true, displayName: true, status: true, encryptedAccessToken: true } },
       },
       take: 20,
     });
 
     return {
-      creators: available.map((u: any) => ({
+      creators: await Promise.all(available.map(async (u: any) => {
+        let instagramStatistics = null;
+        if (u.instagramConnection?.status === 'ACTIVE') {
+          try {
+            instagramStatistics = await getInstagramProfile(decryptToken(u.instagramConnection.encryptedAccessToken));
+          } catch {
+            /* Instagram statistics are optional and should not block the creator directory. */
+          }
+        }
+
+        return {
         id: u.id,
         displayName: u.displayName,
         email: u.email,
         creatorCode: u.creatorCode,
         instagramUsername: u.instagramConnection?.username ?? null,
+        instagramFollowersCount: instagramStatistics?.followers_count ?? null,
+        instagramMediaCount: instagramStatistics?.media_count ?? null,
+      };
       })),
     };
   });

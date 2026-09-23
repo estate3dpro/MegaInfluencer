@@ -8,12 +8,14 @@ export type StoreCreator = {
   creatorCode: string | null;
   instagramUsername: string | null;
   instagramStatus: string | null;
+  instagramFollowersCount?: number | null;
+  instagramMediaCount?: number | null;
   assignedAt: string;
   totalSales?: number;
   totalOrders?: number;
   totalCommissions?: number;
   activeLinks?: number;
-  };
+};
 
 export type AvailableCreator = {
   id: string;
@@ -21,6 +23,8 @@ export type AvailableCreator = {
   email: string | null;
   creatorCode: string | null;
   instagramUsername: string | null;
+  instagramFollowersCount?: number | null;
+  instagramMediaCount?: number | null;
 };
 
 export type AssignableProduct = {
@@ -66,23 +70,41 @@ export async function getStoreCreators() {
 }
 
 export async function getAvailableCreators() {
-  return (await apiClient.get<{ creators: AvailableCreator[] }>("/store/creators/available")).data.creators;
+  return (await apiClient.get<{ creators: AvailableCreator[] }>("/store/creators/available")).data
+    .creators;
 }
 
 export async function assignStoreCreator(influencerId: string) {
-  return (await apiClient.post<{ ok: boolean; assignment: any }>("/store/creators/assign", { influencerId })).data;
+  return (
+    await apiClient.post<{ ok: boolean; assignment: any }>("/store/creators/assign", {
+      influencerId,
+    })
+  ).data;
 }
 
 export async function getStoreCreatorDetails(creatorId: string) {
-  return (await apiClient.get<{ creator: any; assignedAt: string; instagramStatistics: any }>(`/store/creators/${creatorId}`)).data;
+  return (
+    await apiClient.get<{ creator: any; assignedAt: string; instagramStatistics: any }>(
+      `/store/creators/${creatorId}`,
+    )
+  ).data;
 }
 
 export async function getCreatorAssignedProducts(creatorId: string) {
-  return (await apiClient.get<{ products: AssignableProduct[]; assignedCount: number }>(`/store/creators/${creatorId}/products`)).data;
+  return (
+    await apiClient.get<{ products: AssignableProduct[]; assignedCount: number }>(
+      `/store/creators/${creatorId}/products`,
+    )
+  ).data;
 }
 
 export async function updateCreatorAssignedProducts(creatorId: string, productIds: string[]) {
-  return (await apiClient.put<{ ok: boolean; assignedCount: number }>(`/store/creators/${creatorId}/products`, { productIds })).data;
+  return (
+    await apiClient.put<{ ok: boolean; assignedCount: number }>(
+      `/store/creators/${creatorId}/products`,
+      { productIds },
+    )
+  ).data;
 }
 
 export async function getStoreCommissions(params?: { status?: string; search?: string }) {
@@ -90,9 +112,18 @@ export async function getStoreCommissions(params?: { status?: string; search?: s
   if (params?.status && params.status !== "ALL") searchParams.set("status", params.status);
   if (params?.search) searchParams.set("search", params.search);
   const query = searchParams.toString();
-  return (await apiClient.get<CommissionsResponse>(`/store/commissions${query ? `?${query}` : ""}`)).data;
+  return (await apiClient.get<CommissionsResponse>(`/store/commissions${query ? `?${query}` : ""}`))
+    .data;
 }
 
-export async function updateCommissionStatus(commissionId: string, status: "PENDING" | "APPROVED" | "PAID" | "REVERSED") {
-  return (await apiClient.patch<{ ok: boolean; commission: any }>(`/store/commissions/${commissionId}/status`, { status })).data;
+export async function updateCommissionStatus(
+  commissionId: string,
+  status: "PENDING" | "APPROVED" | "PAID" | "REVERSED",
+) {
+  return (
+    await apiClient.patch<{ ok: boolean; commission: any }>(
+      `/store/commissions/${commissionId}/status`,
+      { status },
+    )
+  ).data;
 }
