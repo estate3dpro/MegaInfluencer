@@ -107,17 +107,44 @@ export async function sendManualInstagramReply(
     throw new AppError('INSTAGRAM_CONNECTION_EXPIRED', 'This creator’s Instagram access token has expired.', 409);
   }
 
+  // Instagram accepts only one initial private reply for a comment. An
+  // automation may already have sent that first message; further messages
+  // require the customer to reply in Instagram first, creating a normal DM
+  // conversation. Do not send a second request that Meta reports only as an
+  // unhelpful "unknown error".
+  const automatedReply = await app.prisma.instagramAutomationDelivery.findFirst({
+    where: {
+      commentId: conversation.instagramCommentId,
+      status: 'SENT',
+      automation: { influencerId: conversation.influencerId },
+    },
+    select: { id: true },
+  });
+  if (automatedReply) {
+    throw new AppError(
+      'INSTAGRAM_PRIVATE_REPLY_ALREADY_SENT',
+      'An automated private reply was already sent for this comment. The customer must reply in Instagram before another direct message can be sent.',
+      409,
+    );
+  }
+  if (!conversation.instagramAccountId) {
+    throw new AppError(
+      'INSTAGRAM_WEBHOOK_ACCOUNT_UNKNOWN',
+      'This older comment does not include the webhook Instagram account ID needed to send a private reply. Please use a newly received comment instead.',
+      409,
+    );
+  }
+
   const reply = await app.prisma.instagramManualReply.create({
     data: { conversationId, senderUserId: actor.userId, senderRole: actor.role, message },
     select: { id: true },
   });
 
   try {
-    // The webhook account ID is authoritative for Instagram Login webhooks;
-    // fall back to the connected profile ID when it is not provided.
+    // The webhook account ID is authoritative for Instagram Login webhooks.
     const result = await sendInstagramPrivateReply(
       decryptToken(connection.encryptedAccessToken),
-      conversation.instagramAccountId ?? connection.instagramUserId,
+      conversation.instagramAccountId,
       conversation.instagramCommentId,
       message,
     );
