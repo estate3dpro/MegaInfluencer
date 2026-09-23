@@ -46,7 +46,7 @@ function AuthLayout({ role, children }: { role: Role; children: ReactNode }) {
             <img
               src="/logo/MI_Logo.svg"
               alt="MegaInfluencer"
-              className="h-9 w-9 shrink-0 object-contain"
+              className="h-10 w-10 shrink-0 object-contain"
             />
             MegaInfluencer
           </div>
@@ -262,7 +262,7 @@ function BrandHeading({
   return (
     <>
       <div className="flex items-center gap-2 font-display text-base font-bold text-foreground">
-        <img src="/logo/MI_Logo.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" />
+        <img src="/logo/MI_Logo.svg" alt="" aria-hidden="true" className="h-8 w-8 object-contain" />
         MegaInfluencer
       </div>
       <p className="mt-9 text-xs font-bold uppercase tracking-[0.16em] text-primary">{eyebrow}</p>

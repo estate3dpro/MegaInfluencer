@@ -50,7 +50,7 @@ function RoleSidebar({ role }: { role: Role }) {
           <img
             src="/logo/MI_Logo.svg"
             alt="MegaInfluencer"
-            className="h-8 w-8 shrink-0 object-contain"
+            className="h-10 w-10 shrink-0 object-contain"
           />
           <span className="min-w-0 group-data-[collapsible=icon]:hidden">
             <span className="block truncate font-display text-sm font-semibold">Platform</span>
