@@ -84,6 +84,16 @@ export function CampaignsPage() {
               <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
                 {campaign.brief}
               </p>
+              {campaign.product ? (
+                <div className="mt-3 flex items-center gap-3 rounded-xl border bg-muted/30 p-3">
+                  {campaign.product.imageUrl ? (
+                    <img src={campaign.product.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                  ) : (
+                    <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary"><FileText className="h-4 w-4" /></span>
+                  )}
+                  <div className="min-w-0"><p className="text-xs text-muted-foreground">Campaign product</p><p className="truncate text-sm font-semibold">{campaign.product.title}</p></div>
+                </div>
+              ) : null}
               <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-3 text-sm">
                 <div>
                   <p className="text-xs text-muted-foreground">Deliverables</p>

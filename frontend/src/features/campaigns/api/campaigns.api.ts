@@ -24,6 +24,8 @@ export type Campaign = {
   createdAt?: string;
   status: "DRAFT" | "PUBLISHED" | "PAUSED" | "CLOSED" | "ARCHIVED";
   organization?: { name: string; logoUrl: string | null };
+  productId?: string | null;
+  product?: { id: string; title: string; imageUrl: string | null; price: string | null } | null;
   applications?: { id: string; status: string }[];
   _count?: { applications: number };
 };
@@ -38,6 +40,7 @@ export type CampaignInput = {
   deliverableDetails: Record<string, number>;
   compensationType: "FIXED" | "BARTER" | "COMMISSION" | "HYBRID" | "PERFORMANCE" | "NEGOTIABLE";
   compensationDetails: Record<string, string | number | boolean>;
+  productId?: string | null;
   minimumFollowers?: number;
   applicationType: "OPEN" | "APPROVAL_REQUIRED" | "INVITE_ONLY";
   budgetMin?: number;

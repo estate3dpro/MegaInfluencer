@@ -13,6 +13,7 @@ import {
   updateCampaign,
   type CampaignInput,
 } from "@/features/campaigns/api/campaigns.api";
+import { getStoreProducts } from "@/features/store-admin/api/products.api";
 const images = [
   "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80",
   "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1200&q=80",
@@ -31,6 +32,7 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
   const [image, setImage] = useState(images[0]!);
   const [plan, setPlan] = useState<CampaignInput["compensationType"]>("FIXED");
   const [saving, setSaving] = useState(false);
+  const [productId, setProductId] = useState("none");
   const [error, setError] = useState("");
   const [f, setF] = useState({
     title: "",
@@ -52,12 +54,17 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
     queryFn: () => getStoreCampaign(campaignId!),
     enabled: Boolean(campaignId),
   });
+  const productsQuery = useQuery({
+    queryKey: ["store-products", "campaign-selector"],
+    queryFn: () => getStoreProducts(1, { all: true }),
+  });
   useEffect(() => {
     const campaign = campaignQuery.data;
     if (!campaign) return;
     const details = campaign.compensationDetails ?? {};
     setImage(campaign.imageUrl);
     setPlan(campaign.compensationType as CampaignInput["compensationType"]);
+    setProductId(campaign.productId ?? "none");
     setF({
       title: campaign.title,
       brief: campaign.brief,
@@ -96,6 +103,7 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
         deliverableDetails: { reel: 1, story: 2, post: 0, ugc: 0 },
         compensationType: plan,
         compensationDetails: { amount: f.amount, commissionRate: f.rate, product: f.product },
+        productId: productId === "none" ? null : productId,
         minimumFollowers: f.followers ? Number(f.followers) : undefined,
         applicationType: f.applicationType,
         budgetMin: f.amount ? Number(f.amount) : undefined,
@@ -269,6 +277,25 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
                 />
               </label>
             </div>
+          </Section>
+          <Section title="Campaign product (optional)">
+            <p className="text-sm text-muted-foreground">
+              Select a store product to automatically add it to every accepted creator’s Products page.
+            </p>
+            <select
+              className="mt-4 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+            >
+              <option value="none">No product selected</option>
+              {(productsQuery.data?.products ?? []).map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name} {product.price ? `— ${product.price}` : ""}
+                </option>
+              ))}
+            </select>
+            {productsQuery.isLoading ? <p className="mt-2 text-xs text-muted-foreground">Loading your product catalog…</p> : null}
+            {productsQuery.isError ? <p className="mt-2 text-xs text-destructive">Products could not be loaded. You can still save this campaign without one.</p> : null}
           </Section>
           <Section title="2. Deliverables & compensation">
             <div className="grid gap-4 md:grid-cols-2">

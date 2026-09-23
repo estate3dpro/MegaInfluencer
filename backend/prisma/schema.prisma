@@ -306,6 +306,8 @@ model Campaign {
   id String @id @default(cuid())
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productId String?
+  product ShopifyProduct? @relation("CampaignProduct", fields: [productId], references: [id], onDelete: SetNull)
   title String
   brief String
   category String
@@ -332,6 +334,7 @@ model Campaign {
   applications CampaignApplication[]
   assignments CampaignAssignment[]
   @@index([organizationId, status])
+  @@index([productId])
   @@index([organizationId, deletedAt])
   @@index([status, applicationDeadline])
 }
@@ -401,6 +404,7 @@ model ShopifyProduct {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   affiliateLinks AffiliateLink[]
   productAssignments ProductInfluencerAssignment[]
+  campaigns Campaign[] @relation("CampaignProduct")
 
   @@unique([organizationId, shopifyId])
   @@index([organizationId, syncedAt])

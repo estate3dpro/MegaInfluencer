@@ -14,18 +14,39 @@ async function org(app: FastifyInstance, userId: string) {
   return value;
 }
 
+async function campaignData(app: FastifyInstance, organizationId: string, input: Input) {
+  const productId = input.productId ?? null;
+  if (productId) {
+    const product = await app.prisma.shopifyProduct.findFirst({
+      where: { id: productId, organizationId },
+      select: { id: true },
+    });
+    if (!product) throw new AppError('CAMPAIGN_PRODUCT_NOT_FOUND', 'Choose a product from your store catalog.', 400);
+  }
+  return { ...input, productId };
+}
+
+async function assignCampaignProduct(tx: any, campaign: { productId: string | null; organizationId: string }, influencerId: string) {
+  if (!campaign.productId) return;
+  await tx.productInfluencerAssignment.upsert({
+    where: { productId_influencerId: { productId: campaign.productId, influencerId } },
+    create: { productId: campaign.productId, organizationId: campaign.organizationId, influencerId },
+    update: {},
+  });
+}
+
 export async function listStore(app: FastifyInstance, userId: string) {
   const organization = await org(app, userId);
   return app.prisma.campaign.findMany({
     where: { organizationId: organization.id, deletedAt: null },
-    include: { _count: { select: { applications: true } } },
+    include: { product: { select: { id: true, title: true, imageUrl: true, price: true } }, _count: { select: { applications: true } } },
     orderBy: { createdAt: 'desc' },
   });
 }
 
 export async function create(app: FastifyInstance, userId: string, input: Input) {
   const organization = await org(app, userId);
-  return app.prisma.campaign.create({ data: { ...input, organizationId: organization.id } });
+  return app.prisma.campaign.create({ data: { ...(await campaignData(app, organization.id, input)), organizationId: organization.id } });
 }
 
 async function own(app: FastifyInstance, userId: string, id: string) {
@@ -76,6 +97,7 @@ export async function manuallyAssign(app: FastifyInstance, userId: string, campa
       create: { campaignId, influencerId },
       update: { status: 'ASSIGNED' },
     });
+    await assignCampaignProduct(tx, campaign, influencerId);
     await tx.storeInfluencerAssignment.upsert({
       where: { organizationId_influencerId: { organizationId: campaign.organizationId, influencerId } },
       create: { organizationId: campaign.organizationId, influencerId },
@@ -111,8 +133,8 @@ export async function unassign(app: FastifyInstance, userId: string, campaignId:
 }
 
 export async function update(app: FastifyInstance, userId: string, id: string, input: Input) {
-  await own(app, userId, id);
-  return app.prisma.campaign.update({ where: { id }, data: input });
+  const campaign = await own(app, userId, id);
+  return app.prisma.campaign.update({ where: { id }, data: await campaignData(app, campaign.organizationId, input) });
 }
 
 export async function publish(app: FastifyInstance, userId: string, id: string) {
@@ -159,7 +181,7 @@ export async function applications(app: FastifyInstance, userId: string, id: str
 export async function assignedCampaigns(app: FastifyInstance, userId: string) {
   return app.prisma.campaignAssignment.findMany({
     where: { influencerId: userId, status: 'ASSIGNED', campaign: { is: { deletedAt: null } } },
-    include: { campaign: { include: { organization: { select: { name: true, logoUrl: true } } } } },
+    include: { campaign: { include: { organization: { select: { name: true, logoUrl: true } }, product: { select: { id: true, title: true, imageUrl: true, price: true } } } } },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -191,6 +213,7 @@ export async function decide(
         create: { organizationId: campaign.organizationId, influencerId: application.influencerId },
         update: {},
       });
+      await assignCampaignProduct(tx, campaign, application.influencerId);
       await tx.notification.createMany({
         data: [
           {
@@ -229,6 +252,7 @@ export async function discover(app: FastifyInstance, userId: string) {
     where: { status: 'PUBLISHED', deletedAt: null, applicationDeadline: { gt: new Date() } },
     include: {
       organization: { select: { name: true, logoUrl: true } },
+      product: { select: { id: true, title: true, imageUrl: true, price: true } },
       applications: { where: { influencerId: userId }, select: { id: true, status: true } },
     },
     orderBy: { publishedAt: 'desc' },
