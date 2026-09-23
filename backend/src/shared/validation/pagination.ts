@@ -13,7 +13,9 @@ export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
 export function parseOrThrow<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success) {
-    throw new AppError('VALIDATION_ERROR', 'Request validation failed.', 400);
+    const issue = result.error.issues[0];
+    const field = issue?.path.length ? `${issue.path.join('.')}: ` : '';
+    throw new AppError('VALIDATION_ERROR', `${field}${issue?.message ?? 'Request validation failed.'}`, 400);
   }
 
   return result.data;

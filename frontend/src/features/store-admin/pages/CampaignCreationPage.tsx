@@ -7,7 +7,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createCampaign, getStoreCampaign, updateCampaign, type CampaignInput } from "@/features/campaigns/api/campaigns.api";
+import {
+  createCampaign,
+  getStoreCampaign,
+  updateCampaign,
+  type CampaignInput,
+} from "@/features/campaigns/api/campaigns.api";
 const images = [
   "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80",
   "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1200&q=80",
@@ -72,6 +77,12 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (f.brief.trim().length < 20) {
+      setError(
+        "Campaign brief must be at least 20 characters. Explain the product, goal, and creator angle.",
+      );
+      return;
+    }
     try {
       setSaving(true);
       const input: CampaignInput = {
@@ -96,9 +107,7 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
       await nav({ to: "/store-admin/campaigns" });
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : "Unable to save the campaign. Please try again.",
+        caught instanceof Error ? caught.message : "Unable to save the campaign. Please try again.",
       );
     } finally {
       setSaving(false);
@@ -108,7 +117,9 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
     <div>
       <Label>{label}</Label>
       <Input
-        required={key === "title" || key === "deliverables" || key === "amount" || key === "deadline"}
+        required={
+          key === "title" || key === "deliverables" || key === "amount" || key === "deadline"
+        }
         className="mt-2"
         type={type}
         value={f[key]}
@@ -127,7 +138,9 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
           </Button>
           <div>
             <p className="text-sm font-medium text-primary">Campaign marketplace</p>
-            <h1 className="font-display text-2xl font-semibold">{campaignId ? "Edit campaign" : "Create campaign"}</h1>
+            <h1 className="font-display text-2xl font-semibold">
+              {campaignId ? "Edit campaign" : "Create campaign"}
+            </h1>
             <p className="text-sm text-muted-foreground">
               Build a clear opportunity creators can confidently apply to.
             </p>
@@ -205,11 +218,16 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
                 <Label>Campaign brief *</Label>
                 <Textarea
                   required
+                  minLength={20}
+                  maxLength={3000}
                   className="mt-2"
                   value={f.brief}
                   onChange={(e) => setF({ ...f, brief: e.target.value })}
                   placeholder="Explain the product, story, and desired creator angle."
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {f.brief.trim().length}/20 characters minimum
+                </p>
               </div>
             </div>
           </Section>
@@ -235,15 +253,15 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
                   className="hidden"
                   accept="image/png,image/jpeg,image/webp"
                   type="file"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          if (file.size > 3 * 1024 * 1024) {
-                            setError("Choose a PNG, JPEG, or WebP image smaller than 3 MB.");
-                            e.target.value = "";
-                            return;
-                          }
-                          const r = new FileReader();
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 3 * 1024 * 1024) {
+                        setError("Choose a PNG, JPEG, or WebP image smaller than 3 MB.");
+                        e.target.value = "";
+                        return;
+                      }
+                      const r = new FileReader();
                       r.onload = () => setImage(String(r.result));
                       r.readAsDataURL(file);
                     }
@@ -299,7 +317,12 @@ export function CampaignCreationPage({ campaignId }: { campaignId?: string }) {
                 <select
                   className="mt-2 h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={f.applicationType}
-                  onChange={(e) => setF({ ...f, applicationType: e.target.value as CampaignInput["applicationType"] })}
+                  onChange={(e) =>
+                    setF({
+                      ...f,
+                      applicationType: e.target.value as CampaignInput["applicationType"],
+                    })
+                  }
                 >
                   <option value="OPEN">Open to everyone</option>
                   <option value="APPROVAL_REQUIRED">Approval required</option>
