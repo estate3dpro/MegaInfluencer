@@ -75,6 +75,7 @@ export const instagramWebhookRoutes: FastifyPluginAsync = async (app) => {
     if (!verifyWebhookSignature(rawBody, typeof signature === 'string' ? signature : undefined)) {
       throw new AppError('INVALID_WEBHOOK_SIGNATURE', 'Webhook signature is invalid.', 401);
     }
+    request.log.info({ payloadBytes: rawBody.length }, 'Verified Instagram webhook received');
 
     // When explicitly enabled on production, forward verified events to the
     // local ngrok API and avoid processing the same event in both places.

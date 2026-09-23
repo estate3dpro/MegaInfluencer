@@ -22,6 +22,24 @@ export type CreateInstagramAutomationInput = {
   wholeWordMatch: boolean;
 };
 
+export type InstagramConnection = {
+  id: string;
+  instagramUserId: string;
+  username: string;
+  displayName: string | null;
+  tokenExpiresAt: string | null;
+  status: "ACTIVE" | "EXPIRED" | "REVOKED";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function getInstagramConnection() {
+  const { data } = await apiClient.get<{ connection: InstagramConnection | null }>(
+    "/influencer/instagram/connection",
+  );
+  return data.connection;
+}
+
 export async function getInstagramAutomations() {
   const { data } = await apiClient.get<{ items: InstagramAutomation[] }>("/instagram-automations");
   return data.items;

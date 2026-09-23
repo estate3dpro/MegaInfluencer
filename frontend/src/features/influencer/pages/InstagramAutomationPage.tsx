@@ -18,7 +18,11 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getInstagramAutomation, getInstagramAutomations } from "../api/instagram-automations.api";
+import {
+  getInstagramAutomation,
+  getInstagramAutomations,
+  getInstagramConnection,
+} from "../api/instagram-automations.api";
 
 export const automationRules = [
   {
@@ -51,6 +55,10 @@ export const automationRules = [
 ];
 
 export function InstagramAutomationPage() {
+  const connectionQuery = useQuery({
+    queryKey: ["influencer", "instagram-connection"],
+    queryFn: getInstagramConnection,
+  });
   const automationsQuery = useQuery({
     queryKey: ["influencer", "instagram-automations"],
     queryFn: getInstagramAutomations,
@@ -65,6 +73,7 @@ export function InstagramAutomationPage() {
       rate: "—",
       active: rule.status === "ACTIVE",
     })) ?? [];
+  const connection = connectionQuery.data;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -85,12 +94,25 @@ export function InstagramAutomationPage() {
           </span>
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="font-display text-lg font-semibold">@meerastyles is connected</p>
-              <Badge className="bg-success/15 text-success hover:bg-success/15">Active</Badge>
+              <p className="font-display text-lg font-semibold">
+                {connection ? `@${connection.username} is connected` : "Instagram is not connected"}
+              </p>
+              {connection ? (
+                <Badge className="bg-success/15 text-success hover:bg-success/15">
+                  {connection.status === "ACTIVE" ? "Active" : connection.status}
+                </Badge>
+              ) : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Automations are responding to your audience around the clock.
+              {connection
+                ? "Automations are responding to your audience around the clock."
+                : "Connect Instagram to start responding to comments automatically."}
             </p>
+            {connection ? (
+              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                Development: Instagram account ID {connection.instagramUserId}
+              </p>
+            ) : null}
           </div>
           <Button variant="outline">Manage connection</Button>
         </CardContent>

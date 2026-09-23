@@ -39,8 +39,6 @@ export function ProfilePage() {
   const data = profileQuery.data;
   const profileName =
     data?.profile.name || data?.connection.displayName || user?.name || "Influencer";
-  
-  console.log(data, "profileName");
   const username = data?.profile.username || data?.connection.username;
   const errorMessage = isApiError(profileQuery.error)
     ? profileQuery.error.message

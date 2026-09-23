@@ -30,6 +30,7 @@ export async function beginInstagramOAuth(app: FastifyInstance, flow: 'LOGIN' | 
   await app.prisma.instagramOAuthState.create({
     data: { stateHash: hashOpaqueToken(state), flow, influencerId, expiresAt: new Date(Date.now() + stateLifetimeMs) },
   });
+  app.log.info({ flow, influencerId: influencerId ?? null }, 'Instagram OAuth flow started');
   return createAuthorizationUrl(callbackUrl(), state);
 }
 
@@ -53,11 +54,15 @@ async function saveConnection(
   accessToken: string,
   expiresIn?: number,
 ) {
+  const previousConnection = await app.prisma.instagramConnection.findUnique({
+    where: { influencerId },
+    select: { instagramUserId: true, username: true },
+  });
   const connectedElsewhere = await app.prisma.instagramConnection.findUnique({ where: { instagramUserId: instagramUser.id } });
   if (connectedElsewhere && connectedElsewhere.influencerId !== influencerId) {
     throw new AppError('INSTAGRAM_ACCOUNT_ALREADY_LINKED', 'This Instagram account is connected to another influencer.', 409);
   }
-  return app.prisma.instagramConnection.upsert({
+  const connection = await app.prisma.instagramConnection.upsert({
     where: { influencerId },
     create: {
       influencerId,
@@ -78,6 +83,17 @@ async function saveConnection(
     },
     select: { id: true, instagramUserId: true, username: true, displayName: true, tokenExpiresAt: true, status: true },
   });
+  app.log.info({
+    influencerId,
+    connectionId: connection.id,
+    instagramUserId: connection.instagramUserId,
+    username: connection.username,
+    previousInstagramUserId: previousConnection?.instagramUserId ?? null,
+    previousUsername: previousConnection?.username ?? null,
+    tokenExpiresAt: connection.tokenExpiresAt,
+    action: previousConnection ? 'updated' : 'created',
+  }, 'Instagram connection saved');
+  return connection;
 }
 
 export async function completeInstagramOAuth(app: FastifyInstance, input: { code: string; state: string }) {
@@ -85,6 +101,13 @@ export async function completeInstagramOAuth(app: FastifyInstance, input: { code
   const shortLived = await exchangeAuthorizationCode(input.code, callbackUrl());
   const longLived = await exchangeLongLivedToken(shortLived.access_token);
   const instagramUser = await getInstagramUser(longLived.access_token);
+  app.log.info({
+    flow: state.flow,
+    influencerId: state.influencerId ?? null,
+    instagramUserId: instagramUser.id,
+    username: instagramUser.username,
+    tokenHasExpiry: Boolean(longLived.expires_in),
+  }, 'Instagram OAuth account resolved');
 
   if (state.flow === 'CONNECT') {
     if (!state.influencerId) throw new AppError('INVALID_OAUTH_STATE', 'The connection request is incomplete.', 400);
@@ -149,7 +172,8 @@ export async function getConnection(app: FastifyInstance, influencerId: string) 
 }
 
 export async function disconnectInstagram(app: FastifyInstance, influencerId: string) {
-  await app.prisma.instagramConnection.deleteMany({ where: { influencerId } });
+  const deleted = await app.prisma.instagramConnection.deleteMany({ where: { influencerId } });
+  app.log.info({ influencerId, connectionDeleted: deleted.count === 1 }, 'Instagram connection disconnected');
 }
 
 export async function listInstagramMedia(app: FastifyInstance, influencerId: string, limit: number) {

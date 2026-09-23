@@ -136,9 +136,21 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
       app.log.warn({ ...logContext, tokenExpiresAt: connection.tokenExpiresAt }, 'Instagram automation skipped: connection token expired');
       continue;
     }
-    if (event.instagramAccountId && connection.instagramUserId !== event.instagramAccountId) {
+    const accountIdMatches = !event.instagramAccountId || connection.instagramUserId === event.instagramAccountId;
+    app.log.info({
+      ...logContext,
+      connectedInstagramAccountId: connection.instagramUserId,
+      webhookInstagramAccountId: event.instagramAccountId ?? null,
+      accountIdMatches,
+    }, 'Instagram automation ownership check completed');
+    if (!accountIdMatches) {
       summary.skipped += 1;
-      app.log.warn({ ...logContext, connectedInstagramAccountId: connection.instagramUserId }, 'Instagram automation skipped: webhook account does not own this automation');
+      app.log.warn({
+        ...logContext,
+        connectedInstagramAccountId: connection.instagramUserId,
+        webhookInstagramAccountId: event.instagramAccountId,
+        accountIdMatches,
+      }, 'Instagram automation skipped: webhook account does not own this automation');
       continue;
     }
     if (!matchesKeywords(event.commentText, automation.keywords, automation.wholeWordMatch)) {
