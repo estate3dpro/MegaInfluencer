@@ -95,8 +95,9 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     return {
       links: rows.map((row: any) => {
         const clicks = Number(row._count?.clicks ?? 0);
-        const commissions = (row.commissions ?? []).filter((commission: any) => commission.status !== 'REVERSED');
-        const orders = commissions.length;
+        const allCommissions = row.commissions ?? [];
+        const commissions = allCommissions.filter((commission: any) => commission.status !== 'REVERSED');
+        const orders = allCommissions.length;
         const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0);
         const earnings = commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
 

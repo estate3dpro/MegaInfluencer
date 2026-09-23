@@ -13,10 +13,11 @@ export const influencerDashboardRoutes: FastifyPluginAsync = async (app) => {
     const thirtyDaysAgo = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29));
     const activeCommission = { creatorId: actor.userId, status: { not: 'REVERSED' as const } };
 
-    const [monthCommissions, previousCommissions, recentCommissions, monthClicks, previousClicks, assignments, creator] = await Promise.all([
+    const [monthCommissions, previousCommissions, monthOrderCount, recentCommissions, monthClicks, previousClicks, assignments, creator] = await Promise.all([
       prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: monthStart } }, select: { amount: true, orderAmount: true, createdAt: true } }),
       prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: previousMonthStart, lt: monthStart } }, select: { amount: true, orderAmount: true } }),
-      prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: thirtyDaysAgo } }, select: { amount: true, createdAt: true, status: true, shopifyOrder: { select: { name: true } }, organization: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      prisma.affiliateCommission.count({ where: { creatorId: actor.userId, createdAt: { gte: monthStart } } }),
+      prisma.affiliateCommission.findMany({ where: { creatorId: actor.userId, createdAt: { gte: thirtyDaysAgo } }, select: { amount: true, createdAt: true, status: true, shopifyOrder: { select: { name: true } }, organization: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
       prisma.affiliateLinkClick.count({ where: { link: { creatorId: actor.userId }, createdAt: { gte: monthStart } } }),
       prisma.affiliateLinkClick.count({ where: { link: { creatorId: actor.userId }, createdAt: { gte: previousMonthStart, lt: monthStart } } }),
       prisma.campaignAssignment.findMany({ where: { influencerId: actor.userId, campaign: { status: { in: ['PUBLISHED', 'PAUSED'] }, deletedAt: null } }, include: { campaign: { include: { organization: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
@@ -39,12 +40,12 @@ export const influencerDashboardRoutes: FastifyPluginAsync = async (app) => {
     return {
       creatorCode: creator?.creatorCode ?? null,
       metrics: {
-        earnings: sum(monthCommissions), sales: sales(monthCommissions), orders: monthCommissions.length, clicks: monthClicks,
+        earnings: sum(monthCommissions), sales: sales(monthCommissions), orders: monthOrderCount, clicks: monthClicks,
         earningsChange: change(sum(monthCommissions), sum(previousCommissions)), clicksChange: change(monthClicks, previousClicks),
       },
       earnings: [...daily.entries()].map(([date, amount]) => ({ date, amount })),
       campaigns: assignments.map(({ campaign, status }: any) => ({ id: campaign.id, title: campaign.title, brand: campaign.organization.name, status, deadline: campaign.contentDeadline ?? campaign.applicationDeadline, campaignStatus: campaign.status })),
-      activity: recentCommissions.map((commission: any) => ({ id: `${commission.shopifyOrder.name}-${commission.createdAt.toISOString()}`, title: commission.status === 'APPROVED' ? 'Commission approved' : 'Commission recorded', detail: `${commission.organization.name} · Order ${commission.shopifyOrder.name}`, amount: Number(commission.amount), createdAt: commission.createdAt })),
+      activity: recentCommissions.map((commission: any) => ({ id: `${commission.shopifyOrder.name}-${commission.createdAt.toISOString()}`, title: commission.status === 'REVERSED' ? 'Commission reversed' : commission.status === 'APPROVED' ? 'Commission approved' : 'Commission recorded', detail: `${commission.organization.name} · Order ${commission.shopifyOrder.name}`, amount: commission.status === 'REVERSED' ? 0 : Number(commission.amount), createdAt: commission.createdAt })),
     };
   });
 };

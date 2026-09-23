@@ -81,8 +81,9 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const totalOrders = rows.length;
-    const totalSales = rows.reduce((sum: number, row: any) => sum + Number(row.orderAmount), 0);
-    const totalCommissions = rows.reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+    const earningRows = rows.filter((row: any) => row.status !== 'REVERSED');
+    const totalSales = earningRows.reduce((sum: number, row: any) => sum + Number(row.orderAmount), 0);
+    const totalCommissions = earningRows.reduce((sum: number, row: any) => sum + Number(row.amount), 0);
 
     return {
       metrics: {
@@ -107,8 +108,8 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
           productTitle: row.link?.product?.title ?? 'Storewide referral',
           orderTotal: inrCurrency.format(Number(row.orderAmount)),
           orderTotalRaw: Number(row.orderAmount),
-          commission: inrCurrency.format(Number(row.amount)),
-          commissionRaw: Number(row.amount),
+          commission: inrCurrency.format(row.status === 'REVERSED' ? 0 : Number(row.amount)),
+          commissionRaw: row.status === 'REVERSED' ? 0 : Number(row.amount),
           commissionRate: `${row.commissionRate}%`,
           status: row.status === 'APPROVED' ? 'Approved' : row.status === 'PAID' ? 'Paid' : row.status === 'REVERSED' ? 'Cancelled' : 'Pending',
           statusRaw: row.status,

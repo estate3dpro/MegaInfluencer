@@ -44,6 +44,7 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       previousClicks,
       currentCommissions,
       previousCommissions,
+      currentAttributedOrderCount,
       allTimeCommissionsCount,
     ] = await Promise.all([
       prisma.affiliateLinkClick.count({
@@ -61,15 +62,18 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         select: { amount: true, orderAmount: true },
       }),
       prisma.affiliateCommission.count({
+        where: { creatorId: actor.userId, createdAt: { gte: startDate } },
+      }),
+      prisma.affiliateCommission.count({
         where: activeCommissionFilter,
       }),
     ]);
 
     const totalSalesCurrent = currentCommissions.reduce((sum: number, c: { orderAmount: unknown }) => sum + Number(c.orderAmount), 0);
     const totalSalesPrevious = previousCommissions.reduce((sum: number, c: { orderAmount: unknown }) => sum + Number(c.orderAmount), 0);
-    const ordersCountCurrent = currentCommissions.length;
-    const avgOrderValue = ordersCountCurrent > 0 ? Math.round(totalSalesCurrent / ordersCountCurrent) : 0;
-    const clickConversionRate = currentClicks > 0 ? ((ordersCountCurrent / currentClicks) * 100).toFixed(1) : '1.8';
+    const paidOrderCountCurrent = currentCommissions.length;
+    const avgOrderValue = paidOrderCountCurrent > 0 ? Math.round(totalSalesCurrent / paidOrderCountCurrent) : 0;
+    const clickConversionRate = currentClicks > 0 ? ((currentAttributedOrderCount / currentClicks) * 100).toFixed(1) : '1.8';
 
     // 2. Fetch Instagram Profile & Media safely
     let igProfile: any = null;
@@ -89,7 +93,7 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
 
     const followersBase = igProfile?.followers_count ?? 2;
     const reachBase = Math.max(currentClicks * 6, Math.round(followersBase * 1.5 + currentClicks * 12));
-    const engagementBase = Math.max(ordersCountCurrent * 2, Math.round(followersBase * 0.086 + ordersCountCurrent * 45));
+    const engagementBase = Math.max(currentAttributedOrderCount * 2, Math.round(followersBase * 0.086 + currentAttributedOrderCount * 45));
     const profileVisitsBase = Math.max(currentClicks * 2, Math.round(reachBase * 0.071 + currentClicks * 2));
 
     // 3. Overview Cards
@@ -160,8 +164,8 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       linkClicksDetail: `${clickConversionRate}% click-through rate`,
       attributedSales: formatInr(totalSalesCurrent),
       attributedSalesDetail: `${formatChange(totalSalesCurrent, totalSalesPrevious)} vs. last month`,
-      ordersGenerated: String(ordersCountCurrent),
-      ordersGeneratedDetail: `₹${totalSalesCurrent > 0 ? (totalSalesCurrent / ordersCountCurrent).toFixed(2) : '0.00'} average order value`,
+      ordersGenerated: String(currentAttributedOrderCount),
+      ordersGeneratedDetail: `₹${totalSalesCurrent > 0 && paidOrderCountCurrent > 0 ? (totalSalesCurrent / paidOrderCountCurrent).toFixed(2) : '0.00'} average order value`,
     };
 
     // 8. Top Performing Content
