@@ -190,6 +190,7 @@ model InstagramAutomation {
   keywords       String[]
   dmMessage      String
   wholeWordMatch Boolean                   @default(true)
+  replyOnDuplicateCommentWebhook Boolean   @default(false)
   status         InstagramAutomationStatus @default(ACTIVE)
   deliveries     InstagramAutomationDelivery[]
   createdAt      DateTime                  @default(now())
@@ -203,6 +204,7 @@ model InstagramAutomationDelivery {
   id              String                            @id @default(cuid())
   automationId    String
   commentId       String
+  attemptKey      String
   commenterId     String
   commenterName   String?
   commentText     String
@@ -214,8 +216,9 @@ model InstagramAutomationDelivery {
   updatedAt       DateTime                          @updatedAt
   automation      InstagramAutomation               @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
-  @@unique([automationId, commentId])
+  @@unique([automationId, attemptKey])
   @@index([automationId, createdAt])
+  @@index([automationId, commentId])
   @@index([status, createdAt])
 }
 

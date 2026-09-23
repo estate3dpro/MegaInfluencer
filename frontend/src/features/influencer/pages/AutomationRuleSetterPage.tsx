@@ -32,6 +32,7 @@ export function AutomationRuleSetterPage() {
     "Hey {username}! Thanks for your comment — here’s the link you asked for: ",
   );
   const [wholeWordMatch, setWholeWordMatch] = useState(true);
+  const [replyOnDuplicateCommentWebhook, setReplyOnDuplicateCommentWebhook] = useState(false);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const postsQuery = useQuery({
@@ -74,6 +75,7 @@ export function AutomationRuleSetterPage() {
         keywords: finalKeywords,
         dmMessage: message.trim(),
         wholeWordMatch,
+        replyOnDuplicateCommentWebhook,
       });
       await navigate({ to: "/influencer/instagram-automation" });
     } catch {
@@ -247,6 +249,20 @@ export function AutomationRuleSetterPage() {
                 </span>
               </span>
               <Switch checked={wholeWordMatch} onCheckedChange={setWholeWordMatch} />
+            </label>
+            <label className="mt-3 flex cursor-pointer items-center justify-between rounded-xl border bg-muted/30 p-3.5">
+              <span>
+                <span className="block text-sm font-medium">Reply again to duplicate comment webhooks</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {replyOnDuplicateCommentWebhook
+                    ? "A Meta redelivery of the exact same comment can send another DM."
+                    : "The same comment is answered once, even when Meta retries its webhook."}
+                </span>
+              </span>
+              <Switch
+                checked={replyOnDuplicateCommentWebhook}
+                onCheckedChange={setReplyOnDuplicateCommentWebhook}
+              />
             </label>
           </SetterSection>
 

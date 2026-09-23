@@ -16,6 +16,7 @@ const automationSelect = {
   keywords: true,
   dmMessage: true,
   wholeWordMatch: true,
+  replyOnDuplicateCommentWebhook: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -60,6 +61,7 @@ export async function createInstagramAutomation(app: FastifyInstance, influencer
       keywords: input.keywords,
       dmMessage: input.dmMessage,
       wholeWordMatch: input.wholeWordMatch,
+      replyOnDuplicateCommentWebhook: input.replyOnDuplicateCommentWebhook,
     },
     select: automationSelect,
   });

@@ -9,6 +9,7 @@ export type InstagramAutomation = {
   keywords: string[];
   dmMessage: string;
   wholeWordMatch: boolean;
+  replyOnDuplicateCommentWebhook: boolean;
   status: "ACTIVE" | "PAUSED";
   createdAt: string;
   updatedAt: string;
@@ -20,6 +21,7 @@ export type CreateInstagramAutomationInput = {
   keywords: string[];
   dmMessage: string;
   wholeWordMatch: boolean;
+  replyOnDuplicateCommentWebhook: boolean;
 };
 
 export type InstagramConnection = {

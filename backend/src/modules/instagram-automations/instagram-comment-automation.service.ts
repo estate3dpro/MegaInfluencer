@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { randomUUID } from 'node:crypto';
 
 import { decryptToken } from '../instagram/instagram.crypto.js';
 import { sendInstagramPrivateReply } from '../instagram/instagram.client.js';
@@ -144,14 +145,18 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
       accountIdMatches,
     }, 'Instagram automation ownership check completed');
     if (!accountIdMatches) {
-      summary.skipped += 1;
       app.log.warn({
         ...logContext,
         connectedInstagramAccountId: connection.instagramUserId,
         webhookInstagramAccountId: event.instagramAccountId,
         accountIdMatches,
-      }, 'Instagram automation skipped: webhook account does not own this automation');
-      continue;
+        // Meta signs this event and the automation lookup already matches its
+        // globally unique media ID. Instagram Login can return an OAuth ID
+        // different from the account ID used in a webhook entry, so use the
+        // webhook ID for the reply endpoint (the same behavior as the working
+        // Next.js implementation) instead of discarding a valid event.
+        replyInstagramAccountId: event.instagramAccountId,
+      }, 'Instagram automation account IDs differ; using webhook account ID for private reply');
     }
     if (!matchesKeywords(event.commentText, automation.keywords, automation.wholeWordMatch)) {
       summary.skipped += 1;
@@ -159,16 +164,25 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
       continue;
     }
     summary.matchingAutomations += 1;
-    app.log.info({ ...logContext, keywords: automation.keywords }, 'Instagram automation keyword matched');
+    app.log.info({
+      ...logContext,
+      keywords: automation.keywords,
+      replyOnDuplicateCommentWebhook: automation.replyOnDuplicateCommentWebhook,
+    }, 'Instagram automation keyword matched');
 
-    // This unique row is the idempotency boundary for Meta retries and events
-    // delivered more than once in separate webhook payloads.
+    // By default, a unique attempt key is the idempotency boundary for Meta
+    // retries. A rule can explicitly opt in to replying again to a redelivery
+    // of the exact same comment; those attempts retain the same comment ID but
+    // get a distinct audit key.
     let delivery: { id: string };
     try {
       delivery = await app.prisma.instagramAutomationDelivery.create({
         data: {
           automationId: automation.id,
           commentId: event.commentId,
+          attemptKey: automation.replyOnDuplicateCommentWebhook
+            ? `${event.commentId}:${randomUUID()}`
+            : event.commentId,
           commenterId: event.commenterId,
           commenterName: event.commenterName,
           commentText: event.commentText,
@@ -185,9 +199,10 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
     }
 
     try {
+      const replyInstagramAccountId = event.instagramAccountId ?? connection.instagramUserId;
       const result = await sendInstagramPrivateReply(
         decryptToken(connection.encryptedAccessToken),
-        connection.instagramUserId,
+        replyInstagramAccountId,
         event.commentId,
         personaliseMessage(automation.dmMessage, event.commenterName),
       );
@@ -196,7 +211,11 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
         data: { status: 'SENT', providerMessageId: result.message_id ?? null, sentAt: new Date() },
       });
       summary.sent += 1;
-      app.log.info({ ...logContext, providerMessageId: result.message_id ?? null }, 'Instagram automation private reply sent');
+      app.log.info({
+        ...logContext,
+        replyInstagramAccountId,
+        providerMessageId: result.message_id ?? null,
+      }, 'Instagram automation private reply sent');
     } catch (error) {
       await app.prisma.instagramAutomationDelivery.update({
         where: { id: delivery.id },
