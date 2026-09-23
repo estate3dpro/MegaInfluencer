@@ -43,9 +43,11 @@ function AuthLayout({ role, children }: { role: Role; children: ReactNode }) {
       <div className="mx-auto grid min-h-[calc(100dvh-1.5rem)] max-w-[1440px] overflow-hidden rounded-2xl bg-card shadow-elevated sm:min-h-[calc(100dvh-2.5rem)] lg:h-full lg:min-h-0 lg:grid-cols-[0.92fr_1.08fr]">
         <aside className="relative hidden min-h-0 overflow-hidden border-r border-primary/10 bg-gradient-to-br from-primary/10 via-card to-indigo/10 p-8 lg:flex lg:flex-col xl:p-12">
           <div className="relative z-10 shrink-0 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm text-primary-foreground">
-              M
-            </span>
+            <img
+              src="/logo/MI_Logo.svg"
+              alt="MegaInfluencer"
+              className="h-9 w-9 shrink-0 object-contain"
+            />
             MegaInfluencer
           </div>
           <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center py-4 xl:py-6">
@@ -260,7 +262,7 @@ function BrandHeading({
   return (
     <>
       <div className="flex items-center gap-2 font-display text-base font-bold text-foreground">
-        <Sparkles className="h-4 w-4 text-primary" />
+        <img src="/logo/MI_Logo.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" />
         MegaInfluencer
       </div>
       <p className="mt-9 text-xs font-bold uppercase tracking-[0.16em] text-primary">{eyebrow}</p>

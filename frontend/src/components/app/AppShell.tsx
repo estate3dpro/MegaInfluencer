@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LogOut, Search, Settings, Sparkles, UserRound } from "lucide-react";
+import { LogOut, Search, UserRound } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -47,9 +47,11 @@ function RoleSidebar({ role }: { role: Role }) {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <Link to={meta.home} className="flex items-center gap-2 px-1 py-1.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </span>
+          <img
+            src="/logo/MI_Logo.svg"
+            alt="MegaInfluencer"
+            className="h-8 w-8 shrink-0 object-contain"
+          />
           <span className="min-w-0 group-data-[collapsible=icon]:hidden">
             <span className="block truncate font-display text-sm font-semibold">Platform</span>
             <span className="block truncate text-xs text-muted-foreground">{meta.org}</span>
