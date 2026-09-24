@@ -25,14 +25,38 @@ function toUserResponse(user: { id: string; email: string | null; displayName: s
 
 export async function registerUser(
   app: FastifyInstance,
-  input: { email: string; password: string; displayName: string; role: 'STORE_OWNER' | 'INFLUENCER' },
+  input: {
+    email: string;
+    password: string;
+    displayName: string;
+    role: 'STORE_OWNER' | 'INFLUENCER';
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+  },
 ) {
   const existingUser = await app.prisma.user.findUnique({ where: { email: input.email } });
   if (existingUser) throw new AppError('EMAIL_IN_USE', 'An account already exists for this email.', 409);
 
   const passwordHash = await argon2.hash(input.password, passwordOptions);
   const user = await app.prisma.user.create({
-    data: { email: input.email, passwordHash, displayName: input.displayName, role: input.role },
+    data: {
+      email: input.email,
+      passwordHash,
+      displayName: input.displayName,
+      role: input.role,
+      ...(input.role === 'INFLUENCER'
+        ? {
+            influencerProfile: {
+              create: {
+                firstName: input.firstName!,
+                lastName: input.lastName!,
+                phone: input.phone || null,
+              },
+            },
+          }
+        : {}),
+    },
   });
   if (user.role === 'INFLUENCER') await ensureCreatorCode(app.prisma, user.id);
 

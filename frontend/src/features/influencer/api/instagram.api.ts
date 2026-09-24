@@ -35,6 +35,11 @@ export async function getInstagramProfile() {
   return data;
 }
 
+export async function startInstagramConnection() {
+  const { data } = await apiClient.post<{ authorizationUrl: string }>("/influencer/instagram/connect");
+  return data.authorizationUrl;
+}
+
 export async function getInstagramPosts() {
   const { data } = await apiClient.get<{ items: InstagramMedia[] }>("/influencer/instagram/posts", {
     params: { limit: 50 },

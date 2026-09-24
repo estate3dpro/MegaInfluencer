@@ -97,6 +97,7 @@ enum AffiliateLinkStatus {
 enum AffiliateLinkTargetType {
   STORE
   PRODUCT
+  COLLECTION
 }
 
 enum AffiliateCommissionStatus {
@@ -114,6 +115,7 @@ model User {
   role                  UserRole
   status                UserStatus             @default(ACTIVE)
   creatorCode           String?                @unique
+  influencerProfile     InfluencerProfile?
   ownedOrganizations    Organization[]         @relation("OrganizationOwner")
   storeAssignments      StoreInfluencerAssignment[] @relation("AssignedInfluencer")
   productAssignments    ProductInfluencerAssignment[] @relation("ProductAssignedInfluencer")
@@ -214,6 +216,22 @@ model InstagramAutomation {
 
   @@index([influencerId, createdAt])
   @@index([influencerId, instagramPostId])
+}
+
+model InfluencerProfile {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName       String
+  lastName        String
+  phone           String?  @unique
+  profileImageUrl String?
+  bio             String?
+  city            String?
+  country         String?
+  preferredLanguage String?
+  niches          String[] @default([])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model InstagramAutomationDelivery {
@@ -441,6 +459,7 @@ model ShopifyProduct {
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   affiliateLinks AffiliateLink[]
+  affiliateLinkCollections AffiliateLinkProduct[]
   productAssignments ProductInfluencerAssignment[]
   campaigns Campaign[] @relation("CampaignProduct")
 
@@ -486,12 +505,27 @@ model AffiliateLink {
   organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   creator        User?                    @relation(fields: [creatorId], references: [id], onDelete: SetNull)
   product        ShopifyProduct?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  products       AffiliateLinkProduct[]
   clicks         AffiliateLinkClick[]
   commissions    AffiliateCommission[]
 
   @@index([organizationId, status])
   @@index([creatorId, createdAt])
   @@index([productId])
+}
+
+model AffiliateLinkProduct {
+  id              String        @id @default(cuid())
+  affiliateLinkId String
+  productId       String
+  position        Int           @default(0)
+  createdAt       DateTime      @default(now())
+  affiliateLink   AffiliateLink @relation(fields: [affiliateLinkId], references: [id], onDelete: Cascade)
+  product         ShopifyProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([affiliateLinkId, productId])
+  @@index([productId])
+  @@index([affiliateLinkId, position])
 }
 
 model AffiliateLinkClick {

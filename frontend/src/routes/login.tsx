@@ -1,13 +1,11 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
-import { InstagramLoginPage } from "@/features/auth/components/LoginPage";
+import { CredentialLoginPage } from "@/features/auth/components/LoginPage";
 import { roleHome } from "@/features/auth/types";
 import { useAuthStore } from "@/stores/auth-store";
 
 const loginSearchSchema = z.object({
   redirect: z.string().optional(),
-  instagramLoginCode: z.string().min(20).optional(),
-  error: z.string().optional(),
 });
 
 export const Route = createFileRoute("/login")({
@@ -22,6 +20,5 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginRoute() {
-  const { instagramLoginCode, error } = Route.useSearch();
-  return <InstagramLoginPage loginCode={instagramLoginCode} oauthError={error} />;
+  return <CredentialLoginPage role="influencer" redirectTo={Route.useSearch().redirect} />;
 }

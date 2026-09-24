@@ -7,7 +7,6 @@ const publicAuthPaths = new Set([
   "/auth/login",
   "/auth/register",
   "/auth/refresh",
-  "/auth/instagram/exchange",
 ]);
 
 /** The only HTTP client feature modules should use for private API requests. */
@@ -16,6 +15,30 @@ export const apiClient = axios.create({
   timeout: 15_000,
   headers: { Accept: "application/json", "Content-Type": "application/json" },
 });
+
+type RefreshedTokens = { accessToken: string; refreshToken: string };
+
+// Refresh tokens are rotated by the API and can only be used once. When the
+// app is restored, several queries can receive a 401 at the same time. Keep
+// one renewal in flight so they all reuse the new tokens instead of one of
+// them invalidating the just-renewed session.
+let refreshInFlight: Promise<RefreshedTokens> | null = null;
+
+function refreshSession(refreshToken: string) {
+  if (!refreshInFlight) {
+    refreshInFlight = apiClient
+      .post<RefreshedTokens>("/auth/refresh", { refreshToken })
+      .then(({ data }) => {
+        useAuthStore.getState().updateTokens(data);
+        return data;
+      })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+
+  return refreshInFlight;
+}
 
 apiClient.interceptors.request.use((config) => {
   const accessToken = useAuthStore.getState().accessToken;
@@ -45,15 +68,11 @@ apiClient.interceptors.response.use(
       !originalRequest._retriedAfterRefresh &&
       !publicAuthPaths.has(originalRequest.url?.split("?")[0] ?? "")
     ) {
-      const { refreshToken, updateTokens, signOut, user } = useAuthStore.getState();
+      const { refreshToken, signOut, user } = useAuthStore.getState();
       if (refreshToken) {
         originalRequest._retriedAfterRefresh = true;
         try {
-          const { data } = await apiClient.post<{ accessToken: string; refreshToken: string }>(
-            "/auth/refresh",
-            { refreshToken },
-          );
-          updateTokens(data);
+          await refreshSession(refreshToken);
           return apiClient.request(originalRequest);
         } catch {
           // The expired refresh session is handled below with one clean redirect.

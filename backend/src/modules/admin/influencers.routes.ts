@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { requireRole } from '../../shared/auth/authorization.js';
 import { parseOrThrow } from '../../shared/validation/pagination.js';
-import { getAdminInfluencer, getAdminInfluencerInstagramProfile, listAdminInfluencers, updateAdminInfluencerStatus } from './influencers.service.js';
+import { getAdminInfluencer, getAdminInfluencerInstagramProfile, listAdminInfluencers, provisionAdminInfluencerCredentials, updateAdminInfluencerStatus } from './influencers.service.js';
 import { getAssignedProductIds, setCreatorProductAssignments } from '../product-assignments/product-assignments.service.js';
 
 const listQuerySchema = z.object({
@@ -13,6 +13,10 @@ const listQuerySchema = z.object({
 });
 const influencerParamsSchema = z.object({ influencerId: z.string().cuid() });
 const updateStatusSchema = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED']) });
+const provisionCredentialsSchema = z.object({
+  email: z.string().email().max(320).transform((email) => email.trim().toLowerCase()),
+  password: z.string().min(12).max(128),
+});
 
 export const adminInfluencerRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
@@ -40,6 +44,13 @@ export const adminInfluencerRoutes: FastifyPluginAsync = async (app) => {
     const { influencerId } = parseOrThrow(influencerParamsSchema, request.params);
     const { status } = parseOrThrow(updateStatusSchema, request.body);
     return { influencer: await updateAdminInfluencerStatus(app, actor.userId, influencerId, status) };
+  });
+
+  app.put('/admin/influencers/:influencerId/credentials', async (request) => {
+    requireRole(request, ['ADMIN']);
+    const { influencerId } = parseOrThrow(influencerParamsSchema, request.params);
+    const input = parseOrThrow(provisionCredentialsSchema, request.body);
+    return { influencer: await provisionAdminInfluencerCredentials(app, influencerId, input) };
   });
 
   // GET influencer assigned products across stores

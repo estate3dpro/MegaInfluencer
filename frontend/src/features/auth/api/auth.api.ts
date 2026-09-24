@@ -12,6 +12,18 @@ export type ApiUser = {
 };
 
 export type LoginInput = { email: string; password: string };
+export type InfluencerRegistrationInput = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+export type StoreRegistrationInput = {
+  businessName: string;
+  email: string;
+  password: string;
+};
 export type LoginResponse = { accessToken: string; refreshToken: string; user: ApiUser };
 
 const apiRoleToAppRole: Record<ApiUserRole, Role> = {
@@ -36,9 +48,23 @@ export async function login(input: LoginInput) {
   return data;
 }
 
-export async function exchangeInstagramLoginTicket(code: string) {
-  const { data } = await apiClient.post<LoginResponse>("/auth/instagram/exchange", { code });
-  return data;
+export async function registerInfluencer(input: InfluencerRegistrationInput) {
+  const { data } = await apiClient.post<{ user: ApiUser }>("/auth/register", {
+    ...input,
+    displayName: `${input.firstName.trim()} ${input.lastName.trim()}`,
+    role: "INFLUENCER",
+  });
+  return data.user;
+}
+
+export async function registerStoreOwner(input: StoreRegistrationInput) {
+  const { data } = await apiClient.post<{ user: ApiUser }>("/auth/register", {
+    email: input.email,
+    password: input.password,
+    displayName: input.businessName.trim(),
+    role: "STORE_OWNER",
+  });
+  return data.user;
 }
 
 export async function getCurrentUser() {

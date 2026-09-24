@@ -9,9 +9,11 @@ export type InfluencerTrackedLink = {
   productTitle?: string | null;
   productImage?: string | null;
   productPrice?: string | null;
+  products?: Array<{ id: string; title: string; imageUrl: string | null; price: string | null }>;
+  productCount?: number;
   slug: string;
   url: string;
-  targetType: "STORE" | "PRODUCT";
+  targetType: "STORE" | "PRODUCT" | "COLLECTION";
   commissionRate: number;
   status: "ACTIVE" | "PAUSED";
   clicks: number;
@@ -29,6 +31,7 @@ export type GetInfluencerLinksResponse = {
 export type CreateInfluencerLinkInput = {
   organizationId: string;
   productId?: string | null;
+  productIds?: string[];
   customSlug?: string | null;
 };
 

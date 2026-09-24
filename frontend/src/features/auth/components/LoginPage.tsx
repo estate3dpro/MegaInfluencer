@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Instagram, ShieldCheck, Sparkles, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isApiError } from "@/lib/api/api-error";
-import { exchangeInstagramLoginTicket, login, toAuthUser } from "@/features/auth/api/auth.api";
+import { login, registerInfluencer, registerStoreOwner, toAuthUser } from "@/features/auth/api/auth.api";
 import { roleHome, type Role } from "@/features/auth/types";
 import { useAuthStore } from "@/stores/auth-store";
 
-type CredentialRole = "admin" | "store-admin";
+type CredentialRole = Role;
 
 const portalDetails: Record<
   Role,
@@ -158,93 +158,185 @@ export function CredentialLoginPage({
           {mutation.isPending ? "Signing in..." : `Sign in as ${details.label}`}
         </Button>
       </form>
+      {role === "influencer" || role === "store-admin" ? (
+        <p className="mt-5 text-center text-sm text-muted-foreground">
+          New to MegaInfluencer?{" "}
+          <a href={role === "influencer" ? "/register" : "/store/register"} className="font-semibold text-primary hover:underline">
+            Create your account
+          </a>
+        </p>
+      ) : null}
     </AuthLayout>
   );
 }
 
-export function InstagramLoginPage({
-  loginCode,
-  oauthError,
-}: {
-  loginCode?: string;
-  oauthError?: string;
-}) {
+export function InfluencerRegistrationPage() {
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
-  const instagramLoginUrl = import.meta.env.VITE_INSTAGRAM_LOGIN_URL;
-  const [message, setMessage] = useState<string | null>(null);
-  const exchangedCode = useRef<string | null>(null);
-  const ticketMutation = useMutation({ mutationFn: exchangeInstagramLoginTicket });
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const mutation = useMutation({ mutationFn: registerInfluencer });
 
-  useEffect(() => {
-    if (!loginCode || exchangedCode.current === loginCode) return;
-    exchangedCode.current = loginCode;
-    ticketMutation.mutate(loginCode, {
-      onSuccess: (response) => {
-        const user = toAuthUser(response.user);
-        if (user.activeRole !== "influencer") {
-          setMessage("This Instagram account is not authorized for the Influencer workspace.");
-          return;
-        }
-        setSession({
-          user,
-          accessToken: response.accessToken,
-          refreshToken: response.refreshToken,
-        });
-        void navigate({ to: roleHome.influencer, replace: true });
-      },
-    });
-  }, [loginCode, navigate, setSession, ticketMutation]);
-
-  function startInstagramLogin() {
-    if (!instagramLoginUrl) {
-      setMessage(
-        "Instagram sign-in needs VITE_INSTAGRAM_LOGIN_URL and a backend OAuth callback before it can be enabled.",
-      );
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+    if (password !== confirmPassword) {
+      setFormError("Passwords do not match.");
       return;
     }
-    window.location.assign(instagramLoginUrl);
+
+    const created = await mutation
+      .mutateAsync({ firstName, lastName, email, phone: phone || undefined, password })
+      .catch(() => null);
+    if (!created) return;
+
+    const session = await login({ email, password }).catch(() => null);
+    if (!session) {
+      void navigate({ to: "/login" });
+      return;
+    }
+    setSession({
+      user: toAuthUser(session.user),
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    });
+    void navigate({ to: roleHome.influencer });
   }
-  const oauthMessage =
-    oauthError === "instagram_oauth_denied"
-      ? "Instagram authorization was cancelled. Please try again."
-      : oauthError
-        ? "Instagram sign-in could not be completed. Please try again."
-        : null;
+
   const errorMessage =
-    message ??
-    (isApiError(ticketMutation.error)
-      ? ticketMutation.error.message
-      : ticketMutation.error
-        ? "Instagram sign-in could not be completed. Please try again."
-        : oauthMessage);
+    formError ??
+    (isApiError(mutation.error)
+      ? mutation.error.message
+      : mutation.error
+        ? "Unable to create your account. Please try again."
+        : null);
+
   return (
     <AuthLayout role="influencer">
       <BrandHeading
         eyebrow="Influencer"
-        title={ticketMutation.isPending ? "Signing you in" : "Connect with Instagram"}
-        description={
-          ticketMutation.isPending
-            ? "We are securely preparing your Influencer workspace."
-            : "Use the Instagram account you use to create and publish content."
-        }
+        title="Create your account"
+        description="Set up your MegaInfluencer account, then connect Instagram from your profile."
       />
-      <Button
-        className="mt-8 h-11 w-full gap-2"
-        onClick={startInstagramLogin}
-        disabled={ticketMutation.isPending}
-      >
-        <Instagram className="h-4 w-4" />
-        {ticketMutation.isPending ? "Signing in with Instagram..." : "Continue with Instagram"}
-      </Button>
-      {errorMessage ? (
-        <p className="mt-4 rounded-lg bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
-          {errorMessage}
-        </p>
-      ) : null}
-      <p className="mt-5 text-center text-xs leading-5 text-muted-foreground">
-        By continuing, you authorize MegaInfluencer to identify your Instagram account for creator
-        workspace access.
+      <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            First name
+            <Input value={firstName} onChange={(event) => setFirstName(event.target.value)} autoComplete="given-name" required />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-foreground">
+            Last name
+            <Input value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete="family-name" required />
+          </label>
+        </div>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Email address
+          <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Phone number <span className="font-normal text-muted-foreground">(optional)</span>
+          <Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Password
+          <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Confirm password
+          <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+        </label>
+        {errorMessage ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
+        <Button className="h-11 w-full" type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? "Creating account..." : "Create influencer account"}
+        </Button>
+      </form>
+      <p className="mt-5 text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <a href="/login" className="font-semibold text-primary hover:underline">Sign in</a>
+      </p>
+    </AuthLayout>
+  );
+}
+
+export function StoreRegistrationPage() {
+  const navigate = useNavigate();
+  const setSession = useAuthStore((state) => state.setSession);
+  const [businessName, setBusinessName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const mutation = useMutation({ mutationFn: registerStoreOwner });
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+    if (password !== confirmPassword) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+
+    const created = await mutation.mutateAsync({ businessName, email, password }).catch(() => null);
+    if (!created) return;
+
+    const session = await login({ email, password }).catch(() => null);
+    if (!session) {
+      void navigate({ to: "/store/login" });
+      return;
+    }
+    setSession({
+      user: toAuthUser(session.user),
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    });
+    void navigate({ to: roleHome["store-admin"] });
+  }
+
+  const errorMessage =
+    formError ??
+    (isApiError(mutation.error)
+      ? mutation.error.message
+      : mutation.error
+        ? "Unable to create your store account. Please try again."
+        : null);
+
+  return (
+    <AuthLayout role="store-admin">
+      <BrandHeading
+        eyebrow="Store owner"
+        title="Create your brand account"
+        description="Create your workspace to manage products, creators, and campaign performance."
+      />
+      <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Brand or store name
+          <Input value={businessName} onChange={(event) => setBusinessName(event.target.value)} autoComplete="organization" required />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Work email address
+          <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Password
+          <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold text-foreground">
+          Confirm password
+          <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+        </label>
+        {errorMessage ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
+        <Button className="h-11 w-full" type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? "Creating account..." : "Create store account"}
+        </Button>
+      </form>
+      <p className="mt-5 text-center text-sm text-muted-foreground">
+        Already have a store account?{" "}
+        <a href="/store/login" className="font-semibold text-primary hover:underline">Sign in</a>
       </p>
     </AuthLayout>
   );

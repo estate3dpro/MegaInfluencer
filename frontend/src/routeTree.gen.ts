@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as InfluencerRouteImport } from './routes/influencer'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as StoreAdminRouteImport } from './routes/store-admin'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminPageRouteImport } from './routes/admin/$page'
@@ -74,6 +75,7 @@ import { Route as StoreAdminReportsRouteImport } from './routes/store-admin/repo
 import { Route as StoreAdminSettingsRouteImport } from './routes/store-admin/settings'
 import { Route as StoreAdminStoreRouteImport } from './routes/store-admin/store'
 import { Route as StoreLoginRouteImport } from './routes/store/login'
+import { Route as StoreRegisterRouteImport } from './routes/store/register'
 import { Route as AdminInfluencersIndexRouteImport } from './routes/admin/influencers.index'
 import { Route as AdminInfluencersInfluencerIdRouteImport } from './routes/admin/influencers/$influencerId'
 import { Route as InfluencerCampaignsIndexRouteImport } from './routes/influencer/campaigns/index'
@@ -109,6 +111,11 @@ const InfluencerRoute = InfluencerRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StoreAdminRoute = StoreAdminRouteImport.update({
@@ -420,6 +427,11 @@ const StoreLoginRoute = StoreLoginRouteImport.update({
   path: '/store/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StoreRegisterRoute = StoreRegisterRouteImport.update({
+  id: '/store/register',
+  path: '/store/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminInfluencersIndexRoute = AdminInfluencersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -516,6 +528,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/influencer': typeof InfluencerRouteWithChildren
   '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/store-admin': typeof StoreAdminRouteWithChildren
   '/admin/$page': typeof AdminPageRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
@@ -574,6 +587,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/settings': typeof StoreAdminSettingsRoute
   '/store-admin/store': typeof StoreAdminStoreRoute
   '/store/login': typeof StoreLoginRoute
+  '/store/register': typeof StoreRegisterRoute
   '/admin/': typeof AdminIndexRoute
   '/influencer/': typeof InfluencerIndexRoute
   '/store-admin/': typeof StoreAdminIndexRoute
@@ -597,6 +611,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/admin/$page': typeof AdminPageRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/attribution': typeof AdminAttributionRoute
@@ -647,6 +662,7 @@ export interface FileRoutesByTo {
   '/store-admin/settings': typeof StoreAdminSettingsRoute
   '/store-admin/store': typeof StoreAdminStoreRoute
   '/store/login': typeof StoreLoginRoute
+  '/store/register': typeof StoreRegisterRoute
   '/admin': typeof AdminIndexRoute
   '/influencer': typeof InfluencerIndexRoute
   '/store-admin': typeof StoreAdminIndexRoute
@@ -673,6 +689,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/influencer': typeof InfluencerRouteWithChildren
   '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/store-admin': typeof StoreAdminRouteWithChildren
   '/admin/$page': typeof AdminPageRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
@@ -731,6 +748,7 @@ export interface FileRoutesById {
   '/store-admin/settings': typeof StoreAdminSettingsRoute
   '/store-admin/store': typeof StoreAdminStoreRoute
   '/store/login': typeof StoreLoginRoute
+  '/store/register': typeof StoreRegisterRoute
   '/admin/': typeof AdminIndexRoute
   '/influencer/': typeof InfluencerIndexRoute
   '/store-admin/': typeof StoreAdminIndexRoute
@@ -758,6 +776,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/influencer'
     | '/login'
+    | '/register'
     | '/store-admin'
     | '/admin/$page'
     | '/admin/analytics'
@@ -816,6 +835,7 @@ export interface FileRouteTypes {
     | '/store-admin/settings'
     | '/store-admin/store'
     | '/store/login'
+    | '/store/register'
     | '/admin/'
     | '/influencer/'
     | '/store-admin/'
@@ -839,6 +859,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/register'
     | '/admin/$page'
     | '/admin/analytics'
     | '/admin/attribution'
@@ -889,6 +910,7 @@ export interface FileRouteTypes {
     | '/store-admin/settings'
     | '/store-admin/store'
     | '/store/login'
+    | '/store/register'
     | '/admin'
     | '/influencer'
     | '/store-admin'
@@ -914,6 +936,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/influencer'
     | '/login'
+    | '/register'
     | '/store-admin'
     | '/admin/$page'
     | '/admin/analytics'
@@ -972,6 +995,7 @@ export interface FileRouteTypes {
     | '/store-admin/settings'
     | '/store-admin/store'
     | '/store/login'
+    | '/store/register'
     | '/admin/'
     | '/influencer/'
     | '/store-admin/'
@@ -998,8 +1022,10 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   InfluencerRoute: typeof InfluencerRouteWithChildren
   LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
   StoreAdminRoute: typeof StoreAdminRouteWithChildren
   StoreLoginRoute: typeof StoreLoginRoute
+  StoreRegisterRoute: typeof StoreRegisterRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1030,6 +1056,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/store-admin': {
@@ -1459,6 +1492,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StoreLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/store/register': {
+      id: '/store/register'
+      path: '/store/register'
+      fullPath: '/store/register'
+      preLoaderRoute: typeof StoreRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/influencers/': {
       id: '/admin/influencers/'
       path: '/'
@@ -1828,8 +1868,10 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   InfluencerRoute: InfluencerRouteWithChildren,
   LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
   StoreAdminRoute: StoreAdminRouteWithChildren,
   StoreLoginRoute: StoreLoginRoute,
+  StoreRegisterRoute: StoreRegisterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

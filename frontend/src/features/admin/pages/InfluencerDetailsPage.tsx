@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, Images, Instagram, Package, Plus, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
@@ -27,6 +27,7 @@ import {
   getAdminInfluencerAssignedProducts,
   getAdminInstagramProfile,
   getInfluencer,
+  provisionInfluencerCredentials,
   updateAdminInfluencerAssignedProducts,
   updateInfluencerStatus,
   type InfluencerStatus,
@@ -193,6 +194,17 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
         />
       </section>
 
+      <ProvisionCredentialsCard
+        influencerId={influencerId}
+        email={influencer.email}
+        onProvisioned={(updated) => {
+          client.setQueryData(["admin", "influencer", influencerId], (current: typeof query.data) =>
+            current ? { ...current, ...updated } : current,
+          );
+          void client.invalidateQueries({ queryKey: ["admin", "influencers"] });
+        }}
+      />
+
       {/* Assigned Products Section */}
       <AssignedProductsSection influencerId={influencerId} displayName={influencer.displayName} />
 
@@ -211,6 +223,77 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ProvisionCredentialsCard({
+  influencerId,
+  email: currentEmail,
+  onProvisioned,
+}: {
+  influencerId: string;
+  email: string | null;
+  onProvisioned: (updated: { id: string; email: string | null; updatedAt: string }) => void;
+}) {
+  const [email, setEmail] = useState(currentEmail ?? "");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const mutation = useMutation({
+    mutationFn: () => provisionInfluencerCredentials(influencerId, { email, password }),
+    onSuccess: (updated) => {
+      onProvisioned(updated);
+      setPassword("");
+      setConfirmPassword("");
+      toast.success("Login credentials saved. Share the email and temporary password securely.");
+    },
+  });
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+    if (password !== confirmPassword) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+    mutation.mutate();
+  }
+
+  const errorMessage =
+    formError ??
+    (mutation.error ? "Unable to save credentials. Check the email and try again." : null);
+
+  return (
+    <Card className="shadow-none">
+      <CardHeader>
+        <CardTitle>Influencer login credentials</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Use this for creators who previously signed in through Instagram only. The password is securely hashed and cannot be viewed again after saving.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+          <label className="grid gap-2 text-sm font-medium sm:col-span-2">
+            Login email
+            <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="off" required />
+          </label>
+          <label className="grid gap-2 text-sm font-medium">
+            Temporary password
+            <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={12} autoComplete="new-password" required />
+          </label>
+          <label className="grid gap-2 text-sm font-medium">
+            Confirm temporary password
+            <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={12} autoComplete="new-password" required />
+          </label>
+          {errorMessage ? <p className="text-sm text-destructive sm:col-span-2">{errorMessage}</p> : null}
+          <div className="sm:col-span-2">
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving credentials..." : currentEmail ? "Reset login credentials" : "Create login credentials"}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 

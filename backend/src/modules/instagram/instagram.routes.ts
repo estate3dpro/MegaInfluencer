@@ -3,35 +3,33 @@ import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { parseOrThrow } from '../../shared/validation/pagination.js';
-import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, exchangeInstagramLoginTicket, forwardWebhookToLocal, getConnection, getInstagramProfile, listInstagramMedia, recordWebhookDelivery, verifyWebhookSignature } from './instagram.service.js';
-import { exchangeLoginTicketSchema, mediaQuerySchema, oauthCallbackQuerySchema, webhookVerificationSchema } from './instagram.schema.js';
+import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, forwardWebhookToLocal, getConnection, getInstagramProfile, listInstagramMedia, recordWebhookDelivery, verifyWebhookSignature } from './instagram.service.js';
+import { mediaQuerySchema, oauthCallbackQuerySchema, webhookVerificationSchema } from './instagram.schema.js';
 import { config } from '../../config/env.js';
 import { processInstagramCommentAutomations } from '../instagram-automations/instagram-comment-automation.service.js';
 import { processInstagramDirectMessages } from '../instagram-direct-inbox/instagram-direct-inbox.service.js';
 
 export const instagramAuthRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/auth/instagram', async (_request, reply) => reply.redirect(await beginInstagramOAuth(app, 'LOGIN')));
-
   app.get('/auth/instagram/callback', async (request, reply) => {
     const query = parseOrThrow(oauthCallbackQuerySchema, request.query);
-    if (query.error) return reply.redirect(`${config.frontendOrigin}/login?error=instagram_oauth_denied`);
-    if (!query.code || !query.state) return reply.redirect(`${config.frontendOrigin}/login?error=instagram_oauth_invalid`);
+    if (query.error) return reply.redirect(`${config.frontendOrigin}/influencer/profile?instagram=denied`);
+    if (!query.code || !query.state) return reply.redirect(`${config.frontendOrigin}/influencer/profile?instagram=invalid`);
     try {
       const { redirectUrl } = await completeInstagramOAuth(app, { code: query.code, state: query.state });
       return reply.redirect(redirectUrl);
     } catch (error) {
       app.log.warn({ err: error, requestId: request.id }, 'Instagram OAuth callback failed');
-      return reply.redirect(`${config.frontendOrigin}/login?error=instagram_oauth_failed`);
+      return reply.redirect(`${config.frontendOrigin}/influencer/profile?instagram=failed`);
     }
-  });
-
-  app.post('/auth/instagram/exchange', async (request) => {
-    const { code } = parseOrThrow(exchangeLoginTicketSchema, request.body);
-    return exchangeInstagramLoginTicket(app, code);
   });
 };
 
 export const influencerInstagramRoutes: FastifyPluginAsync = async (app) => {
+  app.post('/influencer/instagram/connect', async (request) => {
+    const actor = requireRole(request, ['INFLUENCER']);
+    return { authorizationUrl: await beginInstagramOAuth(app, 'CONNECT', actor.userId) };
+  });
+
   app.get('/influencer/instagram/connect', async (request, reply) => {
     const actor = requireRole(request, ['INFLUENCER']);
     return reply.redirect(await beginInstagramOAuth(app, 'CONNECT', actor.userId));

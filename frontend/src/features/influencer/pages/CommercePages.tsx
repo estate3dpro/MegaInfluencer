@@ -428,6 +428,8 @@ export function LinksPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("storewide");
+  const [linkType, setLinkType] = useState<"store" | "product" | "collection">("store");
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [customSlug, setCustomSlug] = useState("");
 
   const queryClient = useQueryClient();
@@ -458,6 +460,8 @@ export function LinksPage() {
       setIsCreateOpen(false);
       setCustomSlug("");
       setSelectedProductId("storewide");
+      setSelectedProductIds([]);
+      setLinkType("store");
     },
     onError: (err: any) => {
       toast.error(err?.message || "Failed to create tracking link");
@@ -473,9 +477,18 @@ export function LinksPage() {
       toast.error("Please select a store");
       return;
     }
+    if (linkType === "product" && selectedProductId === "storewide") {
+      toast.error("Please select a product");
+      return;
+    }
+    if (linkType === "collection" && selectedProductIds.length < 2) {
+      toast.error("Choose at least two products for a collection link");
+      return;
+    }
     createMutation.mutate({
       organizationId: selectedStoreId,
-      productId: selectedProductId === "storewide" ? null : selectedProductId,
+      productId: linkType === "product" ? selectedProductId : null,
+      productIds: linkType === "collection" ? selectedProductIds : undefined,
       customSlug: customSlug.trim() || null,
     });
   };
@@ -510,6 +523,7 @@ export function LinksPage() {
                         onValueChange={(val) => {
                           setSelectedStoreId(val);
                           setSelectedProductId("storewide");
+                          setSelectedProductIds([]);
                         }}
                       >
                         <SelectTrigger id="store">
@@ -526,21 +540,40 @@ export function LinksPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="product">Target (Store or Specific Product)</Label>
+                      <Label>Link destination</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([['store', 'Store'], ['product', 'One product'], ['collection', 'Collection']] as const).map(([value, label]) => (
+                          <Button key={value} type="button" size="sm" variant={linkType === value ? "default" : "outline"} onClick={() => setLinkType(value)}>{label}</Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {linkType === "product" ? <div className="space-y-2">
+                      <Label htmlFor="product">Product *</Label>
                       <Select value={selectedProductId} onValueChange={setSelectedProductId}>
                         <SelectTrigger id="product">
                           <SelectValue placeholder="Storewide Homepage" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="storewide">Storewide Homepage Link</SelectItem>
-                          {productsQuery.data?.products?.map((p) => (
+                          {productsQuery.data?.products?.filter((p) => !selectedStoreId || stores.find((store) => store.id === selectedStoreId)?.slug === p.storeSlug).map((p) => (
                             <SelectItem key={p.id || p.name} value={p.id || p.name}>
                               {p.name} ({p.price})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
+                    </div> : null}
+
+                    {linkType === "collection" ? <div className="space-y-2">
+                      <div className="flex items-center justify-between"><Label>Select at least two products *</Label><span className="text-xs text-muted-foreground">{selectedProductIds.length} selected</span></div>
+                      <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-2">
+                        {productsQuery.data?.products?.filter((p) => !selectedStoreId || stores.find((store) => store.id === selectedStoreId)?.slug === p.storeSlug).map((product) => {
+                          const checked = selectedProductIds.includes(product.id);
+                          return <label key={product.id} className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-muted"><input type="checkbox" checked={checked} onChange={() => setSelectedProductIds((ids) => checked ? ids.filter((id) => id !== product.id) : [...ids, product.id])} /><span className="min-w-0 flex-1 truncate text-sm">{product.name}</span><span className="text-xs text-muted-foreground">{product.price}</span></label>;
+                        })}
+                        {!productsQuery.data?.products?.length ? <p className="p-2 text-sm text-muted-foreground">Choose a store to view your assigned products.</p> : null}
+                      </div>
+                    </div> : null}
 
                     <div className="space-y-2">
                       <Label htmlFor="slug">Custom Alias / Slug (Optional)</Label>
@@ -606,7 +639,9 @@ export function LinksPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-sm truncate text-foreground">
-                        {link.productTitle || `${link.storeName} Store Link`}
+                        {link.targetType === "COLLECTION"
+                          ? `${link.productCount ?? link.products?.length ?? 0} product collection`
+                          : link.productTitle || `${link.storeName} Store Link`}
                       </p>
                       <Badge variant="secondary" className="text-[10px] uppercase font-bold">
                         {link.targetType}
@@ -615,6 +650,7 @@ export function LinksPage() {
                     <p className="mt-0.5 font-mono text-xs text-primary truncate">
                       {link.url}
                     </p>
+                    {link.targetType === "COLLECTION" ? <p className="mt-1 truncate text-xs text-muted-foreground">{link.products?.map((product) => product.title).join(" · ")}</p> : null}
                   </div>
                 </div>
 

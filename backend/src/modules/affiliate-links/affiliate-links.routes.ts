@@ -24,6 +24,9 @@ function safeDestination(shopDomain: string | null, path: string) {
   const base = new URL(`https://${shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '')}`);
   return new URL(path, base);
 }
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!));
+}
 function asLink(row: any, baseUrl: string) {
   const clicks = Number(row._count?.clicks ?? 0);
   const commissions = (row.commissions ?? []).filter((commission: any) => commission.status !== 'REVERSED');
@@ -85,6 +88,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
       include: {
         organization: { select: { id: true, name: true, slug: true } },
         product: { select: { id: true, title: true, imageUrl: true, price: true } },
+        products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
         _count: { select: { clicks: true } },
         commissions: { select: { orderAmount: true, amount: true, status: true } },
       },
@@ -110,6 +114,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
           productTitle: row.product?.title ?? null,
           productImage: row.product?.imageUrl ?? null,
           productPrice: row.product?.price ?? null,
+          products: (row.products ?? []).map((item: any) => ({ id: item.product.id, title: item.product.title, imageUrl: item.product.imageUrl, price: item.product.price })),
+          productCount: row.products?.length ?? 0,
           slug: row.slug,
           url: `${baseUrl}/r/${row.slug}`,
           targetType: row.targetType,
@@ -129,12 +135,19 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
   const createInfluencerLinkSchema = z.object({
     organizationId: z.string().min(1),
     productId: z.string().min(1).optional().nullable(),
+    productIds: z.array(z.string().min(1)).min(2).max(50).optional(),
     customSlug: z.string().trim().regex(/^[a-zA-Z0-9_-]{3,50}$/, 'Slug must be 3-50 alphanumeric characters').optional().nullable(),
   });
 
   app.post('/influencer/affiliate-links', async (request, reply) => {
     const actor = requireRole(request, ['INFLUENCER']);
     const input = createInfluencerLinkSchema.parse(request.body);
+    if (input.productId && input.productIds?.length) {
+      throw new AppError('INVALID_LINK_TARGET', 'Choose either one product or a product collection.', 422);
+    }
+    if (input.productIds && new Set(input.productIds).size !== input.productIds.length) {
+      throw new AppError('DUPLICATE_PRODUCTS', 'A product can only be selected once.', 422);
+    }
 
     const organization = await prisma.organization.findUnique({
       where: { id: input.organizationId },
@@ -155,6 +168,15 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
       });
       if (!product) throw new AppError('PRODUCT_NOT_FOUND', 'The selected product does not belong to this store.', 404);
     }
+    const collectionProducts = input.productIds?.length
+      ? await prisma.shopifyProduct.findMany({
+          where: { id: { in: input.productIds }, organizationId: organization.id },
+          select: { id: true, title: true, imageUrl: true, price: true },
+        })
+      : [];
+    if (input.productIds?.length && collectionProducts.length !== input.productIds.length) {
+      throw new AppError('PRODUCT_NOT_FOUND', 'One or more selected products do not belong to this store.', 404);
+    }
 
     await ensureCreatorCode(prisma, actor.userId);
 
@@ -169,14 +191,18 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         organizationId: organization.id,
         creatorId: actor.userId,
         productId: product?.id ?? null,
-        targetType: product ? 'PRODUCT' : 'STORE',
+        targetType: collectionProducts.length ? 'COLLECTION' : product ? 'PRODUCT' : 'STORE',
         destinationPath: product?.handle ? `/products/${product.handle}` : '/',
         commissionRate: 10,
         slug: linkSlug,
+        products: collectionProducts.length
+          ? { create: input.productIds!.map((productId, position) => ({ productId, position })) }
+          : undefined,
       },
       include: {
         organization: { select: { id: true, name: true, slug: true } },
         product: { select: { id: true, title: true, imageUrl: true, price: true } },
+        products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
         _count: { select: { clicks: true } },
         commissions: { select: { orderAmount: true, amount: true, status: true } },
       },
@@ -193,6 +219,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         productTitle: link.product?.title ?? null,
         productImage: link.product?.imageUrl ?? null,
         productPrice: link.product?.price ?? null,
+        products: (link.products ?? []).map((item: any) => ({ id: item.product.id, title: item.product.title, imageUrl: item.product.imageUrl, price: item.product.price })),
+        productCount: link.products?.length ?? 0,
         slug: link.slug,
         url: `${baseUrl}/r/${link.slug}`,
         targetType: link.targetType,
@@ -213,10 +241,22 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
   app.get('/r/:slug', async (request, reply) => {
-    const { slug: linkSlug } = request.params as { slug: string }; const link = await prisma.affiliateLink.findUnique({ where: { slug: linkSlug }, include: { organization: { select: { shopDomain: true } }, creator: { select: { creatorCode: true } } } });
+    const { slug: linkSlug } = request.params as { slug: string }; const link = await prisma.affiliateLink.findUnique({ where: { slug: linkSlug }, include: { organization: { select: { name: true, shopDomain: true } }, creator: { select: { creatorCode: true } }, products: { include: { product: { select: { title: true, handle: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } } } });
     if (!link || link.status !== 'ACTIVE' || (link.expiresAt && link.expiresAt <= new Date())) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'This affiliate link is unavailable.', 404);
     const query = request.query as Record<string, string | undefined>; const visitorHash = request.headers['user-agent'] ? createHash('sha256').update(`${request.headers['user-agent']}|${request.ip}`).digest('hex') : null;
     await prisma.affiliateLinkClick.create({ data: { organizationId: link.organizationId, linkId: link.id, visitorHash, referrer: request.headers.referer?.slice(0, 2_000), utmSource: query.utm_source?.slice(0, 255), utmMedium: query.utm_medium?.slice(0, 255), utmCampaign: query.utm_campaign?.slice(0, 255) } });
+    if (link.targetType === 'COLLECTION') {
+      const creatorCode = link.creatorId ? (link.creator?.creatorCode ?? await ensureCreatorCode(prisma, link.creatorId)) : null;
+      const cards = link.products.map((item: any) => {
+        const destination = safeDestination(link.organization.shopDomain, item.product.handle ? `/products/${item.product.handle}` : '/');
+        destination.searchParams.set('mi_link', link.slug);
+        if (creatorCode) { destination.searchParams.set('mi_creator_code', creatorCode); destination.searchParams.set('utm_creator_code', creatorCode); }
+        for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']) if (query[key]) destination.searchParams.set(key, query[key]!);
+        const image = item.product.imageUrl ? `<img src="${escapeHtml(item.product.imageUrl)}" alt="${escapeHtml(item.product.title)}">` : '<div class="image-placeholder">Product</div>';
+        return `<a class="product" href="${escapeHtml(destination.toString())}">${image}<h2>${escapeHtml(item.product.title)}</h2><p>${escapeHtml(item.product.price ?? '')}</p><span>View product →</span></a>`;
+      }).join('');
+      return reply.type('text/html; charset=utf-8').send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(link.organization.name)} picks</title><style>body{margin:0;background:#f8f7ff;color:#191628;font:16px system-ui,sans-serif}main{max-width:1050px;margin:auto;padding:48px 20px}h1{font-size:32px;margin:0 0 8px}.intro{color:#6e6880;margin:0 0 32px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}.product{display:block;background:#fff;color:inherit;text-decoration:none;border:1px solid #e6e2f0;border-radius:16px;overflow:hidden;padding:14px;box-shadow:0 4px 18px #24164d0a}.product:hover{border-color:#7158ef;transform:translateY(-2px)}img,.image-placeholder{width:100%;height:190px;object-fit:cover;border-radius:10px;background:#eee9ff}.image-placeholder{display:grid;place-items:center;color:#756b94}h2{font-size:16px;margin:14px 0 5px}p{margin:0;color:#665d7d;font-weight:600}.product span{display:block;margin-top:14px;color:#6249dd;font-weight:700;font-size:14px}</style></head><body><main><h1>${escapeHtml(link.organization.name)} picks</h1><p class="intro">A curated collection shared by your creator.</p><section class="grid">${cards}</section></main></body></html>`);
+    }
     const destination = safeDestination(link.organization.shopDomain, link.destinationPath);
     destination.searchParams.set('mi_link', link.slug);
     if (link.creatorId) {

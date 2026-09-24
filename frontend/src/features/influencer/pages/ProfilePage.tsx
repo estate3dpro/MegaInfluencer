@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   ExternalLink,
@@ -11,11 +11,15 @@ import {
 import { PageHeader } from "@/components/app/PageHeader";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isApiError } from "@/lib/api/api-error";
 import { queryKeys } from "@/lib/query-keys";
 import { initials } from "@/lib/format";
-import { getInstagramProfile } from "@/features/influencer/api/instagram.api";
+import {
+  getInstagramProfile,
+  startInstagramConnection,
+} from "@/features/influencer/api/instagram.api";
 import { useAuthStore } from "@/stores/auth-store";
 
 const numberFormatter = new Intl.NumberFormat("en-IN", {
@@ -36,6 +40,10 @@ export function ProfilePage() {
     queryFn: getInstagramProfile,
     staleTime: 60_000,
   });
+  const connectMutation = useMutation({
+    mutationFn: startInstagramConnection,
+    onSuccess: (authorizationUrl) => window.location.assign(authorizationUrl),
+  });
   const data = profileQuery.data;
   const profileName =
     data?.profile.name || data?.connection.displayName || user?.name || "Influencer";
@@ -43,6 +51,15 @@ export function ProfilePage() {
   const errorMessage = isApiError(profileQuery.error)
     ? profileQuery.error.message
     : "Instagram profile details could not be loaded.";
+  const connectionError = isApiError(connectMutation.error)
+    ? connectMutation.error.message
+    : connectMutation.error
+      ? "Instagram connection could not be started. Please try again."
+      : null;
+
+  function handleConnectInstagram() {
+    connectMutation.mutate();
+  }
 
   return (
     <div className="space-y-6">
@@ -73,25 +90,43 @@ export function ProfilePage() {
                 <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
               ) : null}
             </div>
-            {username ? (
-              <a
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                href={`https://instagram.com/${username}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Instagram className="h-4 w-4" /> View Instagram{" "}
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={handleConnectInstagram} disabled={connectMutation.isPending}>
+                <Instagram className="h-4 w-4" />
+                {connectMutation.isPending
+                  ? "Opening Instagram..."
+                  : username
+                    ? "Reconnect Instagram"
+                    : "Connect Instagram"}
+              </Button>
+              {username ? (
+                <a
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  href={`https://instagram.com/${username}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View Instagram <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              ) : null}
+            </div>
           </div>
+          {connectionError ? <p className="mt-4 text-sm text-destructive">{connectionError}</p> : null}
         </CardContent>
       </Card>
 
       {profileQuery.isLoading ? <ProfileLoading /> : null}
       {profileQuery.isError ? (
         <Card>
-          <CardContent className="p-6 text-sm text-destructive">{errorMessage}</CardContent>
+          <CardContent className="space-y-2 p-6">
+            <p className="font-medium">Instagram is not connected</p>
+            <p className="text-sm text-muted-foreground">
+              Connect your Instagram account to view profile insights, publish automations, and use inbox tools.
+            </p>
+            {!isApiError(profileQuery.error) || profileQuery.error.code !== "INSTAGRAM_NOT_CONNECTED" ? (
+              <p className="text-sm text-destructive">{errorMessage}</p>
+            ) : null}
+          </CardContent>
         </Card>
       ) : null}
       {data ? (

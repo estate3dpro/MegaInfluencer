@@ -72,6 +72,12 @@ export async function updateInfluencerStatus(id: string, status: InfluencerStatu
   }>(`/admin/influencers/${id}/status`, { status });
   return data.influencer;
 }
+export async function provisionInfluencerCredentials(id: string, input: { email: string; password: string }) {
+  const { data } = await apiClient.put<{
+    influencer: Pick<InfluencerDetails, "id" | "email" | "updatedAt">;
+  }>(`/admin/influencers/${id}/credentials`, input);
+  return data.influencer;
+}
 export async function getAdminInstagramProfile(id: string) {
   const { data } = await apiClient.get<AdminInstagramProfile>(
     `/admin/influencers/${id}/instagram-profile`,
