@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { randomBytes } from 'node:crypto';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { getAssignedProductIds } from '../product-assignments/product-assignments.service.js';
 import { config } from '../../config/env.js';
@@ -7,6 +8,18 @@ const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 
 
 function formatCurrency(amount: number): string {
   return inrFormat.format(amount);
+}
+
+function activeLinkWhere(creatorId: string) {
+  return {
+    creatorId,
+    status: 'ACTIVE',
+    OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+  };
+}
+
+function affiliateSlug() {
+  return randomBytes(9).toString('base64url');
 }
 
 export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
@@ -35,7 +48,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
           product: {
             include: {
               affiliateLinks: {
-                where: { creatorId: actor.userId },
+                where: activeLinkWhere(actor.userId),
                 include: { _count: { select: { clicks: true, commissions: true } } },
               },
             },
@@ -46,7 +59,24 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       if (!campaign?.product) return { products: [], stores: [] };
 
       const product = campaign.product;
-      const userLink = product.affiliateLinks?.[0];
+      // Campaigns guarantee creators can share the selected product. This
+      // backfills older accepted campaigns that were created before links
+      // were generated during assignment.
+      let userLink = product.affiliateLinks?.[0];
+      if (!userLink) {
+        userLink = await prisma.affiliateLink.create({
+          data: {
+            organizationId: campaign.organization.id,
+            creatorId: actor.userId,
+            productId: product.id,
+            targetType: 'PRODUCT',
+            destinationPath: product.handle ? `/products/${product.handle}` : '/',
+            commissionRate: 10,
+            slug: affiliateSlug(),
+          },
+          include: { _count: { select: { clicks: true, commissions: true } } },
+        });
+      }
       const price = Number(product.price || 0);
       return {
         products: [{
@@ -128,7 +158,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       include: {
         organization: { select: { name: true, slug: true } },
         affiliateLinks: {
-          where: { creatorId: actor.userId },
+          where: activeLinkWhere(actor.userId),
           include: {
             _count: { select: { clicks: true, commissions: true } },
           },

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 
 import { AppError } from '../../shared/errors/app-error.js';
@@ -32,6 +33,34 @@ async function assignCampaignProduct(tx: any, campaign: { productId: string | nu
     where: { productId_influencerId: { productId: campaign.productId, influencerId } },
     create: { productId: campaign.productId, organizationId: campaign.organizationId, influencerId },
     update: {},
+  });
+
+  const activeLink = await tx.affiliateLink.findFirst({
+    where: {
+      organizationId: campaign.organizationId,
+      productId: campaign.productId,
+      creatorId: influencerId,
+      status: 'ACTIVE',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    select: { id: true },
+  });
+  if (activeLink) return;
+
+  const product = await tx.shopifyProduct.findUnique({
+    where: { id: campaign.productId },
+    select: { handle: true },
+  });
+  await tx.affiliateLink.create({
+    data: {
+      organizationId: campaign.organizationId,
+      creatorId: influencerId,
+      productId: campaign.productId,
+      targetType: 'PRODUCT',
+      destinationPath: product?.handle ? `/products/${product.handle}` : '/',
+      commissionRate: 10,
+      slug: randomBytes(9).toString('base64url'),
+    },
   });
 }
 
