@@ -11,6 +11,7 @@ import {
   FileBarChart,
   Filter,
   Gauge,
+  HelpCircle,
   Users2,
   Instagram,
   LayoutDashboard,
@@ -79,7 +80,6 @@ export const influencerNav: NavGroup[] = [
     label: "Grow",
     items: [
       { title: "Discover", url: "/influencer/discover", icon: Compass },
-      // { title: "Campaigns", url: "/influencer/campaigns", icon: Megaphone },
       { title: "Instagram Automation", url: "/influencer/instagram-automation", icon: Instagram },
     ],
   },
@@ -91,6 +91,12 @@ export const influencerNav: NavGroup[] = [
       { title: "Links", url: "/influencer/links", icon: Link2 },
       { title: "Orders", url: "/influencer/orders", icon: ShoppingBag },
       { title: "Earnings", url: "/influencer/earnings", icon: Wallet },
+    ],
+  },
+  {
+    label: "Support",
+    items: [
+      { title: "Help & Guide", url: "/influencer/help", icon: HelpCircle },
     ],
   },
 ];
@@ -124,11 +130,12 @@ export const storeAdminNav: NavGroup[] = [
     ],
   },
   {
-    label: "Setup",
+    label: "Setup & Help",
     items: [
       { title: "Store", url: "/store-admin/store", icon: StoreIcon },
       { title: "Integrations", url: "/store-admin/integrations", icon: Blocks },
       { title: "Settings", url: "/store-admin/settings", icon: Settings },
+      { title: "Help & Guide", url: "/store-admin/help", icon: HelpCircle },
     ],
   },
 ];
@@ -171,6 +178,7 @@ export const adminNav: NavGroup[] = [
       { title: "Integrations", url: "/admin/integrations", icon: Blocks },
       { title: "Reports", url: "/admin/reports", icon: FileBarChart },
       { title: "Settings", url: "/admin/settings", icon: Gauge },
+      { title: "Help & Guide", url: "/admin/help", icon: HelpCircle },
     ],
   },
 ];

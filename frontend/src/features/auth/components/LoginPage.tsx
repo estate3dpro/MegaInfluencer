@@ -42,13 +42,18 @@ function AuthLayout({ role, children }: { role: Role; children: ReactNode }) {
     <main className="box-border min-h-dvh bg-background p-3 sm:p-5 lg:h-dvh lg:min-h-0 lg:overflow-hidden">
       <div className="mx-auto grid min-h-[calc(100dvh-1.5rem)] max-w-[1440px] overflow-hidden rounded-2xl bg-card shadow-elevated sm:min-h-[calc(100dvh-2.5rem)] lg:h-full lg:min-h-0 lg:grid-cols-[0.92fr_1.08fr]">
         <aside className="relative hidden min-h-0 overflow-hidden border-r border-primary/10 bg-gradient-to-br from-primary/10 via-card to-indigo/10 p-8 lg:flex lg:flex-col xl:p-12">
-          <div className="relative z-10 shrink-0 flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
-            <img
-              src="/logo/MI_Logo.svg"
-              alt="MegaInfluencer"
-              className="h-10 w-10 shrink-0 object-contain"
-            />
-            MegaInfluencer
+          <div className="relative z-10 shrink-0 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
+              <img
+                src="/logo/MI_Logo.svg"
+                alt="MegaInfluencer"
+                className="h-10 w-10 shrink-0 object-contain"
+              />
+              MegaInfluencer
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <Sparkles className="h-3.5 w-3.5" /> Powered by Megascale
+            </span>
           </div>
           <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center py-4 xl:py-6">
             <img
@@ -74,8 +79,21 @@ function AuthLayout({ role, children }: { role: Role; children: ReactNode }) {
           <div className="absolute -bottom-28 -right-24 h-80 w-80 rounded-full bg-primary/15 blur-3xl" />
           <div className="absolute left-[-5rem] top-[28%] h-56 w-56 rounded-full bg-indigo/10 blur-3xl" />
         </aside>
-        <section className="flex items-center justify-center px-5 py-12 sm:px-10 lg:px-16">
-          <div className="w-full max-w-[390px]">{children}</div>
+        <section className="flex flex-col items-center justify-between px-5 py-8 sm:px-10 lg:px-16 lg:py-12">
+          <div className="my-auto w-full max-w-[390px]">{children}</div>
+          <div className="mt-8 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground font-medium">
+            <div className="flex flex-wrap items-center justify-center gap-3 text-[11px]">
+              <a href="/privacy-policy" className="hover:text-foreground transition-colors">Privacy Policy</a>
+              <span className="text-muted-foreground/40">•</span>
+              <a href="/terms-of-service" className="hover:text-foreground transition-colors">Terms of Service</a>
+              <span className="text-muted-foreground/40">•</span>
+              <a href="/data-deletion" className="hover:text-foreground transition-colors">Data Deletion</a>
+            </div>
+            <div className="flex items-center justify-center gap-1.5 mt-1">
+              <Sparkles className="h-3.5 w-3.5 text-primary opacity-80" />
+              <span>Powered by <strong className="font-semibold text-foreground">Megascale</strong></span>
+            </div>
+          </div>
         </section>
       </div>
     </main>

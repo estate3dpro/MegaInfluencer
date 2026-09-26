@@ -31,6 +31,7 @@ import { initials } from "@/lib/format";
 import { ThemeToggle } from "@/lib/theme";
 import { useAuthStore } from "@/stores/auth-store";
 import { NotificationSheet } from "./NotificationSheet";
+import { HelpSheetTrigger } from "./HelpPanelGuide";
 
 const accountPaths: Record<Role, { profile: string; preferences: string }> = {
   influencer: { profile: "/influencer/profile", preferences: "/influencer/profile" },
@@ -134,6 +135,7 @@ export function AppShell({ role, children }: { role: Role; children?: ReactNode 
               </Button>
               <ThemeToggle />
               <NotificationSheet />
+              <HelpSheetTrigger role={role} />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
