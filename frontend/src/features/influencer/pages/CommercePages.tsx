@@ -6,15 +6,19 @@ import {
   Check,
   Clock,
   Copy,
+  DollarSign,
   ExternalLink,
   Filter,
+  Layers,
   Link2,
   Package,
+  Percent,
   Plus,
   Search,
   ShoppingBag,
   Store,
   TrendingUp,
+  Truck,
   Users,
 } from "lucide-react";
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, CartesianGrid } from "recharts";
@@ -863,12 +867,13 @@ export function EarningsPage() {
 
   const timeline = earningsData?.timeline ?? [];
   const recentCommissions = earningsData?.recentCommissions ?? [];
+  const barterFulfillments = earningsData?.barterFulfillments ?? [];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Earnings"
-        description="Track commissions, payout status, and the revenue value you create for brand partners."
+        title="Earnings & Payouts"
+        description="Track earnings across all 4 compensation models: Affiliate Commission, Fixed Pricing, Hybrid Base Fees, and Barter Samples."
         actions={<StoreSelector scope={scope} setScope={setScope} stores={storesQuery.data?.stores} />}
       />
 
@@ -883,13 +888,13 @@ export function EarningsPage() {
           label="Pending approval"
           value={balances.pendingApproval}
           icon={TrendingUp}
-          detail={`From ${balances.pendingOrdersCount} recent order${balances.pendingOrdersCount === 1 ? "" : "s"}`}
+          detail={`From ${balances.pendingOrdersCount} pending deal${balances.pendingOrdersCount === 1 ? "" : "s"} / order${balances.pendingOrdersCount === 1 ? "" : "s"}`}
         />
         <Metric
           label="Lifetime earnings"
           value={balances.lifetimeEarnings}
           icon={Users}
-          detail="Total commission earned"
+          detail="Total earnings across all models"
         />
       </section>
 
@@ -897,7 +902,7 @@ export function EarningsPage() {
         <Card className="shadow-card lg:col-span-2">
           <CardHeader className="p-5 pb-3">
             <CardTitle>{scope === "all" ? "Combined monthly earnings" : `${scope} monthly earnings`}</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Monthly commission growth over the last 6 months</p>
+            <p className="mt-1 text-sm text-muted-foreground">Monthly revenue growth across sales commissions and fixed deal fees</p>
           </CardHeader>
           <CardContent className="p-5 pt-2">
             <div className="h-56 w-full">
@@ -920,7 +925,7 @@ export function EarningsPage() {
                           <div className="rounded-xl border bg-card p-3 shadow-lg">
                             <p className="text-xs font-semibold text-foreground">{d.month} Earnings</p>
                             <p className="mt-1 font-display font-bold text-primary">{d.earningsFormatted}</p>
-                            <p className="text-xs text-muted-foreground">{d.orders} orders attributed</p>
+                            <p className="text-xs text-muted-foreground">{d.orders} deals / orders attributed</p>
                           </div>
                         );
                       }
@@ -971,10 +976,46 @@ export function EarningsPage() {
         </Card>
       </section>
 
+      {/* Barter Product Sample Fulfillment Tracking Section */}
+      {barterFulfillments.length > 0 && (
+        <Card className="shadow-card">
+          <CardHeader className="p-5 pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" /> Barter Sample Shipments
+            </CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">Track sample dispatches and delivery confirmations for product exchange campaigns</p>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 p-5 pt-1">
+            {barterFulfillments.map((item) => (
+              <div key={item.id} className="rounded-xl border p-4 space-y-3 bg-card">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary">{item.storeName}</span>
+                    <p className="font-semibold text-sm text-foreground mt-0.5">{item.campaignTitle}</p>
+                  </div>
+                  <Badge variant={item.status === "DELIVERED" || item.status === "COMPLETED" ? "outline" : "secondary"} className="flex items-center gap-1">
+                    <Truck className="h-3 w-3" /> {item.status}
+                  </Badge>
+                </div>
+                <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1">
+                  <p className="font-medium text-foreground">Product: {item.productTitle}</p>
+                  {item.trackingNumber && (
+                    <p className="text-muted-foreground font-mono">
+                      {item.carrier ?? "Courier"}: <span className="font-bold text-foreground">{item.trackingNumber}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unified Transactions Feed */}
       <Card className="shadow-card">
         <CardHeader className="p-5 pb-3">
-          <CardTitle>Recent commission activity</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">Detailed line items from attributed customer purchases</p>
+          <CardTitle>Recent deal & commission activity</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">Attributed sales commissions, fixed campaign fees, and hybrid base payouts</p>
         </CardHeader>
         <CardContent className="space-y-3 p-5 pt-1">
           {recentCommissions.length > 0 ? (
@@ -982,14 +1023,35 @@ export function EarningsPage() {
               <div key={comm.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3.5">
                 <div className="flex items-center gap-3">
                   <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <BadgeIndianRupee className="h-4 w-4" />
+                    {comm.type === "FIXED_FEE" ? (
+                      <DollarSign className="h-4 w-4" />
+                    ) : comm.type === "HYBRID_BASE" ? (
+                      <Layers className="h-4 w-4" />
+                    ) : (
+                      <Percent className="h-4 w-4" />
+                    )}
                   </span>
                   <div>
                     <p className="font-semibold text-sm">{comm.orderName}</p>
                     <p className="text-xs text-muted-foreground">{comm.storeName} · {comm.date}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  {comm.type === "FIXED_FEE" && (
+                    <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-200 text-[10px]">
+                      Fixed Fee
+                    </Badge>
+                  )}
+                  {comm.type === "HYBRID_BASE" && (
+                    <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 border-indigo-200 text-[10px]">
+                      Hybrid Base
+                    </Badge>
+                  )}
+                  {(!comm.type || comm.type === "COMMISSION") && (
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-200 text-[10px]">
+                      Commission
+                    </Badge>
+                  )}
                   <Badge variant={comm.status === "APPROVED" ? "outline" : "secondary"} className={comm.status === "APPROVED" ? "border-success/30 bg-success/10 text-success" : ""}>
                     {comm.status}
                   </Badge>
@@ -998,7 +1060,7 @@ export function EarningsPage() {
               </div>
             ))
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">No recent commission records found.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">No recent earnings records found.</p>
           )}
         </CardContent>
       </Card>

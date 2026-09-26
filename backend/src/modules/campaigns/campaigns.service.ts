@@ -27,41 +27,110 @@ async function campaignData(app: FastifyInstance, organizationId: string, input:
   return { ...input, productId };
 }
 
-async function assignCampaignProduct(tx: any, campaign: { productId: string | null; organizationId: string }, influencerId: string) {
-  if (!campaign.productId) return;
-  await tx.productInfluencerAssignment.upsert({
-    where: { productId_influencerId: { productId: campaign.productId, influencerId } },
-    create: { productId: campaign.productId, organizationId: campaign.organizationId, influencerId },
-    update: {},
-  });
+async function assignCampaignProduct(
+  tx: any,
+  campaign: {
+    id?: string;
+    productId: string | null;
+    organizationId: string;
+    compensationType?: string;
+    budgetMin?: number | null;
+    budgetMax?: number | null;
+    currency?: string;
+  },
+  influencerId: string,
+  proposedRate?: number | null
+) {
+  if (campaign.productId) {
+    await tx.productInfluencerAssignment.upsert({
+      where: { productId_influencerId: { productId: campaign.productId, influencerId } },
+      create: { productId: campaign.productId, organizationId: campaign.organizationId, influencerId },
+      update: {},
+    });
+  }
 
-  const activeLink = await tx.affiliateLink.findFirst({
-    where: {
-      organizationId: campaign.organizationId,
-      productId: campaign.productId,
-      creatorId: influencerId,
-      status: 'ACTIVE',
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-    },
-    select: { id: true },
-  });
-  if (activeLink) return;
+  const compType = (campaign.compensationType ?? 'FIXED').toUpperCase();
 
-  const product = await tx.shopifyProduct.findUnique({
-    where: { id: campaign.productId },
-    select: { handle: true },
-  });
-  await tx.affiliateLink.create({
-    data: {
-      organizationId: campaign.organizationId,
-      creatorId: influencerId,
-      productId: campaign.productId,
-      targetType: 'PRODUCT',
-      destinationPath: product?.handle ? `/products/${product.handle}` : '/',
-      commissionRate: 10,
-      slug: randomBytes(9).toString('base64url'),
-    },
-  });
+  // 1. Create Affiliate Link for COMMISSION, HYBRID, or product campaigns
+  if (compType === 'COMMISSION' || compType === 'HYBRID' || campaign.productId) {
+    const activeLink = await tx.affiliateLink.findFirst({
+      where: {
+        organizationId: campaign.organizationId,
+        productId: campaign.productId ?? undefined,
+        creatorId: influencerId,
+        status: 'ACTIVE',
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { id: true },
+    });
+    if (!activeLink) {
+      let handle: string | null = null;
+      if (campaign.productId) {
+        const product = await tx.shopifyProduct.findUnique({
+          where: { id: campaign.productId },
+          select: { handle: true },
+        });
+        handle = product?.handle ?? null;
+      }
+      await tx.affiliateLink.create({
+        data: {
+          organizationId: campaign.organizationId,
+          creatorId: influencerId,
+          productId: campaign.productId,
+          targetType: campaign.productId ? 'PRODUCT' : 'STORE',
+          destinationPath: handle ? `/products/${handle}` : '/',
+          commissionRate: 10,
+          slug: randomBytes(9).toString('base64url'),
+        },
+      });
+    }
+  }
+
+  // 2. Fixed Fee or Hybrid Base Payout creation
+  if (campaign.id && (compType === 'FIXED' || compType === 'HYBRID')) {
+    const amount = proposedRate ?? campaign.budgetMin ?? campaign.budgetMax ?? (compType === 'HYBRID' ? 500 : 1000);
+    const existingPayout = await tx.campaignPayout.findFirst({
+      where: { campaignId: campaign.id, creatorId: influencerId },
+    });
+    if (!existingPayout) {
+      await tx.campaignPayout.create({
+        data: {
+          organizationId: campaign.organizationId,
+          campaignId: campaign.id,
+          creatorId: influencerId,
+          type: compType === 'HYBRID' ? 'HYBRID_BASE' : 'FIXED_FEE',
+          amount,
+          currency: campaign.currency ?? 'INR',
+          status: 'PENDING',
+          notes: `Campaign compensation for ${compType} deal`,
+        },
+      });
+    }
+  }
+
+  // 3. Barter Sample Fulfillment record creation
+  if (campaign.id && compType === 'BARTER') {
+    const existingBarter = await tx.barterSampleFulfillment.findFirst({
+      where: { campaignId: campaign.id, creatorId: influencerId },
+    });
+    if (!existingBarter) {
+      let productTitle = 'Product Sample';
+      if (campaign.productId) {
+        const p = await tx.shopifyProduct.findUnique({ where: { id: campaign.productId }, select: { title: true } });
+        if (p?.title) productTitle = p.title;
+      }
+      await tx.barterSampleFulfillment.create({
+        data: {
+          organizationId: campaign.organizationId,
+          campaignId: campaign.id,
+          creatorId: influencerId,
+          productId: campaign.productId,
+          productTitle,
+          status: 'PENDING',
+        },
+      });
+    }
+  }
 }
 
 export async function listStore(app: FastifyInstance, userId: string) {
@@ -242,7 +311,7 @@ export async function decide(
         create: { organizationId: campaign.organizationId, influencerId: application.influencerId },
         update: {},
       });
-      await assignCampaignProduct(tx, campaign, application.influencerId);
+      await assignCampaignProduct(tx, campaign, application.influencerId, application.proposedRate);
       await tx.notification.createMany({
         data: [
           {
@@ -317,4 +386,62 @@ export async function apply(
     }
     throw error;
   }
+}
+
+export async function listStorePayouts(app: FastifyInstance, userId: string) {
+  const organization = await org(app, userId);
+  return app.prisma.campaignPayout.findMany({
+    where: { organizationId: organization.id },
+    include: {
+      creator: { select: { id: true, displayName: true, email: true } },
+      campaign: { select: { id: true, title: true, compensationType: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function updatePayoutStatus(app: FastifyInstance, userId: string, payoutId: string, status: any) {
+  const organization = await org(app, userId);
+  const payout = await app.prisma.campaignPayout.findFirst({
+    where: { id: payoutId, organizationId: organization.id },
+  });
+  if (!payout) throw new AppError('PAYOUT_NOT_FOUND', 'Payout record not found.', 404);
+  return app.prisma.campaignPayout.update({
+    where: { id: payoutId },
+    data: { status },
+  });
+}
+
+export async function listStoreBarterFulfillments(app: FastifyInstance, userId: string) {
+  const organization = await org(app, userId);
+  return app.prisma.barterSampleFulfillment.findMany({
+    where: { organizationId: organization.id },
+    include: {
+      creator: { select: { id: true, displayName: true, email: true } },
+      campaign: { select: { id: true, title: true } },
+      product: { select: { id: true, title: true, imageUrl: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function updateBarterFulfillment(
+  app: FastifyInstance,
+  userId: string,
+  fulfillmentId: string,
+  data: { trackingNumber?: string; carrier?: string; status?: any }
+) {
+  const organization = await org(app, userId);
+  const item = await app.prisma.barterSampleFulfillment.findFirst({
+    where: { id: fulfillmentId, organizationId: organization.id },
+  });
+  if (!item) throw new AppError('FULFILLMENT_NOT_FOUND', 'Barter fulfillment record not found.', 404);
+  return app.prisma.barterSampleFulfillment.update({
+    where: { id: fulfillmentId },
+    data: {
+      ...data,
+      shippedAt: data.status === 'SHIPPED' && !item.shippedAt ? new Date() : undefined,
+      deliveredAt: (data.status === 'DELIVERED' || data.status === 'COMPLETED') && !item.deliveredAt ? new Date() : undefined,
+    },
+  });
 }
