@@ -51,8 +51,8 @@ async function assignCampaignProduct(
 
   const compType = (campaign.compensationType ?? 'FIXED').toUpperCase();
 
-  // 1. Create Affiliate Link for COMMISSION, HYBRID, or product campaigns
-  if (compType === 'COMMISSION' || compType === 'HYBRID' || campaign.productId) {
+  // 1. Create Affiliate Link ONLY for COMMISSION and HYBRID models (Barter & Fixed deals do NOT earn sales commissions)
+  if (compType === 'COMMISSION' || compType === 'HYBRID') {
     const activeLink = await tx.affiliateLink.findFirst({
       where: {
         organizationId: campaign.organizationId,

@@ -390,7 +390,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             });
           }
 
-          if (link && creator) {
+          if (link && creator && Number(link.commissionRate ?? 0) > 0) {
             const amount = Number(d.total ?? 0);
             const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
             const status = isRefunded ? 'REVERSED' : 'PENDING';
