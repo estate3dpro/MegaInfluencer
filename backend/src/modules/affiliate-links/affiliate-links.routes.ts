@@ -434,7 +434,9 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       : typeof rawTags === 'string'
       ? rawTags.split(',').map((t: string) => t.trim())
       : [];
-    const isSampleOrder = tagList.includes('InfluencerSample');
+    const isSampleOrder = tagList.some((t: string) =>
+      ['influencersample', 'bartersample', 'sample', 'barter'].includes(t.toLowerCase())
+    );
 
     // Resolve Creator & Link
     let link: any = null;
@@ -519,6 +521,36 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       },
     });
 
+    // Check if creator's active deal in this store is strictly BARTER or FIXED (no sales commission)
+    let isBarterOrFixedOnly = false;
+    if (creator) {
+      const nonCommissionAssignment = await prisma.campaignAssignment.findFirst({
+        where: {
+          influencerId: creator.id,
+          status: 'ASSIGNED',
+          campaign: {
+            organizationId: organization.id,
+            compensationType: { in: ['BARTER', 'FIXED', 'barter', 'fixed'] },
+            deletedAt: null,
+          },
+        },
+      });
+      const hasCommissionDeal = await prisma.campaignAssignment.findFirst({
+        where: {
+          influencerId: creator.id,
+          status: 'ASSIGNED',
+          campaign: {
+            organizationId: organization.id,
+            compensationType: { in: ['COMMISSION', 'HYBRID', 'commission', 'hybrid'] },
+            deletedAt: null,
+          },
+        },
+      });
+      if (nonCommissionAssignment && !hasCommissionDeal) {
+        isBarterOrFixedOnly = true;
+      }
+    }
+
     const isCancelledOrRefunded = Boolean(
       payload.cancelled_at ||
       String(financialStatus).toLowerCase() === 'refunded' ||
@@ -526,8 +558,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     );
     const commissionStatus = isCancelledOrRefunded ? 'REVERSED' : 'PENDING';
 
-    // Auto-create affiliate link if creator is matched but has no link yet
-    if (creator && !link && !isSampleOrder) {
+    // Auto-create affiliate link if creator is matched but has no link yet and NOT on Barter/Fixed deal
+    if (creator && !link && !isSampleOrder && !isBarterOrFixedOnly) {
       link = await prisma.affiliateLink.create({
         data: {
           organizationId: organization.id,
@@ -541,8 +573,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       });
     }
 
-    // If attributed and not an internal sample, upsert commission
-    if (link && !isSampleOrder) {
+    // If attributed and not an internal sample or Barter/Fixed deal, upsert commission
+    if (link && creator && !isSampleOrder && !isBarterOrFixedOnly && Number(link.commissionRate ?? 0) > 0) {
       const orderAmount = subtotal > 0 ? subtotal : Number(total || 0);
       const rate = Number(link.commissionRate ?? 10);
       const amount = (orderAmount * rate) / 100;

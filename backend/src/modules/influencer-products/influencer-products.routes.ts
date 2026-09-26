@@ -62,8 +62,9 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       // Campaigns guarantee creators can share the selected product. This
       // backfills older accepted campaigns that were created before links
       // were generated during assignment.
+      const compType = (campaign.compensationType ?? 'FIXED').toUpperCase();
       let userLink = product.affiliateLinks?.[0];
-      if (!userLink) {
+      if (!userLink && (compType === 'COMMISSION' || compType === 'HYBRID')) {
         userLink = await prisma.affiliateLink.create({
           data: {
             organizationId: campaign.organization.id,
@@ -71,7 +72,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
             productId: product.id,
             targetType: 'PRODUCT',
             destinationPath: product.handle ? `/products/${product.handle}` : '/',
-            commissionRate: 10,
+            commissionRate: compType === 'HYBRID' ? 5 : 10,
             slug: affiliateSlug(),
           },
           include: { _count: { select: { clicks: true, commissions: true } } },
