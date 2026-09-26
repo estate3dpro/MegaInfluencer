@@ -17,7 +17,8 @@ export const queryKeys = {
     influencerOverview: ["stores", "influencer-overview"] as const,
   },
   products: {
-    influencer: (scope: string = "all", search: string = "") => ["products", "influencer", scope, search] as const,
+    influencer: (scope: string = "all", search: string = "", campaignId: string = "") =>
+      ["products", "influencer", scope, search, campaignId] as const,
   },
   links: {
     influencer: (storeId?: string, search?: string) => ["links", "influencer", storeId ?? "all", search ?? ""] as const,

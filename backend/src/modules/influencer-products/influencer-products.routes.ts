@@ -14,8 +14,57 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/influencer/products', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
-    const query = request.query as { search?: string; storeSlug?: string };
+    const query = request.query as { search?: string; storeSlug?: string; campaignId?: string };
     const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
+
+    // Campaign links resolve their product from the campaign itself. This
+    // also supports accepted campaigns created before product assignments.
+    if (query.campaignId) {
+      const campaign = await prisma.campaign.findFirst({
+        where: {
+          id: query.campaignId,
+          deletedAt: null,
+          productId: { not: null },
+          OR: [
+            { assignments: { some: { influencerId: actor.userId, status: 'ASSIGNED' } } },
+            { applications: { some: { influencerId: actor.userId, status: 'ACCEPTED' } } },
+          ],
+        },
+        include: {
+          organization: { select: { id: true, name: true, slug: true } },
+          product: {
+            include: {
+              affiliateLinks: {
+                where: { creatorId: actor.userId },
+                include: { _count: { select: { clicks: true, commissions: true } } },
+              },
+            },
+          },
+        },
+      });
+
+      if (!campaign?.product) return { products: [], stores: [] };
+
+      const product = campaign.product;
+      const userLink = product.affiliateLinks?.[0];
+      const price = Number(product.price || 0);
+      return {
+        products: [{
+          id: product.id,
+          name: product.title,
+          store: campaign.organization.name,
+          storeSlug: campaign.organization.slug || campaign.organization.id,
+          price: price > 0 ? formatCurrency(price) : (product.price ? `₹${product.price}` : '₹0.00'),
+          orders: userLink?._count?.commissions ?? 0,
+          tone: 'bg-primary/10 text-primary',
+          imageUrl: product.imageUrl ?? null,
+          handle: product.handle ?? null,
+          affiliateSlug: userLink?.slug ?? null,
+          affiliateUrl: userLink ? `${baseUrl}/r/${userLink.slug}` : null,
+        }],
+        stores: [{ id: campaign.organization.id, name: campaign.organization.name, slug: campaign.organization.slug || campaign.organization.id }],
+      };
+    }
 
     // 1. Fetch assigned organizations only
     const assignments = await prisma.storeInfluencerAssignment.findMany({

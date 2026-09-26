@@ -113,7 +113,7 @@ export function CampaignsPage() {
               </p>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <Button variant="outline" asChild>
-                  <Link to="/influencer/products">Go to products</Link>
+                  <Link to="/influencer/products" search={{ campaignId: campaign.id, campaignTitle: campaign.title }}>Go to products</Link>
                 </Button>
                 <Button asChild>
                   <Link to="/influencer/campaigns/$campaignId" params={{ campaignId: campaign.id }}>

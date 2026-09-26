@@ -19,10 +19,10 @@ export type InfluencerProductsResponse = {
   stores: Array<{ id: string; name: string; slug: string }>;
 };
 
-export async function getInfluencerProducts(storeSlug?: string, search?: string) {
+export async function getInfluencerProducts(storeSlug?: string, search?: string, campaignId?: string) {
   return (
     await apiClient.get<InfluencerProductsResponse>("/influencer/products", {
-      params: { storeSlug, search },
+      params: { storeSlug, search, campaignId },
     })
   ).data;
 }

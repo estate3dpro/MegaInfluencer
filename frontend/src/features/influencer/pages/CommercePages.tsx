@@ -318,15 +318,15 @@ export function StorePage() {
 // --------------------------------------------------------------------------
 // 2. Products Page
 // --------------------------------------------------------------------------
-export function ProductsPage() {
+export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: string; campaignTitle?: string }) {
   const [scope, setScope] = useScope();
   const storesQuery = useQuery({
     queryKey: queryKeys.stores.influencerOverview,
     queryFn: getInfluencerStoresOverview,
   });
   const productsQuery = useQuery({
-    queryKey: queryKeys.products.influencer(scope),
-    queryFn: () => getInfluencerProducts(scope),
+    queryKey: queryKeys.products.influencer(scope, "", campaignId),
+    queryFn: () => getInfluencerProducts(scope, undefined, campaignId),
   });
 
   const storesData = storesQuery.data;
@@ -335,8 +335,11 @@ export function ProductsPage() {
     ...fallbackScopeName,
     ...(storesData?.stores ? Object.fromEntries(storesData.stores.map((s) => [s.slug || s.id, s.name])) : {}),
   };
-  const currentScopeTitle =
-    scope === "all" ? "Featured across your stores" : `${scopeNameMap[scope] || "Store"} products`;
+  const currentScopeTitle = campaignId
+    ? `Products for ${campaignTitle || "this campaign"}`
+    : scope === "all"
+      ? "Featured across your stores"
+      : `${scopeNameMap[scope] || "Store"} products`;
 
   const productList = productsQuery.data?.products ?? [];
 
@@ -344,14 +347,14 @@ export function ProductsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Discover products from your connected brand stores and share what you love."
-        actions={<StoreSelector scope={scope} setScope={setScope} stores={storesData?.stores} />}
+        description={campaignId ? "The product selected for this campaign is ready for you to share." : "Discover products from your connected brand stores and share what you love."}
+        actions={campaignId ? undefined : <StoreSelector scope={scope} setScope={setScope} stores={storesData?.stores} />}
       />
       <Metrics scope={scope} scopeData={scopeDataMap} />
       <Card className="shadow-card">
         <CardHeader className="p-5 pb-3">
           <CardTitle>{currentScopeTitle}</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">Your assigned product recommendations and live attribution.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{campaignId ? "Campaign products and live attribution." : "Your assigned product recommendations and live attribution."}</p>
         </CardHeader>
         <CardContent className="p-5 pt-2">
           {productList.length > 0 ? (
