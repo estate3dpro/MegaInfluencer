@@ -66,7 +66,7 @@ async function assignCampaignProduct(
     if (!activeLink) {
       let handle: string | null = null;
       if (campaign.productId) {
-        const product = await tx.shopifyProduct.findUnique({
+        const product = await tx.shopifyProduct.findFirst({
           where: { id: campaign.productId },
           select: { handle: true },
         });
@@ -79,7 +79,7 @@ async function assignCampaignProduct(
           productId: campaign.productId,
           targetType: campaign.productId ? 'PRODUCT' : 'STORE',
           destinationPath: handle ? `/products/${handle}` : '/',
-          commissionRate: 10,
+          commissionRate: compType === 'HYBRID' ? 5 : 10,
           slug: randomBytes(9).toString('base64url'),
         },
       });
@@ -116,7 +116,7 @@ async function assignCampaignProduct(
     if (!existingBarter) {
       let productTitle = 'Product Sample';
       if (campaign.productId) {
-        const p = await tx.shopifyProduct.findUnique({ where: { id: campaign.productId }, select: { title: true } });
+        const p = await tx.shopifyProduct.findFirst({ where: { id: campaign.productId }, select: { title: true } });
         if (p?.title) productTitle = p.title;
       }
       await tx.barterSampleFulfillment.create({
@@ -312,23 +312,23 @@ export async function decide(
         update: {},
       });
       await assignCampaignProduct(tx, campaign, application.influencerId, application.proposedRate);
-      await tx.notification.createMany({
-        data: [
-          {
-            userId: application.influencerId,
-            title: 'Campaign application approved',
-            message: `Your application for ${campaign.title} was approved. The campaign is now in your workspace.`,
-            kind: 'CAMPAIGN',
-            link: '/influencer/campaigns',
-          },
-          {
-            userId,
-            title: 'Creator application approved',
-            message: `You approved an application for ${campaign.title}.`,
-            kind: 'CAMPAIGN',
-            link: `/store-admin/campaigns`,
-          },
-        ],
+      await tx.notification.create({
+        data: {
+          userId: application.influencerId,
+          title: 'Campaign application approved',
+          message: `Your application for ${campaign.title} was approved. The campaign is now in your workspace.`,
+          kind: 'CAMPAIGN',
+          link: '/influencer/campaigns',
+        },
+      });
+      await tx.notification.create({
+        data: {
+          userId,
+          title: 'Creator application approved',
+          message: `You approved an application for ${campaign.title}.`,
+          kind: 'CAMPAIGN',
+          link: `/store-admin/campaigns`,
+        },
       });
     } else {
       await tx.notification.create({
