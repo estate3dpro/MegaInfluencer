@@ -78,11 +78,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Platform — Creator Commerce & Affiliate Suite" },
+      { title: "MegaInfluencer — Creator Commerce & Affiliate Suite" },
       {
         name: "description",
         content:
-          "Platform runs creator storefronts, affiliate links, campaigns, attribution and payouts across influencers, stores and the platform team.",
+          "MegaInfluencer helps creators and brands manage storefronts, affiliate links, campaigns, attribution, commissions, and payouts in one platform.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
