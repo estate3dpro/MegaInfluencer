@@ -10,12 +10,25 @@ export type MonthlyEarningsTimeline = {
 
 export type RecentCommissionItem = {
   id: string;
+  type?: "COMMISSION" | "FIXED_FEE" | "HYBRID_BASE";
   orderName: string;
   storeName: string;
   amount: string;
   amountRaw: number;
-  status: "APPROVED" | "PENDING" | "PAID" | "REVERSED";
+  status: "APPROVED" | "PENDING" | "PAID" | "REVERSED" | "CANCELLED";
   date: string;
+};
+
+export type BarterSampleFulfillmentItem = {
+  id: string;
+  campaignTitle: string;
+  storeName: string;
+  productTitle: string;
+  trackingNumber?: string;
+  carrier?: string;
+  status: "PENDING" | "SHIPPED" | "DELIVERED" | "COMPLETED" | "CANCELLED";
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
 };
 
 export type InfluencerEarningsResponse = {
@@ -34,6 +47,7 @@ export type InfluencerEarningsResponse = {
   };
   timeline: MonthlyEarningsTimeline[];
   recentCommissions: RecentCommissionItem[];
+  barterFulfillments?: BarterSampleFulfillmentItem[];
 };
 
 export async function getInfluencerEarnings(scope: string = "all"): Promise<InfluencerEarningsResponse> {

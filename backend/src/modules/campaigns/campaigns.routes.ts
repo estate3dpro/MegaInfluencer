@@ -88,4 +88,26 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     const input = parseOrThrow(applicationSchema, request.body);
     return reply.status(201).send({ application: await service.apply(app, auth.userId, campaignId, input) });
   });
+
+  app.get('/store/campaign-payouts', async (request) => {
+    const auth = requireRole(request, ['STORE_OWNER']);
+    return { items: await service.listStorePayouts(app, auth.userId) };
+  });
+  app.patch('/store/campaign-payouts/:payoutId/status', async (request) => {
+    const auth = requireRole(request, ['STORE_OWNER']);
+    const { payoutId } = request.params as { payoutId: string };
+    const { status } = request.body as { status: string };
+    return { payout: await service.updatePayoutStatus(app, auth.userId, payoutId, status) };
+  });
+
+  app.get('/store/barter-fulfillments', async (request) => {
+    const auth = requireRole(request, ['STORE_OWNER']);
+    return { items: await service.listStoreBarterFulfillments(app, auth.userId) };
+  });
+  app.patch('/store/barter-fulfillments/:fulfillmentId', async (request) => {
+    const auth = requireRole(request, ['STORE_OWNER']);
+    const { fulfillmentId } = request.params as { fulfillmentId: string };
+    const body = request.body as { trackingNumber?: string; carrier?: string; status?: string };
+    return { fulfillment: await service.updateBarterFulfillment(app, auth.userId, fulfillmentId, body) };
+  });
 };

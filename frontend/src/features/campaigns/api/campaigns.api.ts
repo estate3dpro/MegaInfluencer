@@ -131,3 +131,43 @@ export const applyCampaign = async (id: string, pitch: string) =>
   apiClient.post(`/influencer/discover-campaigns/${id}/applications`, { pitch });
 export const getAssignedCampaigns = async () =>
   (await apiClient.get<{ items: CampaignAssignment[] }>("/influencer/campaigns")).data.items;
+
+export type BarterFulfillment = {
+  id: string;
+  campaignId: string;
+  creatorId: string;
+  productId: string | null;
+  productTitle: string;
+  trackingNumber: string | null;
+  carrier: string | null;
+  shippingAddress: string | null;
+  status: "PENDING" | "SHIPPED" | "DELIVERED" | "COMPLETED" | "CANCELLED";
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  creator?: { id: string; displayName: string; email: string | null };
+  campaign?: { id: string; title: string };
+  product?: { id: string; title: string; imageUrl: string | null } | null;
+};
+
+export const getStoreBarterFulfillments = async () =>
+  (await apiClient.get<{ items: BarterFulfillment[] }>("/store/barter-fulfillments")).data.items;
+
+export const updateBarterFulfillment = async ({
+  fulfillmentId,
+  trackingNumber,
+  carrier,
+  status,
+}: {
+  fulfillmentId: string;
+  trackingNumber?: string;
+  carrier?: string;
+  status?: "PENDING" | "SHIPPED" | "DELIVERED" | "COMPLETED" | "CANCELLED";
+}) =>
+  (
+    await apiClient.patch<{ fulfillment: BarterFulfillment }>(
+      `/store/barter-fulfillments/${fulfillmentId}`,
+      { trackingNumber, carrier, status }
+    )
+  ).data.fulfillment;
+
