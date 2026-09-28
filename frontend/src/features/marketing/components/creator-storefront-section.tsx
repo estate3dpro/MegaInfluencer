@@ -40,7 +40,7 @@ export function CreatorStorefrontSection() {
     <section id="storefront" className="scroll-mt-24 px-5 py-20 sm:px-8 md:py-24">
       <div className="mx-auto max-w-7xl">
         <SectionTitle
-          eyebrow="Creator storefronts"
+          eyebrow="Coming soon · Creator storefronts"
           title="A storefront that makes recommendations shoppable."
           copy="Curate products for your audience and keep each recommendation connected to the creator and product referral."
         />
@@ -72,7 +72,7 @@ export function CreatorStorefrontSection() {
               <span className="hidden text-xs text-[#787586] sm:inline">
                 megainfluencer.in/ananya
               </span>
-              <Pill tone="pink">Creator storefront</Pill>
+              <Pill tone="violet">Coming soon</Pill>
             </div>
           </div>
 
@@ -126,7 +126,7 @@ export function CreatorStorefrontSection() {
                     <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
                   </button>
                   <p className="mt-2 text-center text-[10px] font-medium text-[#787586]">
-                    Shopify referral tracked · Creator eligible
+                    Coming soon · Reconciled with Shopify storefronts
                   </p>
                 </div>
               </div>
