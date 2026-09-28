@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "prisma generate",
     "predev": "prisma generate",
     "dev": "tsx watch src/server.ts",
     "tunnel:api": "ngrok.cmd http 3000",

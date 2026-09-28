@@ -8,7 +8,7 @@ import {
 } from './contact-inquiries.schema.js';
 
 export const contactInquiriesRoutes: FastifyPluginAsync = async (app) => {
-  const prisma = app.prisma as any;
+  const prisma = app.prisma;
 
   // POST /contact - Public endpoint for landing/contact page submissions
   app.post('/contact', async (req, reply) => {
