@@ -17,5 +17,14 @@ export const createInstagramAutomationSchema = z.object({
 export const automationParamsSchema = z.object({ automationId: z.string().cuid() });
 
 export const updateInstagramAutomationSchema = z.object({
-  status: z.enum(['ACTIVE', 'PAUSED']),
+  name: z.string().trim().min(1).max(100).optional(),
+  keywords: z.array(keywordSchema).min(1).max(20).transform((keywords) =>
+    [...new Map(keywords.map((keyword) => [keyword.toLocaleLowerCase(), keyword])).values()],
+  ).optional(),
+  dmMessage: z.string().trim().min(1).max(1000).optional(),
+  wholeWordMatch: z.boolean().optional(),
+  replyToAnyComment: z.boolean().optional(),
+  replyOnDuplicateCommentWebhook: z.boolean().optional(),
+  status: z.enum(['ACTIVE', 'PAUSED']).optional(),
 });
+

@@ -58,6 +58,51 @@ export async function getInstagramAutomation(automationId: string) {
   return data.automation;
 }
 
+export type UpdateInstagramAutomationInput = {
+  name?: string;
+  keywords?: string[];
+  dmMessage?: string;
+  wholeWordMatch?: boolean;
+  replyToAnyComment?: boolean;
+  replyOnDuplicateCommentWebhook?: boolean;
+  status?: "ACTIVE" | "PAUSED";
+};
+
+export type InstagramAutomationDeliveryLog = {
+  id: string;
+  automationId: string;
+  commentId: string;
+  attemptKey: string;
+  commenterId: string;
+  commenterName: string | null;
+  commentText: string;
+  status: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  automation?: {
+    id: string;
+    name: string;
+    keywords: string[];
+    postLabel: string | null;
+    instagramPostId: string;
+  };
+};
+
+export type InstagramWebhookDeliveryLog = {
+  id: string;
+  payloadHash: string;
+  payload: any;
+  receivedAt: string;
+};
+
+export type InstagramWebhookLogsResponse = {
+  deliveries: InstagramAutomationDeliveryLog[];
+  webhookDeliveries: InstagramWebhookDeliveryLog[];
+};
+
 export async function createInstagramAutomation(input: CreateInstagramAutomationInput) {
   const { data } = await apiClient.post<{ automation: InstagramAutomation }>(
     "/instagram-automations",
@@ -65,3 +110,29 @@ export async function createInstagramAutomation(input: CreateInstagramAutomation
   );
   return data.automation;
 }
+
+export async function updateInstagramAutomation(
+  automationId: string,
+  input: UpdateInstagramAutomationInput,
+) {
+  const { data } = await apiClient.patch<{ automation: InstagramAutomation }>(
+    `/instagram-automations/${automationId}`,
+    input,
+  );
+  return data.automation;
+}
+
+export async function deleteInstagramAutomation(automationId: string) {
+  const { data } = await apiClient.delete<{ success: boolean; deletedId: string }>(
+    `/instagram-automations/${automationId}`,
+  );
+  return data;
+}
+
+export async function getInstagramWebhookLogs() {
+  const { data } = await apiClient.get<InstagramWebhookLogsResponse>(
+    "/instagram-automations/webhook-logs",
+  );
+  return data;
+}
+

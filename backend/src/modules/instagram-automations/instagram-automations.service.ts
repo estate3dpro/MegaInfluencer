@@ -3,7 +3,10 @@ import type { z } from 'zod';
 
 import { AppError } from '../../shared/errors/app-error.js';
 import { listInstagramMedia } from '../instagram/instagram.service.js';
-import { createInstagramAutomationSchema } from './instagram-automations.schema.js';
+import {
+  createInstagramAutomationSchema,
+  updateInstagramAutomationSchema,
+} from './instagram-automations.schema.js';
 
 type CreateAutomationInput = z.infer<typeof createInstagramAutomationSchema>;
 
@@ -85,16 +88,87 @@ export async function createInstagramAutomation(app: FastifyInstance, influencer
   });
 }
 
+export async function updateInstagramAutomation(
+  app: FastifyInstance,
+  influencerId: string,
+  automationId: string,
+  input: z.infer<typeof updateInstagramAutomationSchema>,
+) {
+  const existing = await app.prisma.instagramAutomation.findFirst({
+    where: { id: automationId, influencerId },
+  });
+  if (!existing) throw new AppError('AUTOMATION_NOT_FOUND', 'Automation rule was not found.', 404);
+
+  const updated = await app.prisma.instagramAutomation.update({
+    where: { id: automationId },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.keywords !== undefined ? { keywords: input.keywords } : {}),
+      ...(input.dmMessage !== undefined ? { dmMessage: input.dmMessage } : {}),
+      ...(input.wholeWordMatch !== undefined ? { wholeWordMatch: input.wholeWordMatch } : {}),
+      ...(input.replyToAnyComment !== undefined ? { replyToAnyComment: input.replyToAnyComment } : {}),
+      ...(input.replyOnDuplicateCommentWebhook !== undefined ? { replyOnDuplicateCommentWebhook: input.replyOnDuplicateCommentWebhook } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    },
+    select: automationWithDeliveriesSelect,
+  });
+  return withDeliveryStats(updated);
+}
+
+export async function deleteInstagramAutomation(
+  app: FastifyInstance,
+  influencerId: string,
+  automationId: string,
+) {
+  const existing = await app.prisma.instagramAutomation.findFirst({
+    where: { id: automationId, influencerId },
+  });
+  if (!existing) throw new AppError('AUTOMATION_NOT_FOUND', 'Automation rule was not found.', 404);
+
+  await app.prisma.instagramAutomation.delete({
+    where: { id: automationId },
+  });
+  return { success: true, deletedId: automationId };
+}
+
 export async function updateInstagramAutomationStatus(
   app: FastifyInstance,
   influencerId: string,
   automationId: string,
   status: 'ACTIVE' | 'PAUSED',
 ) {
-  const updated = await app.prisma.instagramAutomation.updateMany({
-    where: { id: automationId, influencerId },
-    data: { status },
-  });
-  if (updated.count !== 1) throw new AppError('AUTOMATION_NOT_FOUND', 'Automation rule was not found.', 404);
-  return getInstagramAutomation(app, influencerId, automationId);
+  return updateInstagramAutomation(app, influencerId, automationId, { status });
 }
+
+export async function getInstagramWebhookLogs(app: FastifyInstance, influencerId: string) {
+  const [deliveries, webhookDeliveries] = await Promise.all([
+    app.prisma.instagramAutomationDelivery.findMany({
+      where: {
+        automation: { influencerId },
+      },
+      include: {
+        automation: {
+          select: {
+            id: true,
+            name: true,
+            keywords: true,
+            postLabel: true,
+            instagramPostId: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    }),
+    app.prisma.instagramWebhookDelivery.findMany({
+      orderBy: { receivedAt: 'desc' },
+      take: 50,
+    }),
+  ]);
+
+  return {
+    deliveries,
+    webhookDeliveries,
+  };
+}
+
