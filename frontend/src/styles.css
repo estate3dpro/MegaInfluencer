@@ -158,6 +158,10 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   * {
     border-color: var(--color-border);
   }
@@ -177,3 +181,4 @@
     letter-spacing: -0.015em;
   }
 }
+

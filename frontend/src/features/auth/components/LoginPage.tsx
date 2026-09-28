@@ -1,15 +1,46 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, forwardRef, type FormEvent, type ReactNode, type ComponentProps } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Instagram, ShieldCheck, Sparkles, Store } from "lucide-react";
+import { Eye, EyeOff, Instagram, ShieldCheck, Sparkles, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { isApiError } from "@/lib/api/api-error";
 import { login, registerInfluencer, registerStoreOwner, toAuthUser } from "@/features/auth/api/auth.api";
 import { roleHome, type Role } from "@/features/auth/types";
 import { useAuthStore } from "@/stores/auth-store";
 
 type CredentialRole = Role;
+
+const PasswordInput = forwardRef<HTMLInputElement, ComponentProps<"input">>(
+  ({ className, ...props }, ref) => {
+    const [showPassword, setShowPassword] = useState(false);
+    return (
+      <div className="relative">
+        <Input
+          type={showPassword ? "text" : "password"}
+          className={cn("pr-10", className)}
+          ref={ref}
+          {...props}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setShowPassword((prev) => !prev)}
+          className="absolute right-0 top-0 flex h-full items-center justify-center px-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          aria-label={showPassword ? "Hide password" : "Show password"}
+        >
+          {showPassword ? (
+            <EyeOff className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Eye className="h-4 w-4" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+    );
+  },
+);
+PasswordInput.displayName = "PasswordInput";
 
 const portalDetails: Record<
   Role,
@@ -155,11 +186,11 @@ export function CredentialLoginPage({
         </label>
         <label className="grid gap-2 text-sm font-semibold text-foreground">
           Password
-          <Input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
+            placeholder="Enter your password"
             required
           />
         </label>
@@ -262,11 +293,11 @@ export function InfluencerRegistrationPage() {
         </label>
         <label className="grid gap-2 text-sm font-semibold text-foreground">
           Password
-          <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+          <PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={12} placeholder="At least 12 characters" required />
         </label>
         <label className="grid gap-2 text-sm font-semibold text-foreground">
           Confirm password
-          <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+          <PasswordInput value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} placeholder="Re-enter password" required />
         </label>
         {errorMessage ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
         <Button className="h-11 w-full" type="submit" disabled={mutation.isPending}>
@@ -341,11 +372,11 @@ export function StoreRegistrationPage() {
         </label>
         <label className="grid gap-2 text-sm font-semibold text-foreground">
           Password
-          <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+          <PasswordInput value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" minLength={12} placeholder="At least 12 characters" required />
         </label>
         <label className="grid gap-2 text-sm font-semibold text-foreground">
           Confirm password
-          <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} required />
+          <PasswordInput value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} placeholder="Re-enter password" required />
         </label>
         {errorMessage ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{errorMessage}</p> : null}
         <Button className="h-11 w-full" type="submit" disabled={mutation.isPending}>
