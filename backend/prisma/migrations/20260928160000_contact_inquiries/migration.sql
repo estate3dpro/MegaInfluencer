@@ -7,7 +7,7 @@ EXCEPTION
 END $$;
 
 -- CreateTable
-CREATE TABLE "ContactInquiry" (
+CREATE TABLE IF NOT EXISTS "ContactInquiry" (
     "id" TEXT NOT NULL,
     "fullName" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -22,4 +22,4 @@ CREATE TABLE "ContactInquiry" (
 );
 
 -- CreateIndex
-CREATE INDEX "ContactInquiry_status_createdAt_idx" ON "ContactInquiry"("status", "createdAt");
+CREATE INDEX IF NOT EXISTS "ContactInquiry_status_createdAt_idx" ON "ContactInquiry"("status", "createdAt");
