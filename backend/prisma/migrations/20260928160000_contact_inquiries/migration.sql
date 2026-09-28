@@ -1,5 +1,10 @@
--- CreateEnum
-CREATE TYPE "InquiryStatus" AS ENUM ('NEW', 'IN_REVIEW', 'RESOLVED', 'ARCHIVED');
+-- CreateEnum (the enum may already exist when the schema was previously pushed)
+DO $$
+BEGIN
+    CREATE TYPE "InquiryStatus" AS ENUM ('NEW', 'IN_REVIEW', 'RESOLVED', 'ARCHIVED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateTable
 CREATE TABLE "ContactInquiry" (
