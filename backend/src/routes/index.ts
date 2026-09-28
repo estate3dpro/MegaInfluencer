@@ -26,6 +26,7 @@ import { influencerProductsRoutes } from '../modules/influencer-products/influen
 import { influencerOrdersRoutes } from '../modules/influencer-orders/influencer-orders.routes.js';
 import { influencerEarningsRoutes } from '../modules/influencer-earnings/influencer-earnings.routes.js';
 import { notificationsRoutes } from '../modules/notifications/notifications.routes.js';
+import { contactInquiriesRoutes } from '../modules/contact-inquiries/contact-inquiries.routes.js';
 
 export function registerRoutes(app: FastifyInstance) {
   app.register(healthRoutes);
@@ -33,6 +34,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(adminInfluencerRoutes, { prefix: '/api/v1' });
   app.register(adminStoreRoutes, { prefix: '/api/v1' });
   app.register(adminOverviewRoutes, { prefix: '/api/v1' });
+  app.register(contactInquiriesRoutes, { prefix: '/api/v1' });
   app.register(storeDashboardRoutes, { prefix: '/api/v1' });
   app.register(storeAnalyticsRoutes, { prefix: '/api/v1' });
   app.register(storeProductsRoutes, { prefix: '/api/v1' });

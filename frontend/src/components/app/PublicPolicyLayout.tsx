@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { ShieldCheck, Sparkles, Lock, FileText, Trash2, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FileText, Lock, ShieldCheck, Trash2 } from "lucide-react";
+import { LandingFooter, LandingHeader, Pill } from "@/features/marketing/components";
 
 export function PublicPolicyLayout({
   title,
@@ -15,106 +15,79 @@ export function PublicPolicyLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Top Public Header */}
-      <header className="sticky top-0 z-40 border-b bg-card/85 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2.5 font-display text-lg font-bold text-foreground">
-            <img src="/logo/MI_Logo.svg" alt="MegaInfluencer" className="h-9 w-9 object-contain" />
-            <span>MegaInfluencer</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-block"
-            >
-              Sign In
-            </Link>
-            <Button asChild size="sm" variant="outline" className="text-xs">
-              <Link to="/login">
-                <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to App
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+    <main className="min-h-screen bg-[#fbf8fc] font-sans text-[#1b1b1e] flex flex-col">
+      {/* Shared Sticky Landing Header */}
+      <LandingHeader />
 
       {/* Hero Header Banner */}
-      <div className="border-b bg-gradient-to-b from-primary/5 via-card to-background py-10 sm:py-14">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 text-center">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3.5 py-1 text-xs font-semibold text-primary mb-4">
-            <Sparkles className="h-3.5 w-3.5" /> Powered by Megascale Compliance
-          </div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl text-foreground">
+      <section className="px-5 pt-12 pb-6 sm:px-8 sm:pt-16 sm:pb-8">
+        <div className="mx-auto max-w-4xl text-center">
+          <Pill tone="violet">
+            <span className="font-normal text-[#474554]">Legal & Compliance</span>
+          </Pill>
+          <h1 className="mt-4 font-display text-4xl font-bold tracking-tight text-[#1b1b1e] sm:text-5xl">
             {title}
           </h1>
-          <p className="mt-3 text-base text-muted-foreground max-w-2xl mx-auto">{subtitle}</p>
-          <p className="mt-4 text-xs font-medium text-muted-foreground">
-            Last updated: <span className="text-foreground">{lastUpdated}</span>
+          <p className="mt-3 text-base leading-7 text-[#474554] sm:text-lg max-w-2xl mx-auto">
+            {subtitle}
           </p>
-        </div>
-      </div>
+          <p className="mt-3 text-xs font-medium text-[#787586]">
+            Last updated: <span className="font-semibold text-[#1b1b1e]">{lastUpdated}</span>
+          </p>
 
-      {/* Policy Page Nav Links */}
-      <div className="border-b bg-card/50">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 flex items-center justify-center gap-2 sm:gap-6 py-3 text-xs sm:text-sm font-medium overflow-x-auto">
-          <Link
-            to="/privacy-policy"
-            activeProps={{ className: "text-primary font-semibold border-b-2 border-primary pb-1" }}
-            inactiveProps={{ className: "text-muted-foreground hover:text-foreground pb-1" }}
-            className="flex items-center gap-1.5 shrink-0"
-          >
-            <Lock className="h-3.5 w-3.5" /> Privacy Policy
-          </Link>
-          <span className="text-muted-foreground/40">•</span>
-          <Link
-            to="/terms-of-service"
-            activeProps={{ className: "text-primary font-semibold border-b-2 border-primary pb-1" }}
-            inactiveProps={{ className: "text-muted-foreground hover:text-foreground pb-1" }}
-            className="flex items-center gap-1.5 shrink-0"
-          >
-            <FileText className="h-3.5 w-3.5" /> Terms of Service
-          </Link>
-          <span className="text-muted-foreground/40">•</span>
-          <Link
-            to="/data-deletion"
-            activeProps={{ className: "text-primary font-semibold border-b-2 border-primary pb-1" }}
-            inactiveProps={{ className: "text-muted-foreground hover:text-foreground pb-1" }}
-            className="flex items-center gap-1.5 shrink-0"
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Data Deletion Instructions
-          </Link>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-10 sm:px-6 sm:py-14">
-        <article className="prose prose-slate dark:prose-invert max-w-none space-y-8 text-sm sm:text-base leading-relaxed">
-          {children}
-        </article>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t bg-card py-10 mt-auto">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2 font-display font-semibold text-foreground">
-            <img src="/logo/MI_Logo.svg" alt="MegaInfluencer" className="h-6 w-6 object-contain" />
-            <span>MegaInfluencer</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <Link to="/privacy-policy" className="hover:text-foreground transition-colors">
-              Privacy Policy
+          {/* Sub-nav Tab Bar for Policies */}
+          <div className="mt-8 flex items-center justify-center gap-2 overflow-x-auto p-1.5 rounded-full border border-[#c8c4d7]/50 bg-[#f6f2f7] w-fit mx-auto">
+            <Link
+              to="/privacy-policy"
+              activeProps={{
+                className: "bg-white text-[#1b1b1e] shadow-sm font-semibold",
+              }}
+              inactiveProps={{
+                className: "text-[#474554] hover:text-[#1b1b1e] hover:bg-white/50 font-medium",
+              }}
+              className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs sm:text-sm transition-all duration-200 shrink-0"
+            >
+              <Lock className="h-3.5 w-3.5" /> Privacy Policy
             </Link>
-            <Link to="/terms-of-service" className="hover:text-foreground transition-colors">
-              Terms of Service
+            <Link
+              to="/terms-of-service"
+              activeProps={{
+                className: "bg-white text-[#1b1b1e] shadow-sm font-semibold",
+              }}
+              inactiveProps={{
+                className: "text-[#474554] hover:text-[#1b1b1e] hover:bg-white/50 font-medium",
+              }}
+              className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs sm:text-sm transition-all duration-200 shrink-0"
+            >
+              <FileText className="h-3.5 w-3.5" /> Terms of Service
             </Link>
-            <Link to="/data-deletion" className="hover:text-foreground transition-colors">
-              Data Deletion
+            <Link
+              to="/data-deletion"
+              activeProps={{
+                className: "bg-white text-[#1b1b1e] shadow-sm font-semibold",
+              }}
+              inactiveProps={{
+                className: "text-[#474554] hover:text-[#1b1b1e] hover:bg-white/50 font-medium",
+              }}
+              className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs sm:text-sm transition-all duration-200 shrink-0"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Data Deletion
             </Link>
           </div>
-          <p>© {new Date().getFullYear()} MegaInfluencer Inc. Powered by Megascale. All rights reserved.</p>
         </div>
-      </footer>
-    </div>
+      </section>
+
+      {/* Main Content Card */}
+      <section className="flex-1 px-5 pb-20 sm:px-8 md:pb-28">
+        <div className="mx-auto max-w-4xl rounded-3xl border border-[#e6e6ef] bg-white p-6 sm:p-12 shadow-sm">
+          <article className="prose prose-slate max-w-none space-y-8 text-sm sm:text-base leading-relaxed text-[#474554] [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-[#1b1b1e] [&_h2]:border-b [&_h2]:border-[#e6e6ef] [&_h2]:pb-2 [&_strong]:text-[#1b1b1e] [&_code]:bg-[#f0edf1] [&_code]:text-[#5341cd] [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:font-mono [&_code]:text-xs [&_a]:text-[#5341cd] [&_a]:underline">
+            {children}
+          </article>
+        </div>
+      </section>
+
+      {/* Shared Landing Footer */}
+      <LandingFooter />
+    </main>
   );
 }

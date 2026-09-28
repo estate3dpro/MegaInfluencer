@@ -39,17 +39,33 @@ export function LandingFooter() {
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider">Support</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider">Support & Legal</h3>
             <div className="mt-4 grid gap-3 text-sm text-[#474554]">
-              <Link to="/contact">Contact MegaInfluencer</Link>
-              <a href="#integrations">Integration status</a>
-              <a href="#roadmap">Product roadmap</a>
+              <Link to="/contact" className="hover:text-[#1b1b1e]">Contact MegaInfluencer</Link>
+              <Link to="/privacy-policy" className="hover:text-[#1b1b1e]">Privacy Policy</Link>
+              <Link to="/terms-of-service" className="hover:text-[#1b1b1e]">Terms of Service</Link>
+              <Link to="/data-deletion" className="hover:text-[#1b1b1e]">Data Deletion</Link>
+              <a href="#integrations" className="hover:text-[#1b1b1e]">Integration status</a>
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-between gap-4 pt-8 text-sm text-[#787586] sm:flex-row">
-          <span>© 2026 MegaInfluencer. Creator commerce & affiliate operations.</span>
-          <span className="flex items-center gap-2">
+        <div className="flex flex-col items-center justify-between gap-4 pt-8 text-sm text-[#787586] lg:flex-row">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+            <span>© 2026 MegaInfluencer. All rights reserved.</span>
+            <span className="hidden sm:inline">•</span>
+            <Link to="/privacy-policy" className="hover:text-[#1b1b1e] transition-colors">
+              Privacy Policy
+            </Link>
+            <span>•</span>
+            <Link to="/terms-of-service" className="hover:text-[#1b1b1e] transition-colors">
+              Terms of Service
+            </Link>
+            <span>•</span>
+            <Link to="/data-deletion" className="hover:text-[#1b1b1e] transition-colors">
+              Data Deletion
+            </Link>
+          </div>
+          <span className="flex items-center gap-2 text-xs">
             <i className="h-2 w-2 rounded-full bg-[#00655a]" />
             Shopify & Instagram API webhooks operational
           </span>

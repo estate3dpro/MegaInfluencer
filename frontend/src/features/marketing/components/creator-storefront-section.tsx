@@ -39,11 +39,20 @@ export function CreatorStorefrontSection() {
   return (
     <section id="storefront" className="scroll-mt-24 px-5 py-20 sm:px-8 md:py-24">
       <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="Coming soon · Creator storefronts"
-          title="A storefront that makes recommendations shoppable."
-          copy="Curate products for your audience and keep each recommendation connected to the creator and product referral."
-        />
+        <div className="max-w-3xl">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Pill tone="pink">Coming Soon</Pill>
+            <span className="text-xs font-bold uppercase tracking-[.16em] text-[#5341cd]">
+              Creator storefronts
+            </span>
+          </div>
+          <h2 className="mt-4 font-display text-3xl font-bold tracking-[-.03em] text-[#1b1b1e] sm:text-4xl md:text-5xl">
+            A storefront that makes recommendations shoppable.
+          </h2>
+          <p className="mt-5 text-base leading-7 text-[#474554]">
+            Curate products for your audience and keep each recommendation connected to the creator and product referral.
+          </p>
+        </div>
         <div className="mt-12 overflow-hidden rounded-2xl border border-[#e6e6ef] bg-white shadow-[0_16px_36px_rgba(24,24,27,.06)]">
           {/* Storefront Header */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e6e6ef] bg-[#faf8fc]/60 px-6 py-4">

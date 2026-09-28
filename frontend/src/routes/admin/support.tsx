@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChatPage } from "@/features/chat/pages/ChatPage";
+import { InquiriesPage } from "@/features/admin/pages/InquiriesPage";
 
 export const Route = createFileRoute("/admin/support")({
-  component: () => <ChatPage role="admin" mode="support" />,
+  component: InquiriesPage,
 });

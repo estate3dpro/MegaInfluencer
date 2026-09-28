@@ -16,13 +16,13 @@ const integrations = [
   },
   {
     name: "WooCommerce",
-    status: "In development",
+    status: "Coming soon",
     copy: "Additional catalogue and referral integration",
     Icon: Package,
   },
   {
     name: "Payout providers",
-    status: "Roadmap",
+    status: "Coming soon",
     copy: "Future settlement and payout connections",
     Icon: CircleDollarSign,
   },

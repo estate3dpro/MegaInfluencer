@@ -175,6 +175,7 @@ export const adminNav: NavGroup[] = [
     label: "Governance",
     items: [
       { title: "Users & Roles", url: "/admin/users", icon: UserCog },
+      { title: "Inquiries & Support", url: "/admin/support", icon: MessageCircle },
       { title: "Integrations", url: "/admin/integrations", icon: Blocks },
       { title: "Reports", url: "/admin/reports", icon: FileBarChart },
       { title: "Settings", url: "/admin/settings", icon: Gauge },

@@ -17,17 +17,17 @@ const roadmap = [
     "Track referred sales and commission balances in creator and brand dashboards.",
   ],
   [
-    "In development",
+    "Coming soon",
     "WooCommerce sync",
     "Extend connected catalogues and referral attribution to more storefronts.",
   ],
   [
-    "Roadmap",
+    "Coming soon",
     "Payout provider connections",
     "Streamline final payout workflows with supported payment partners.",
   ],
   [
-    "Research",
+    "Coming soon",
     "Public creator discovery",
     "Help brands discover relevant creators and creators apply to opportunities.",
   ],

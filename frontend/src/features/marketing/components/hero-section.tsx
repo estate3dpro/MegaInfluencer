@@ -14,11 +14,10 @@ export function HeroSection() {
       <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-7">
           <Pill tone="green">
-            Shopify webhook engine{" "}
-            <span className="font-normal text-[#474554]">/ real-time affiliate attribution</span>
+            <span className="font-normal text-[#474554]">Real-Time affiliate attribution</span>
           </Pill>
           <h1 className="max-w-4xl font-display text-4xl font-bold leading-[1.08] tracking-[-.04em] sm:text-5xl md:text-6xl">
-            Creator commerce and affiliate operations{" "}
+            Turn creator influence into measurable revenue{" "}
             <span className="underline decoration-[#a53361] decoration-4 underline-offset-8">
               built for real brands.
             </span>
@@ -46,17 +45,17 @@ export function HeroSection() {
               <b className="flex items-center text-lg">
                 Shopify <CheckCircle2 className="ml-1 h-4 w-4 text-[#00655a]" />
               </b>
-              <span className="text-[#787586]">Product & order sync</span>
+              <span className="text-[#787586]">Catalog & order sync</span>
             </div>
             <div>
               <b className="flex items-center text-lg text-[#a53361]">
                 Instagram <Instagram className="ml-1 h-4 w-4" />
               </b>
-              <span className="text-[#787586]">OAuth & auto-DM webhooks</span>
+              <span className="text-[#787586]">Auto-DM link delivery</span>
             </div>
             <div>
               <b className="text-lg text-[#00655a]">100%</b>
-              <span className="block text-[#787586]">Webhook reconciled</span>
+              <span className="block text-[#787586]">Accurate attribution</span>
             </div>
           </div>
         </div>

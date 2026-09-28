@@ -22,10 +22,10 @@ export function CtaSection() {
             Connect creator account <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
           <Link
-            to="/store/register"
-            className="inline-flex items-center rounded-xl border border-[#c8c4d7] bg-white px-6 py-3.5 text-sm font-semibold"
+            to="/contact"
+            className="inline-flex items-center rounded-xl border border-[#c8c4d7] bg-white px-6 py-3.5 text-sm font-semibold transition hover:bg-[#faf8fc]"
           >
-            Install on Shopify
+            Contact our team
           </Link>
         </div>
       </div>
