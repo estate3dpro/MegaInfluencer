@@ -8,6 +8,8 @@ export type InstagramAutomation = {
   postLabel: string | null;
   keywords: string[];
   dmMessage: string;
+  fallbackMessage: string | null;
+  fallbackEnabled: boolean;
   wholeWordMatch: boolean;
   replyToAnyComment: boolean;
   replyOnDuplicateCommentWebhook: boolean;
@@ -23,6 +25,8 @@ export type CreateInstagramAutomationInput = {
   postId: string;
   keywords: string[];
   dmMessage: string;
+  fallbackMessage?: string;
+  fallbackEnabled?: boolean;
   wholeWordMatch: boolean;
   replyToAnyComment: boolean;
   replyOnDuplicateCommentWebhook: boolean;
@@ -62,6 +66,8 @@ export type UpdateInstagramAutomationInput = {
   name?: string;
   keywords?: string[];
   dmMessage?: string;
+  fallbackMessage?: string | null;
+  fallbackEnabled?: boolean;
   wholeWordMatch?: boolean;
   replyToAnyComment?: boolean;
   replyOnDuplicateCommentWebhook?: boolean;
@@ -80,6 +86,10 @@ export type InstagramAutomationDeliveryLog = {
   providerMessageId: string | null;
   errorMessage: string | null;
   sentAt: string | null;
+  fallbackSent: boolean;
+  fallbackMessage: string | null;
+  fallbackError: string | null;
+  fallbackSentAt: string | null;
   createdAt: string;
   updatedAt: string;
   automation?: {

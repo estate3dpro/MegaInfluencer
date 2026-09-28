@@ -40,6 +40,10 @@ export function AutomationRuleSetterPage() {
   const [message, setMessage] = useState(
     "Hey {username}! Thanks for your comment — here’s the link you asked for: ",
   );
+  const [fallbackMessage, setFallbackMessage] = useState(
+    "Hey {username}! We ran into an issue finding that exact link right now, but you can explore all our latest products and deals here: ",
+  );
+  const [fallbackEnabled, setFallbackEnabled] = useState(true);
   const [wholeWordMatch, setWholeWordMatch] = useState(true);
   const [replyToAnyComment, setReplyToAnyComment] = useState(false);
   const [replyOnDuplicateCommentWebhook, setReplyOnDuplicateCommentWebhook] = useState(false);
@@ -84,6 +88,8 @@ export function AutomationRuleSetterPage() {
         postId: selectedPost.id,
         keywords: finalKeywords,
         dmMessage: message.trim(),
+        fallbackMessage: fallbackEnabled ? fallbackMessage.trim() : undefined,
+        fallbackEnabled,
         wholeWordMatch,
         replyToAnyComment,
         replyOnDuplicateCommentWebhook,
@@ -298,6 +304,40 @@ export function AutomationRuleSetterPage() {
             <div className="mt-2 flex justify-between text-xs text-muted-foreground">
               <span>Instagram allows a reply only after the customer starts the conversation.</span>
               <span>{message.length}/1000</span>
+            </div>
+          </SetterSection>
+
+          <SetterSection
+            step="05"
+            title="Automated fallback message (Optional)"
+            description="Sent automatically if the primary link or DM fails to deliver."
+          >
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border bg-muted/30 p-3.5">
+                <span>
+                  <span className="block text-sm font-medium">Enable automatic error fallback</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    If an unavailable affiliate link or API error occurs, send this backup message instead.
+                  </span>
+                </span>
+                <Switch checked={fallbackEnabled} onCheckedChange={setFallbackEnabled} />
+              </label>
+
+              {fallbackEnabled && (
+                <div className="space-y-2 pt-1">
+                  <Textarea
+                    value={fallbackMessage}
+                    onChange={(event) => setFallbackMessage(event.target.value)}
+                    maxLength={1000}
+                    className="min-h-24 resize-y bg-background"
+                    placeholder="Hey {username}! We ran into a temporary issue with that exact link, but check out..."
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Use {"{username}"} for recipient name.</span>
+                    <span>{fallbackMessage.length}/1000</span>
+                  </div>
+                </div>
+              )}
             </div>
           </SetterSection>
         </div>

@@ -10,7 +10,10 @@ import {
   Eye,
   FileCode2,
   Heart,
+  HelpCircle,
+  History,
   Instagram,
+  LifeBuoy,
   MessageCircle,
   MousePointerClick,
   Pause,
@@ -20,6 +23,7 @@ import {
   Search,
   Send,
   Settings2,
+  ShieldAlert,
   Sparkles,
   Terminal,
   Trash2,
@@ -113,6 +117,8 @@ export function InstagramAutomationPage() {
   const [editKeywordDraft, setEditKeywordDraft] = useState("");
   const [editKeywords, setEditKeywords] = useState<string[]>([]);
   const [editMessage, setEditMessage] = useState("");
+  const [editFallbackMessage, setEditFallbackMessage] = useState("");
+  const [editFallbackEnabled, setEditFallbackEnabled] = useState(true);
   const [editWholeWord, setEditWholeWord] = useState(true);
   const [editReplyToAny, setEditReplyToAny] = useState(false);
   const [editReplyDuplicate, setEditReplyDuplicate] = useState(false);
@@ -187,6 +193,11 @@ export function InstagramAutomationPage() {
     setEditKeywords([...rule.keywords]);
     setEditKeywordDraft("");
     setEditMessage(rule.dmMessage);
+    setEditFallbackMessage(
+      rule.fallbackMessage ||
+        "Hey {username}! We ran into a temporary issue with that exact link, but you can explore all our latest deals and catalog here: ",
+    );
+    setEditFallbackEnabled(rule.fallbackEnabled ?? true);
     setEditWholeWord(rule.wholeWordMatch);
     setEditReplyToAny(rule.replyToAnyComment);
     setEditReplyDuplicate(rule.replyOnDuplicateCommentWebhook);
@@ -227,6 +238,8 @@ export function InstagramAutomationPage() {
         name: editName.trim(),
         keywords: finalKeywords,
         dmMessage: editMessage.trim(),
+        fallbackMessage: editFallbackEnabled ? editFallbackMessage.trim() : null,
+        fallbackEnabled: editFallbackEnabled,
         wholeWordMatch: editWholeWord,
         replyToAnyComment: editReplyToAny,
         replyOnDuplicateCommentWebhook: editReplyDuplicate,
@@ -405,6 +418,11 @@ export function InstagramAutomationPage() {
                         >
                           {isActive ? "Active" : "Paused"}
                         </Badge>
+                        {rule.fallbackEnabled && rule.fallbackMessage && (
+                          <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                            Fallback Active
+                          </Badge>
+                        )}
                         {rule.postLabel ? (
                           <span className="truncate rounded bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground max-w-[200px]">
                             {rule.postLabel}
@@ -540,6 +558,11 @@ export function InstagramAutomationPage() {
                         >
                           {delivery.status}
                         </Badge>
+                        {delivery.fallbackSent && (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                            Fallback Delivered
+                          </Badge>
+                        )}
                         <span className="text-xs text-muted-foreground">
                           via rule: <strong className="text-foreground">{delivery.automation?.name ?? "Automation"}</strong>
                         </span>
@@ -548,8 +571,8 @@ export function InstagramAutomationPage() {
                         Comment: “{delivery.commentText}”
                       </p>
                       {delivery.errorMessage && (
-                        <p className="mt-1 text-xs text-rose-600 line-clamp-1">
-                          Error: {delivery.errorMessage}
+                        <p className="mt-1 text-xs text-rose-600 dark:text-rose-400 line-clamp-1">
+                          Note: {delivery.errorMessage}
                         </p>
                       )}
                     </div>
@@ -600,7 +623,7 @@ export function InstagramAutomationPage() {
               className="gap-2 text-xs"
             >
               <Terminal className="h-3.5 w-3.5 text-primary" />
-              View full webhook logs & payload inspector
+              View full webhook logs & fallback timeline
             </Button>
           </div>
         </CardContent>
@@ -612,7 +635,7 @@ export function InstagramAutomationPage() {
           <div className="md:col-span-1">
             <p className="font-display text-lg font-semibold">How it works</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Use keywords in your posts and let automation deliver the right response instantly.
+              Use keywords in your posts and let automation deliver the right response instantly with automatic fallback protection.
             </p>
           </div>
           <HowStep
@@ -635,7 +658,7 @@ export function InstagramAutomationPage() {
             <DialogHeader>
               <DialogTitle>Edit Automation Rule</DialogTitle>
               <DialogDescription>
-                Update the keyword triggers and response message for this automation.
+                Update keyword triggers, primary response message, and fallback message for this automation.
               </DialogDescription>
             </DialogHeader>
 
@@ -686,21 +709,54 @@ export function InstagramAutomationPage() {
                 </div>
               </div>
 
+              {/* Primary Direct Message */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="edit-message">Direct Message Response</Label>
+                  <Label htmlFor="edit-message">Primary Direct Message</Label>
                   <span className="text-xs text-muted-foreground">Use {"{username}"} for recipient name</span>
                 </div>
                 <Textarea
                   id="edit-message"
                   value={editMessage}
                   onChange={(e) => setEditMessage(e.target.value)}
-                  rows={4}
+                  rows={3}
                   placeholder="Hey {username}! Thanks for commenting. Here is the link: https://..."
                   required
                 />
               </div>
 
+              {/* Fallback Direct Message */}
+              <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <LifeBuoy className="h-4 w-4 text-primary" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Automated Fallback Message</p>
+                      <p className="text-xs text-muted-foreground">
+                        Sent automatically if the primary link is unavailable or an error occurs.
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={editFallbackEnabled} onCheckedChange={setEditFallbackEnabled} />
+                </div>
+
+                {editFallbackEnabled && (
+                  <div className="space-y-2 pt-1">
+                    <Textarea
+                      value={editFallbackMessage}
+                      onChange={(e) => setEditFallbackMessage(e.target.value)}
+                      rows={2}
+                      className="bg-background text-xs"
+                      placeholder="Hey {username}! We had a temporary issue finding that exact link, but you can explore our main store here: https://..."
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Helps maintain high conversions and customer satisfaction even if a specific campaign link fails.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Configuration Switches */}
               <div className="space-y-3 rounded-lg border p-4 bg-muted/20">
                 <div className="flex items-center justify-between">
                   <div>
@@ -791,7 +847,7 @@ export function InstagramAutomationPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* FULL-SCREEN WEBHOOK LOGS POPUP */}
+      {/* FULL-SCREEN WEBHOOK LOGS & FALLBACK TIMELINE POPUP */}
       <WebhookLogsFullscreenModal
         open={webhookLogsOpen}
         onOpenChange={setWebhookLogsOpen}
@@ -804,7 +860,7 @@ export function InstagramAutomationPage() {
 }
 
 // ---------------------------------------------------------------------------
-// FULL-SCREEN WEBHOOK LOGS POPUP COMPONENT
+// FULL-SCREEN WEBHOOK LOGS & FALLBACK TIMELINE MODAL
 // ---------------------------------------------------------------------------
 function WebhookLogsFullscreenModal({
   open,
@@ -829,6 +885,10 @@ function WebhookLogsFullscreenModal({
 
   const deliveries = data?.deliveries ?? [];
   const webhooks = data?.webhookDeliveries ?? [];
+  const fallbackDeliveries = useMemo(
+    () => deliveries.filter((d) => d.fallbackSent || d.fallbackError || Boolean(d.fallbackMessage)),
+    [deliveries],
+  );
 
   const filteredDeliveries = useMemo(() => {
     return deliveries.filter((item) => {
@@ -843,6 +903,19 @@ function WebhookLogsFullscreenModal({
       return matchSearch && matchStatus;
     });
   }, [deliveries, searchTerm, statusFilter]);
+
+  const filteredFallbackDeliveries = useMemo(() => {
+    return fallbackDeliveries.filter((item) => {
+      if (!searchTerm) return true;
+      return (
+        item.commenterName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.commentText?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.automation?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.fallbackMessage?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.errorMessage?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
+  }, [fallbackDeliveries, searchTerm]);
 
   const filteredWebhooks = useMemo(() => {
     return webhooks.filter((item) => {
@@ -859,7 +932,7 @@ function WebhookLogsFullscreenModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="fixed inset-2 md:inset-6 max-w-[calc(100vw-1rem)] md:max-w-[calc(100vw-3rem)] h-[calc(100vh-1rem)] md:h-[calc(100vh-3rem)] max-h-none flex flex-col p-0 rounded-2xl overflow-hidden border shadow-2xl bg-background">
+      <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[90vh] flex flex-col p-0 rounded-2xl overflow-hidden border shadow-2xl bg-background">
         {/* Modal Header */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b px-6 py-4 bg-muted/30">
           <div className="flex items-center gap-3">
@@ -868,14 +941,14 @@ function WebhookLogsFullscreenModal({
             </span>
             <div>
               <div className="flex items-center gap-2.5">
-                <DialogTitle className="text-xl font-bold">Instagram Webhook Logs</DialogTitle>
+                <DialogTitle className="text-xl font-bold">Instagram Webhook & Fallback Logs</DialogTitle>
                 <Badge variant="outline" className="gap-1.5 border-emerald-500/40 text-emerald-600">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                   Live Receiver Active
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Inspect raw Meta webhook events, triggered automations, and direct message deliveries.
+                Inspect raw Meta webhook events, triggered automations, error intercepts, and fallback timelines.
               </p>
             </div>
           </div>
@@ -905,14 +978,18 @@ function WebhookLogsFullscreenModal({
         {/* Tabs and Controls */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b px-6 py-3 bg-card">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
-            <TabsList className="grid grid-cols-2 h-9">
+            <TabsList className="grid grid-cols-3 h-9">
               <TabsTrigger value="deliveries" className="gap-2 text-xs">
                 <Send className="h-3.5 w-3.5" />
-                <span>Triggered Deliveries ({deliveries.length})</span>
+                <span>Deliveries ({deliveries.length})</span>
+              </TabsTrigger>
+              <TabsTrigger value="fallback" className="gap-2 text-xs">
+                <History className="h-3.5 w-3.5 text-amber-500" />
+                <span>Fallback Timeline ({fallbackDeliveries.length})</span>
               </TabsTrigger>
               <TabsTrigger value="raw" className="gap-2 text-xs">
                 <FileCode2 className="h-3.5 w-3.5" />
-                <span>Raw Meta Payloads ({webhooks.length})</span>
+                <span>Raw Webhooks ({webhooks.length})</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -921,7 +998,7 @@ function WebhookLogsFullscreenModal({
             <div className="relative min-w-[220px] flex-1 sm:flex-initial">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search logs..."
+                placeholder="Search logs & timeline..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="h-9 pl-9 text-xs"
@@ -956,7 +1033,8 @@ function WebhookLogsFullscreenModal({
 
         {/* Modal Main Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-muted/10">
-          {activeTab === "deliveries" ? (
+          {/* TAB 1: ALL DELIVERIES */}
+          {activeTab === "deliveries" && (
             filteredDeliveries.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-center bg-card">
                 <Activity className="h-10 w-10 text-muted-foreground/40" />
@@ -995,6 +1073,12 @@ function WebhookLogsFullscreenModal({
                           )}
                           {delivery.status}
                         </Badge>
+                        {delivery.fallbackSent && (
+                          <Badge variant="outline" className="gap-1 text-xs border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                            <LifeBuoy className="h-3 w-3" />
+                            Fallback Sent
+                          </Badge>
+                        )}
                         <span className="font-semibold text-sm text-foreground">
                           Rule: {delivery.automation?.name ?? "Automation"}
                         </span>
@@ -1036,7 +1120,7 @@ function WebhookLogsFullscreenModal({
                         ) : null}
                         {delivery.errorMessage ? (
                           <div className="mt-1 rounded bg-rose-500/10 border border-rose-500/20 p-2 text-xs text-rose-600 dark:text-rose-400">
-                            <strong>Error:</strong> {delivery.errorMessage}
+                            <strong>Note:</strong> {delivery.errorMessage}
                           </div>
                         ) : (
                           <p className="mt-1 text-xs text-muted-foreground">
@@ -1056,63 +1140,152 @@ function WebhookLogsFullscreenModal({
                 ))}
               </div>
             )
-          ) : filteredWebhooks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-center bg-card">
-              <FileCode2 className="h-10 w-10 text-muted-foreground/40" />
-              <p className="mt-3 font-semibold text-foreground">No incoming Meta webhooks recorded</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Payloads received at <code className="font-mono text-primary">/api/v1/webhooks/instagram</code> will be logged here.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredWebhooks.map((webhook, idx) => (
-                <div
-                  key={webhook.id || idx}
-                  className="rounded-xl border bg-card p-4 transition-all hover:border-primary/40"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="font-mono text-xs">
-                        PAYLOAD #{idx + 1}
-                      </Badge>
-                      <span className="font-mono text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-[320px]">
-                        SHA256: {webhook.payloadHash}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {new Date(webhook.receivedAt).toLocaleString()}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(JSON.stringify(webhook.payload, null, 2))}
-                        className="h-7 px-2 text-xs gap-1"
-                      >
-                        <Copy className="h-3 w-3" />
-                        Copy JSON
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedPayload(webhook.payload)}
-                        className="h-7 px-2 text-xs gap-1"
-                      >
-                        <Eye className="h-3 w-3" />
-                        Inspect
-                      </Button>
-                    </div>
-                  </div>
+          )}
 
-                  <div className="mt-3">
-                    <pre className="max-h-48 overflow-x-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-100 dark:bg-slate-900">
-                      <code>{JSON.stringify(webhook.payload, null, 2)}</code>
-                    </pre>
+          {/* TAB 2: DEDICATED FALLBACK TIMELINE */}
+          {activeTab === "fallback" && (
+            filteredFallbackDeliveries.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-center bg-card">
+                <LifeBuoy className="h-10 w-10 text-muted-foreground/40" />
+                <p className="mt-3 font-semibold text-foreground">No Fallback Messages Triggered Yet</p>
+                <p className="mt-1 max-w-md text-xs text-muted-foreground">
+                  When a primary message or link fails, the system automatically intervenes and dispatches your configured backup fallback message. All fallback attempts and timelines will be logged here.
+                </p>
+              </div>
+            ) : (
+              <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-border">
+                {filteredFallbackDeliveries.map((delivery) => (
+                  <div key={delivery.id} className="relative group">
+                    <span
+                      className={cn(
+                        "absolute -left-6 top-1.5 grid h-5 w-5 place-items-center rounded-full border bg-background",
+                        delivery.fallbackSent ? "border-amber-500 text-amber-500" : "border-rose-500 text-rose-500",
+                      )}
+                    >
+                      <span className="h-2 w-2 rounded-full bg-current" />
+                    </span>
+
+                    <div className="rounded-xl border bg-card p-5 shadow-sm space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            className={cn(
+                              "font-mono text-xs uppercase",
+                              delivery.fallbackSent
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                                : "bg-rose-500/10 text-rose-600 border-rose-500/30",
+                            )}
+                            variant="outline"
+                          >
+                            {delivery.fallbackSent ? "Fallback Delivered" : "Fallback Failed"}
+                          </Badge>
+                          <span className="text-sm font-semibold text-foreground">
+                            Rule: {delivery.automation?.name ?? "Automation"}
+                          </span>
+                        </div>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {new Date(delivery.fallbackSentAt || delivery.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {/* Primary Error Root Cause */}
+                        <div className="rounded-lg bg-rose-500/5 border border-rose-500/20 p-3 space-y-1">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                            Primary Intercept Reason
+                          </div>
+                          <p className="text-xs text-foreground font-mono">
+                            {delivery.errorMessage || "Primary message execution encountered an error."}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground pt-1">
+                            Recipient: {delivery.commenterName ? `@${delivery.commenterName}` : "Commenter"} on “{delivery.commentText}”
+                          </p>
+                        </div>
+
+                        {/* Fallback Message Sent */}
+                        <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-3 space-y-1">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            <LifeBuoy className="h-3.5 w-3.5" />
+                            Fallback DM Dispatched
+                          </div>
+                          <p className="text-xs italic bg-background/80 p-2 rounded border text-foreground">
+                            “{delivery.fallbackMessage || "Configured fallback response"}”
+                          </p>
+                          {delivery.providerMessageId && (
+                            <p className="font-mono text-[10px] text-muted-foreground truncate pt-1">
+                              Meta Message ID: {delivery.providerMessageId}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
+          )}
+
+          {/* TAB 3: RAW WEBHOOKS */}
+          {activeTab === "raw" && (
+            filteredWebhooks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-center bg-card">
+                <FileCode2 className="h-10 w-10 text-muted-foreground/40" />
+                <p className="mt-3 font-semibold text-foreground">No incoming Meta webhooks recorded</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Payloads received at <code className="font-mono text-primary">/api/v1/webhooks/instagram</code> will be logged here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredWebhooks.map((webhook, idx) => (
+                  <div
+                    key={webhook.id || idx}
+                    className="rounded-xl border bg-card p-4 transition-all hover:border-primary/40"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          PAYLOAD #{idx + 1}
+                        </Badge>
+                        <span className="font-mono text-xs text-muted-foreground truncate max-w-[200px] sm:max-w-[320px]">
+                          SHA256: {webhook.payloadHash}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {new Date(webhook.receivedAt).toLocaleString()}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(JSON.stringify(webhook.payload, null, 2))}
+                          className="h-7 px-2 text-xs gap-1"
+                        >
+                          <Copy className="h-3 w-3" />
+                          Copy JSON
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedPayload(webhook.payload)}
+                          className="h-7 px-2 text-xs gap-1"
+                        >
+                          <Eye className="h-3 w-3" />
+                          Inspect
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <pre className="max-h-48 overflow-x-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-100 dark:bg-slate-900">
+                        <code>{JSON.stringify(webhook.payload, null, 2)}</code>
+                      </pre>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </div>
 

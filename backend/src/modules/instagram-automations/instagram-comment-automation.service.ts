@@ -252,12 +252,69 @@ async function processCommentEvent(app: FastifyInstance, event: MetaCommentEvent
         providerMessageId: result.message_id ?? null,
       }, 'Instagram automation private reply sent');
     } catch (error) {
-      await app.prisma.instagramAutomationDelivery.update({
-        where: { id: delivery.id },
-        data: { status: 'FAILED', errorMessage: errorMessage(error) },
-      });
-      summary.failed += 1;
+      const primaryError = errorMessage(error);
       app.log.error({ err: error, ...logContext }, 'Instagram automation private reply failed');
+
+      // If fallback is configured and enabled, try sending fallback message
+      const fallbackMsg = (automation as any).fallbackMessage?.trim();
+      const fallbackEnabled = (automation as any).fallbackEnabled !== false;
+
+      if (fallbackEnabled && fallbackMsg) {
+        try {
+          app.log.info({
+            ...logContext,
+            primaryError,
+            fallbackMessage: fallbackMsg,
+          }, 'Attempting to send fallback Instagram automation message');
+
+          const replyInstagramAccountId = event.instagramAccountId ?? connection.instagramUserId;
+          const fallbackResult = await sendInstagramPrivateReply(
+            decryptToken(connection.encryptedAccessToken),
+            replyInstagramAccountId,
+            event.commentId,
+            personaliseMessage(fallbackMsg, event.commenterName),
+          );
+
+          await app.prisma.instagramAutomationDelivery.update({
+            where: { id: delivery.id },
+            data: {
+              status: 'SENT',
+              providerMessageId: fallbackResult.message_id ?? null,
+              sentAt: new Date(),
+              errorMessage: `Primary DM failed: ${primaryError} [Delivered Fallback]`,
+              fallbackSent: true,
+              fallbackMessage: fallbackMsg,
+              fallbackSentAt: new Date(),
+            },
+          });
+          summary.sent += 1;
+          app.log.info({
+            ...logContext,
+            providerMessageId: fallbackResult.message_id ?? null,
+            fallbackSent: true,
+          }, 'Instagram fallback private reply sent successfully');
+        } catch (fallbackErr) {
+          const fallbackErrorMsg = errorMessage(fallbackErr);
+          await app.prisma.instagramAutomationDelivery.update({
+            where: { id: delivery.id },
+            data: {
+              status: 'FAILED',
+              errorMessage: `Primary error: ${primaryError} | Fallback error: ${fallbackErrorMsg}`,
+              fallbackSent: false,
+              fallbackMessage: fallbackMsg,
+              fallbackError: fallbackErrorMsg,
+            },
+          });
+          summary.failed += 1;
+          app.log.error({ err: fallbackErr, ...logContext }, 'Instagram fallback private reply also failed');
+        }
+      } else {
+        await app.prisma.instagramAutomationDelivery.update({
+          where: { id: delivery.id },
+          data: { status: 'FAILED', errorMessage: primaryError },
+        });
+        summary.failed += 1;
+      }
     }
   }
   return summary;
