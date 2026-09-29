@@ -2,8 +2,7 @@ import { ArrowRight, CheckCircle2, ShoppingBag } from "lucide-react";
 import { Pill } from "./pill";
 import { SectionTitle } from "./section-title";
 
-const creatorPhoto =
-  "https://lh3.googleusercontent.com/aida/AEtjO1Wq9uc_AOlf-2hZuB55LOah2l1s8iiNmpR0nqVDrxurastrFmlhkswEQgNaNncSPceX_T8vJMIaJKWcFGzwhRA3eoLcuThwP1_YOZYd5BWrcK1aq5cBhRFeTVsh8h3r0nMvq7FNcTFBd1JQVf7DylwVKOyynuqboCc5ny51PkM6gswL6OwdjXz-qqVL9r0kI0Z4wP7n3uTB-CMpAwcEeXIj1UVRukeVax6YVYERhsr_Y8knahDwvO1IGDeE";
+const creatorPhoto = "/images/creator-portrait.png";
 
 const storefrontProducts = [
   {
@@ -12,8 +11,7 @@ const storefrontProducts = [
     price: "₹3,499",
     tag: "Kitchen & Living",
     commission: "12% commission",
-    image:
-      "https://lh3.googleusercontent.com/aida/AEtjO1UKVEmyMg9mc_MruZURy-ABLqgPF4j1LmzronKrhy_X44s7_0bE61EKi0iKZiuld48ZpLJD9TPTm2Y2e-HrR-GktOedE2rcO_j1SyDj1HSjz3zeN7j5uCI5VdmRqz-EmCZC3jlE5swKmFStMeVQ5RUB1tLpItr7T9fXIKF_mg0wYIugQojsteY22YnUXJWuC0AAa2J9irX_bbsaOR5UpBEq2aNdAUze1fF9iWEnzHREdb-7bngKg0RvEQ8=s1600",
+    image: "/images/kettle.png",
   },
   {
     name: "Botanical renewal serum & mist",
@@ -21,8 +19,7 @@ const storefrontProducts = [
     price: "₹1,899",
     tag: "Skincare",
     commission: "15% commission",
-    image:
-      "https://lh3.googleusercontent.com/aida/AEtjO1WEyuoY6WNsF7Pg96LlxpI2e0oHLOfgpDLk5mEmVldjRtL_1Rp5geRUvb9Nud6il3jUN6f2T9yVC1E6sZqYLKyyYNshTIqa0Z1CXWVLO2tufB9fb11_jNgx68TtR3F29uLhP_L3BX6FYnG8XpOT40spPPJS9wFnibUZmHJCG-AyeGI_qztdHpP7s1wiXDGFvuO2DZpnabNmJmqAoJjuQnoiZTZMFbnoVm989OsOREpJy5rLIQWoa7w5ohWP=s1600",
+    image: "/images/botanical-serum.png",
   },
   {
     name: "Vegetable-tanned leather cardholder",
@@ -30,8 +27,7 @@ const storefrontProducts = [
     price: "₹2,299",
     tag: "Accessories",
     commission: "10% commission",
-    image:
-      "https://lh3.googleusercontent.com/aida/AEtjO1Xdu_FCnU2N_AUxzDssuFxtSLCm2rYcva0Sdak3oHRybpP8QKUnfokEEtT6LvbGit2qiqK9xshBal5FHDjIXAxaIwk9zfDhUCBdG2AVt1tzTEKA8xU1m4r52zsEeKsi0f1R5_spc0gcfySPAMiLTAYTsBxdEU3sHwv2n1FHFHMfq6--VLVTjskw2aB2nSAmduvHtQlg5hLCENetzzhvElYS-_lzBMtuvx_iLP___AnN5m3KxM2EEzmHrrjD=s1600",
+    image: "/images/cardholder.png",
   },
 ];
 

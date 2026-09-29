@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Sparkles } from "lucide-react";
 
 export function LandingFooter() {
   return (
@@ -10,7 +11,15 @@ export function LandingFooter() {
               <img src="/logo/MI_Logo.svg" alt="" className="h-8 w-8" />
               MegaInfluencer
             </div>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-[#474554]">
+            <a
+              href="https://megascale.in"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-[#5341cd]/10 px-2.5 py-1 text-[11px] font-semibold text-[#5341cd] transition hover:bg-[#5341cd]/20"
+            >
+              <Sparkles className="h-3 w-3" /> Powered by Megascale
+            </a>
+            <p className="mt-3 max-w-sm text-sm leading-6 text-[#474554]">
               Creator commerce and affiliate operations connecting influencers, Shopify
               storefronts, and automated Instagram engagement.
             </p>
@@ -52,6 +61,18 @@ export function LandingFooter() {
         <div className="flex flex-col items-center justify-between gap-4 pt-8 text-sm text-[#787586] lg:flex-row">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             <span>© 2026 MegaInfluencer. All rights reserved.</span>
+            <span className="hidden sm:inline">•</span>
+            <span>
+              Powered by{" "}
+              <a
+                href="https://megascale.in"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-[#1b1b1e] hover:underline"
+              >
+                Megascale
+              </a>
+            </span>
             <span className="hidden sm:inline">•</span>
             <Link to="/privacy-policy" className="hover:text-[#1b1b1e] transition-colors">
               Privacy Policy
