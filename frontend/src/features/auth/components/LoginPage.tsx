@@ -82,9 +82,14 @@ function AuthLayout({ role, children }: { role: Role; children: ReactNode }) {
               />
               MegaInfluencer
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            <a
+              href="https://megascale.in"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/20"
+            >
               <Sparkles className="h-3.5 w-3.5" /> Powered by Megascale
-            </span>
+            </a>
           </div>
           <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center py-4 xl:py-6">
             <img

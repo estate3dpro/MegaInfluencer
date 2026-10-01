@@ -2,11 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight, CheckCircle2, Copy, Instagram } from "lucide-react";
 import { Pill } from "./pill";
 
-const creatorPhoto =
-  "https://lh3.googleusercontent.com/aida/AEtjO1Wq9uc_AOlf-2hZuB55LOah2l1s8iiNmpR0nqVDrxurastrFmlhkswEQgNaNncSPceX_T8vJMIaJKWcFGzwhRA3eoLcuThwP1_YOZYd5BWrcK1aq5cBhRFeTVsh8h3r0nMvq7FNcTFBd1JQVf7DylwVKOyynuqboCc5ny51PkM6gswL6OwdjXz-qqVL9r0kI0Z4wP7n3uTB-CMpAwcEeXIj1UVRukeVax6YVYERhsr_Y8knahDwvO1IGDeE";
-
-const serumPhoto =
-  "https://lh3.googleusercontent.com/aida/AEtjO1UKVEmyMg9mc_MruZURy-ABLqgPF4j1LmzronKrhy_X44s7_0bE61EKi0iKZiuld48ZpLJD9TPTm2Y2e-HrR-GktOedE2rcO_j1SyDj1HSjz3zeN7j5uCI5VdmRqz-EmCZC3jlE5swKmFStMeVQ5RUB1tLpItr7T9fXIKF_mg0wYIugQojsteY22YnUXJWuC0AAa2J9irX_bbsaOR5UpBEq2aNdAUze1fF9iWEnzHREdb-7bngKg0RvEQ8=s1600";
+const creatorPhoto = "/images/creator-portrait.png";
+const serumPhoto = "/images/botanical-serum.png";
 
 export function HeroSection() {
   return (
