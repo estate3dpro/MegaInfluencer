@@ -74,7 +74,10 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           instagramMediaCount: instagramStatistics?.media_count ?? null,
           totalSales,
           totalOrders,
-          totalCommissions,
+          totalCommissions: row.compensationMode === 'BARTER' ? 0 : totalCommissions,
+          compensationMode: row.compensationMode,
+          barterOrders: row.compensationMode === 'BARTER' ? totalOrders : 0,
+          barterGmv: row.compensationMode === 'BARTER' ? totalSales : 0,
           activeLinks,
         };
       })),
@@ -165,6 +168,28 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true, assignment };
   });
 
+  // Temporary creator-level override while campaign compensation plans are being repaired.
+  app.patch('/store/creators/:creatorId/compensation-mode', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const { creatorId } = req.params as { creatorId: string };
+    const { compensationMode } = req.body as { compensationMode?: string };
+
+    if (!['COMMISSION', 'BARTER'].includes(compensationMode ?? '')) {
+      throw new AppError('INVALID_COMPENSATION_MODE', 'compensationMode must be COMMISSION or BARTER', 400);
+    }
+
+    const assignment = await prisma.storeInfluencerAssignment.updateMany({
+      where: { organizationId: org.id, influencerId: creatorId },
+      data: { compensationMode },
+    });
+    if (!assignment.count) {
+      throw new AppError('CREATOR_NOT_FOUND', 'Creator is not assigned to this store.', 404);
+    }
+
+    return { ok: true, compensationMode };
+  });
+
   // GET store commissions roster
   app.get('/store/commissions', async (req) => {
     const actor = requireRole(req, ['STORE_OWNER']);
@@ -183,7 +208,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       ];
     }
 
-    const [rows, allCommissions] = await Promise.all([
+    const [rows, allCommissions, assignments] = await Promise.all([
       prisma.affiliateCommission.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -210,22 +235,35 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       }),
       prisma.affiliateCommission.findMany({
         where: { organizationId: org.id },
-        select: { amount: true, status: true },
+        select: { creatorId: true, amount: true, status: true },
+      }),
+      prisma.storeInfluencerAssignment.findMany({
+        where: { organizationId: org.id },
+        select: { influencerId: true, compensationMode: true },
       }),
     ]);
 
-    const pendingAmount = allCommissions
+    const compensationByCreator = new Map(
+      assignments.map((assignment: any) => [assignment.influencerId, assignment.compensationMode]),
+    );
+    const payoutCommissions = allCommissions.filter(
+      (commission: any) => compensationByCreator.get(commission.creatorId) !== 'BARTER',
+    );
+
+    const pendingAmount = payoutCommissions
       .filter((c: any) => c.status === 'PENDING')
       .reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
-    const approvedAmount = allCommissions
+    const approvedAmount = payoutCommissions
       .filter((c: any) => c.status === 'APPROVED')
       .reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
-    const paidAmount = allCommissions
+    const paidAmount = payoutCommissions
       .filter((c: any) => c.status === 'PAID')
       .reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
 
     return {
-      commissions: rows.map((r: any) => ({
+      commissions: rows
+        .filter((r: any) => compensationByCreator.get(r.creatorId) !== 'BARTER')
+        .map((r: any) => ({
         id: r.id,
         orderId: r.shopifyOrderId,
         orderNumber: r.shopifyOrder?.name ?? `#${r.shopifyOrderId.slice(-6)}`,
@@ -243,12 +281,12 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
               instagram: r.creator.instagramConnection?.username ?? null,
             }
           : null,
-      })),
+        })),
       metrics: {
         pendingAmount,
         approvedAmount,
         paidAmount,
-        totalCount: allCommissions.length,
+        totalCount: payoutCommissions.length,
       },
     };
   });
@@ -296,7 +334,12 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
         /* profile remains available when Meta stats cannot be fetched */
       }
     }
-    return { creator: assignment.influencer, assignedAt: assignment.createdAt, instagramStatistics };
+    return {
+      creator: assignment.influencer,
+      assignedAt: assignment.createdAt,
+      compensationMode: assignment.compensationMode,
+      instagramStatistics,
+    };
   });
 
   // GET store products and assignment state for this creator

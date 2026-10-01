@@ -378,38 +378,19 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             update: d,
           });
 
-          // Check if creator's active deal in this store is strictly BARTER or FIXED (no sales commission)
-          let isBarterOrFixedOnly = false;
+          // The store roster switch is the temporary compensation source of truth.
+          // It deliberately bypasses campaign compensation while that workflow is repaired.
+          let compensationMode: 'COMMISSION' | 'BARTER' = 'COMMISSION';
           if (creator) {
-            const nonCommissionAssignment = await prisma.campaignAssignment.findFirst({
-              where: {
-                influencerId: creator.id,
-                status: 'ASSIGNED',
-                campaign: {
-                  organizationId: s.id,
-                  compensationType: { in: ['BARTER', 'FIXED', 'barter', 'fixed'] },
-                  deletedAt: null,
-                },
-              },
+            const assignment = await prisma.storeInfluencerAssignment.findUnique({
+              where: { organizationId_influencerId: { organizationId: s.id, influencerId: creator.id } },
+              select: { compensationMode: true },
             });
-            const hasCommissionDeal = await prisma.campaignAssignment.findFirst({
-              where: {
-                influencerId: creator.id,
-                status: 'ASSIGNED',
-                campaign: {
-                  organizationId: s.id,
-                  compensationType: { in: ['COMMISSION', 'HYBRID', 'commission', 'hybrid'] },
-                  deletedAt: null,
-                },
-              },
-            });
-            if (nonCommissionAssignment && !hasCommissionDeal) {
-              isBarterOrFixedOnly = true;
-            }
+            if (assignment?.compensationMode === 'BARTER') compensationMode = 'BARTER';
           }
 
-          // Only auto-create an affiliate commission link if creator is NOT on a Barter/Fixed-only deal
-          if (creator && !link && !isBarterOrFixedOnly) {
+          // A link is also required for barter orders so they can be attributed and counted.
+          if (creator && !link) {
             link = await prisma.affiliateLink.create({
               data: {
                 organizationId: s.id,
@@ -423,11 +404,11 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             });
           }
 
-          // If creator is on a Barter/Fixed deal only, do NOT record an AffiliateCommission
-          if (link && creator && !isBarterOrFixedOnly && Number(link.commissionRate ?? 0) > 0) {
+          if (link && creator && (compensationMode === 'BARTER' || Number(link.commissionRate ?? 0) > 0)) {
             const amount = Number(d.total ?? 0);
             const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
             const status = isRefunded ? 'REVERSED' : 'PENDING';
+            const commissionRate = compensationMode === 'BARTER' ? 0 : Number(link.commissionRate ?? 10);
 
             await prisma.affiliateCommission.upsert({
               where: { shopifyOrderId: order.id },
@@ -437,13 +418,14 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 creatorId: link.creatorId ?? creator.id,
                 shopifyOrderId: order.id,
                 orderAmount: amount,
-                commissionRate: link.commissionRate ?? 10,
-                amount: (amount * Number(link.commissionRate ?? 10)) / 100,
+                commissionRate,
+                amount: (amount * commissionRate) / 100,
                 status,
               },
               update: {
                 orderAmount: amount,
-                amount: (amount * Number(link.commissionRate ?? 10)) / 100,
+                commissionRate,
+                amount: (amount * commissionRate) / 100,
                 status: isRefunded ? 'REVERSED' : undefined,
               },
             });
@@ -647,7 +629,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
     });
 
-    const rate = customRate ?? (link ? Number(link.commissionRate) : 10);
+    const assignment = await prisma.storeInfluencerAssignment.findUnique({
+      where: { organizationId_influencerId: { organizationId: s.id, influencerId: creator.id } },
+      select: { compensationMode: true },
+    });
+    const isBarter = assignment?.compensationMode === 'BARTER';
+    const rate = isBarter ? 0 : (customRate ?? (link ? Number(link.commissionRate) : 10));
 
     if (!link) {
       link = await prisma.affiliateLink.create({

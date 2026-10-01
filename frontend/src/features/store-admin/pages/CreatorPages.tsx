@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ import {
   getAvailableCreators,
   getStoreCommissions,
   getStoreCreators,
+  updateCreatorCompensationMode,
   updateCommissionStatus,
   type StoreCreator,
 } from "../api/creators.api";
@@ -143,6 +145,17 @@ export function CreatorsPage() {
     onError: () => toast.error("Could not add creator to store"),
   });
 
+  const compensationMutation = useMutation({
+    mutationFn: ({ creatorId, compensationMode }: { creatorId: string; compensationMode: "COMMISSION" | "BARTER" }) =>
+      updateCreatorCompensationMode(creatorId, compensationMode),
+    onSuccess: (_, variables) => {
+      client.invalidateQueries({ queryKey: ["store", "creators"] });
+      client.invalidateQueries({ queryKey: ["store", "commissions"] });
+      toast.success(variables.compensationMode === "BARTER" ? "Creator is now managed as barter" : "Creator is now managed on commission");
+    },
+    onError: () => toast.error("Could not update creator compensation mode"),
+  });
+
   const filteredCreators = creators.filter((c: StoreCreator) =>
     `${c.displayName} ${c.email || ""} ${c.creatorCode || ""}`
       .toLowerCase()
@@ -234,12 +247,13 @@ export function CreatorsPage() {
       </div>
 
       <PageTable>
-        <table className="w-full min-w-[850px] text-left text-sm">
+        <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-5 py-3 font-medium">Influencer Profile</th>
               <th className="px-5 py-3 font-medium">Instagram Handle</th>
               <th className="px-5 py-3 font-medium">Creator Code</th>
+              <th className="px-5 py-3 text-center font-medium">Compensation</th>
               <th className="px-5 py-3 text-right font-medium">Attributed GMV</th>
               <th className="px-5 py-3 text-center font-medium">Orders</th>
               <th className="px-5 py-3 text-right font-medium">Commissions</th>
@@ -250,14 +264,14 @@ export function CreatorsPage() {
             {query.isLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i} className="border-b last:border-0">
-                  <td colSpan={7} className="px-5 py-4">
+                  <td colSpan={8} className="px-5 py-4">
                     <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
                   </td>
                 </tr>
               ))
             ) : filteredCreators.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                   No creators found. Click &ldquo;Add Creator Partner&rdquo; to add influencers to your store.
                 </td>
               </tr>
@@ -289,14 +303,32 @@ export function CreatorsPage() {
                   <td className="px-5 py-3.5 font-mono font-semibold text-xs text-primary">
                     {creator.creatorCode ? `@${creator.creatorCode}` : "—"}
                   </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center justify-center gap-2">
+                      <Switch
+                        checked={creator.compensationMode === "BARTER"}
+                        disabled={compensationMutation.isPending}
+                        onCheckedChange={(checked) =>
+                          compensationMutation.mutate({
+                            creatorId: creator.id,
+                            compensationMode: checked ? "BARTER" : "COMMISSION",
+                          })
+                        }
+                        aria-label={`Set ${creator.displayName} to ${creator.compensationMode === "BARTER" ? "commission" : "barter"} mode`}
+                      />
+                      <span className={`text-xs font-semibold ${creator.compensationMode === "BARTER" ? "text-amber-600" : "text-teal"}`}>
+                        {creator.compensationMode === "BARTER" ? "Barter" : "Commission"}
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-5 py-3.5 text-right font-bold text-foreground">
                     {formatCurrency(creator.totalSales || 0)}
                   </td>
                   <td className="px-5 py-3.5 text-center font-medium">
-                    {creator.totalOrders || 0}
+                    {creator.compensationMode === "BARTER" ? creator.barterOrders || 0 : creator.totalOrders || 0}
                   </td>
                   <td className="px-5 py-3.5 text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(creator.totalCommissions || 0)}
+                    {creator.compensationMode === "BARTER" ? "—" : formatCurrency(creator.totalCommissions || 0)}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <Button asChild variant="ghost" size="sm" className="text-primary">

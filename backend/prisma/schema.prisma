@@ -604,6 +604,7 @@ model StoreInfluencerAssignment {
   id             String       @id @default(cuid())
   organizationId String
   influencerId   String
+  compensationMode String     @default("COMMISSION")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   influencer     User         @relation("AssignedInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
   createdAt      DateTime     @default(now())

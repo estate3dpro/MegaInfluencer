@@ -15,6 +15,9 @@ export type StoreCreator = {
   totalOrders?: number;
   totalCommissions?: number;
   activeLinks?: number;
+  compensationMode: "COMMISSION" | "BARTER";
+  barterOrders?: number;
+  barterGmv?: number;
 };
 
 export type AvailableCreator = {
@@ -79,6 +82,18 @@ export async function assignStoreCreator(influencerId: string) {
     await apiClient.post<{ ok: boolean; assignment: any }>("/store/creators/assign", {
       influencerId,
     })
+  ).data;
+}
+
+export async function updateCreatorCompensationMode(
+  creatorId: string,
+  compensationMode: "COMMISSION" | "BARTER",
+) {
+  return (
+    await apiClient.patch<{ ok: boolean; compensationMode: "COMMISSION" | "BARTER" }>(
+      `/store/creators/${creatorId}/compensation-mode`,
+      { compensationMode },
+    )
   ).data;
 }
 
