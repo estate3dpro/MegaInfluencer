@@ -10,9 +10,10 @@ export type InfluencerOrder = {
   productTitle: string;
   orderTotal: string;
   orderTotalRaw: number;
-  commission: string;
+  commission: string | null;
   commissionRaw: number;
-  commissionRate: string;
+  commissionRate: string | null;
+  isBarter: boolean;
   status: "Approved" | "Pending" | "Paid" | "Cancelled";
   statusRaw: "APPROVED" | "PENDING" | "PAID" | "REVERSED";
   date: string;
@@ -24,6 +25,8 @@ export type GetInfluencerOrdersResponse = {
     totalOrders: number;
     totalSales: string;
     totalCommissions: string;
+    barterOrders: number;
+    isBarterOnly: boolean;
   };
   orders: InfluencerOrder[];
 };

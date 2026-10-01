@@ -104,16 +104,18 @@ function StoreSelector({
 function Metrics({
   scope,
   scopeData,
+  showEarnings = true,
 }: {
   scope: Scope;
   scopeData: Record<string, { sales: string; orders: string; earnings: string; clicks: string; conversion: string }>;
+  showEarnings?: boolean;
 }) {
   const data = scopeData[scope] || scopeData["all"] || fallbackScopeData["all"];
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <Metric label="Attributed sales" value={data.sales} icon={TrendingUp} detail="Last 30 days" />
       <Metric label="Orders generated" value={data.orders} icon={ShoppingBag} detail="Tracked purchases" />
-      <Metric label="Your earnings" value={data.earnings} icon={BadgeIndianRupee} detail="Approved + pending" />
+      {showEarnings ? <Metric label="Your earnings" value={data.earnings} icon={BadgeIndianRupee} detail="Approved + pending" /> : null}
       <Metric label="Link clicks" value={data.clicks} icon={Link2} detail={`${data.conversion} conversion rate`} />
     </section>
   );
@@ -198,7 +200,7 @@ export function StorePage() {
         description="Track the storefronts and products you share with your audience."
         actions={<StoreSelector scope={scope} setScope={setScope} stores={data?.stores} />}
       />
-      <Metrics scope={scope} scopeData={scopeDataMap} />
+      <Metrics scope={scope} scopeData={scopeDataMap} showEarnings={!data?.isBarterOnly} />
       <section className="grid gap-6 xl:grid-cols-3">
         <Card className="shadow-card xl:col-span-2">
           <CardHeader className="p-5 pb-3">
@@ -354,7 +356,7 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
         description={campaignId ? "The product selected for this campaign is ready for you to share." : "Discover products from your connected brand stores and share what you love."}
         actions={campaignId ? undefined : <StoreSelector scope={scope} setScope={setScope} stores={storesData?.stores} />}
       />
-      <Metrics scope={scope} scopeData={scopeDataMap} />
+      <Metrics scope={scope} scopeData={scopeDataMap} showEarnings={!storesData?.isBarterOnly} />
       <Card className="shadow-card">
         <CardHeader className="p-5 pb-3">
           <CardTitle>{currentScopeTitle}</CardTitle>
@@ -476,6 +478,7 @@ export function LinksPage() {
   });
 
   const links = linksQuery.data?.links ?? [];
+  const isBarterOnly = linksQuery.data?.isBarterOnly ?? storesQuery.data?.isBarterOnly ?? false;
   const scopeDataMap = storesQuery.data?.scopeData ?? fallbackScopeData;
 
   const handleCreateLink = (e: React.FormEvent) => {
@@ -612,7 +615,7 @@ export function LinksPage() {
         }
       />
 
-      <Metrics scope={scope} scopeData={scopeDataMap} />
+      <Metrics scope={scope} scopeData={scopeDataMap} showEarnings={!isBarterOnly} />
 
       <Card className="shadow-card">
         <CardHeader className="flex flex-col gap-4 p-5 pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -674,10 +677,12 @@ export function LinksPage() {
                     <p className="font-bold font-display text-success">{link.conversion}</p>
                     <p className="text-[11px] text-muted-foreground">Conv.</p>
                   </div>
-                  <div className="text-center sm:text-right">
-                    <p className="font-bold font-display text-primary">₹{link.earnings}</p>
-                    <p className="text-[11px] text-muted-foreground">Earned</p>
-                  </div>
+                  {!isBarterOnly ? (
+                    <div className="text-center sm:text-right">
+                      <p className="font-bold font-display text-primary">₹{link.earnings}</p>
+                      <p className="text-[11px] text-muted-foreground">Earned</p>
+                    </div>
+                  ) : null}
                   <Button
                     variant="outline"
                     size="sm"
@@ -752,7 +757,7 @@ export function OrdersPage() {
         actions={<StoreSelector scope={scope} setScope={setScope} stores={storesQuery.data?.stores} />}
       />
 
-      <Metrics scope={scope} scopeData={scopeDataMap} />
+      <Metrics scope={scope} scopeData={scopeDataMap} showEarnings={!ordersData?.metrics.isBarterOnly} />
 
       <Card className="shadow-card">
         <CardHeader className="flex flex-col gap-4 p-5 pb-3 sm:flex-row sm:items-center sm:justify-between">
@@ -791,7 +796,7 @@ export function OrdersPage() {
                 <th className="px-5 py-3 font-medium">Store</th>
                 <th className="px-5 py-3 font-medium">Product / Link</th>
                 <th className="px-5 py-3 font-medium">Order Total</th>
-                <th className="px-5 py-3 font-medium">Your Commission</th>
+                {!ordersData?.metrics.isBarterOnly ? <th className="px-5 py-3 font-medium">Your Commission</th> : null}
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium text-right">Date</th>
               </tr>
@@ -809,17 +814,18 @@ export function OrdersPage() {
                       {order.productTitle}
                     </td>
                     <td className="px-5 py-4 font-medium">{order.orderTotal}</td>
-                    <td className="px-5 py-4">
-                      <p className="font-display font-bold text-primary">{order.commission}</p>
-                      <p className="text-[11px] text-muted-foreground">{order.commissionRate} rate</p>
-                    </td>
+                    {!ordersData?.metrics.isBarterOnly ? (
+                      <td className="px-5 py-4">
+                        {order.isBarter ? <p className="text-xs font-semibold text-amber-600">Barter order</p> : <><p className="font-display font-bold text-primary">{order.commission}</p><p className="text-[11px] text-muted-foreground">{order.commissionRate} rate</p></>}
+                      </td>
+                    ) : null}
                     <td className="px-5 py-4">{getStatusBadge(order.status)}</td>
                     <td className="px-5 py-4 text-right text-xs text-muted-foreground">{order.date}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-14 text-center text-muted-foreground">
+                  <td colSpan={ordersData?.metrics.isBarterOnly ? 6 : 7} className="py-14 text-center text-muted-foreground">
                     <ShoppingBag className="mx-auto h-9 w-9 opacity-40" />
                     <p className="mt-2 font-medium">No attributed orders found</p>
                     <p className="text-xs">Purchases from your shared referral links will appear here in real-time.</p>
@@ -868,6 +874,26 @@ export function EarningsPage() {
   const timeline = earningsData?.timeline ?? [];
   const recentCommissions = earningsData?.recentCommissions ?? [];
   const barterFulfillments = earningsData?.barterFulfillments ?? [];
+
+  if (earningsData?.isBarterOnly) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Barter Orders"
+          description="Your store partnerships are currently managed as barter. Orders are tracked, with no cash commission or payout."
+          actions={<StoreSelector scope={scope} setScope={setScope} stores={storesQuery.data?.stores} />}
+        />
+        <section className="grid gap-4 sm:grid-cols-1">
+          <Metric label="Barter orders generated" value={String(earningsData.barterOrders)} icon={ShoppingBag} detail="Tracked purchases" />
+        </section>
+        <Card className="shadow-card">
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            Orders from your shared links are counted here, but barter partnerships do not create commission earnings or payouts.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

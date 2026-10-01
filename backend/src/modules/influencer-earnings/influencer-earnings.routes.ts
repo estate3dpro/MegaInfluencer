@@ -28,7 +28,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
-    const [allCommissions, allPayouts, barterFulfillments] = await Promise.all([
+    const [allCommissions, allPayouts, barterFulfillments, storeAssignments] = await Promise.all([
       prisma.affiliateCommission.findMany({
         where,
         include: {
@@ -54,14 +54,25 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
         },
         orderBy: { createdAt: 'desc' },
       }),
+      prisma.storeInfluencerAssignment.findMany({
+        where: { influencerId: actor.userId },
+        select: { organizationId: true, compensationMode: true },
+      }),
     ]);
+
+    const barterOrganizationIds = new Set(
+      storeAssignments.filter((assignment: any) => assignment.compensationMode === 'BARTER').map((assignment: any) => assignment.organizationId),
+    );
+    const cashCommissions = allCommissions.filter((commission: any) => !barterOrganizationIds.has(commission.organizationId));
+    const cashPayouts = allPayouts.filter((payout: any) => !barterOrganizationIds.has(payout.organizationId));
+    const barterOrders = allCommissions.filter((commission: any) => barterOrganizationIds.has(commission.organizationId));
 
     let availableToWithdraw = 0;
     let pendingApproval = 0;
     let lifetimeEarnings = 0;
     let paidEarnings = 0;
 
-    for (const comm of allCommissions) {
+    for (const comm of cashCommissions) {
       const amount = Number(comm.amount);
       if (comm.status === 'APPROVED') {
         availableToWithdraw += amount;
@@ -74,7 +85,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    for (const payout of allPayouts) {
+    for (const payout of cashPayouts) {
       const amount = Number(payout.amount);
       if (payout.status === 'APPROVED') {
         availableToWithdraw += amount;
@@ -103,7 +114,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    for (const comm of allCommissions) {
+    for (const comm of cashCommissions) {
       if (comm.status === 'REVERSED') continue;
       const d = new Date(comm.createdAt);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -115,7 +126,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    for (const payout of allPayouts) {
+    for (const payout of cashPayouts) {
       if (payout.status === 'CANCELLED') continue;
       const d = new Date(payout.createdAt);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -147,7 +158,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
 
     // Build unified recent transactions list across Commissions & Fixed/Hybrid Payouts
     const unifiedTransactions = [
-      ...allCommissions.map((comm: any) => ({
+      ...cashCommissions.map((comm: any) => ({
         id: comm.id,
         type: 'COMMISSION',
         orderName: comm.shopifyOrder?.name ?? 'Order Commission',
@@ -158,7 +169,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
         date: new Date(comm.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
         rawDate: comm.createdAt,
       })),
-      ...allPayouts.map((payout: any) => ({
+      ...cashPayouts.map((payout: any) => ({
         id: payout.id,
         type: payout.type, // FIXED_FEE or HYBRID_BASE
         orderName: `${payout.campaign?.title ?? 'Campaign'} (${payout.type === 'HYBRID_BASE' ? 'Hybrid Base' : 'Fixed Fee'})`,
@@ -178,8 +189,8 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
         pendingApproval: inrCurrency.format(pendingApproval),
         pendingApprovalRaw: pendingApproval,
         pendingOrdersCount:
-          allCommissions.filter((c: any) => c.status === 'PENDING').length +
-          allPayouts.filter((p: any) => p.status === 'PENDING').length,
+          cashCommissions.filter((c: any) => c.status === 'PENDING').length +
+          cashPayouts.filter((p: any) => p.status === 'PENDING').length,
         lifetimeEarnings: inrCurrency.format(lifetimeEarnings),
         lifetimeEarningsRaw: lifetimeEarnings,
         paidEarnings: inrCurrency.format(paidEarnings),
@@ -189,6 +200,8 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
       },
       timeline,
       recentCommissions: unifiedTransactions.slice(0, 15),
+      isBarterOnly: storeAssignments.length > 0 && storeAssignments.every((assignment: any) => assignment.compensationMode === 'BARTER'),
+      barterOrders: barterOrders.length,
       barterFulfillments: barterFulfillments.map((b: any) => ({
         id: b.id,
         campaignTitle: b.campaign?.title ?? 'Barter Campaign',

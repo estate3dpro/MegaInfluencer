@@ -13,16 +13,24 @@ export const influencerDashboardRoutes: FastifyPluginAsync = async (app) => {
     const thirtyDaysAgo = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29));
     const activeCommission = { creatorId: actor.userId, status: { not: 'REVERSED' as const } };
 
-    const [monthCommissions, previousCommissions, monthOrderCount, recentCommissions, monthClicks, previousClicks, assignments, creator] = await Promise.all([
-      prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: monthStart } }, select: { amount: true, orderAmount: true, createdAt: true } }),
-      prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: previousMonthStart, lt: monthStart } }, select: { amount: true, orderAmount: true } }),
+    const [monthCommissions, previousCommissions, monthOrderCount, recentCommissions, monthClicks, previousClicks, assignments, creator, storeAssignments] = await Promise.all([
+      prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: monthStart } }, select: { organizationId: true, amount: true, orderAmount: true, createdAt: true } }),
+      prisma.affiliateCommission.findMany({ where: { ...activeCommission, createdAt: { gte: previousMonthStart, lt: monthStart } }, select: { organizationId: true, amount: true, orderAmount: true } }),
       prisma.affiliateCommission.count({ where: { creatorId: actor.userId, createdAt: { gte: monthStart } } }),
-      prisma.affiliateCommission.findMany({ where: { creatorId: actor.userId, createdAt: { gte: thirtyDaysAgo } }, select: { amount: true, createdAt: true, status: true, shopifyOrder: { select: { name: true } }, organization: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      prisma.affiliateCommission.findMany({ where: { creatorId: actor.userId, createdAt: { gte: thirtyDaysAgo } }, select: { organizationId: true, amount: true, createdAt: true, status: true, shopifyOrder: { select: { name: true } }, organization: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
       prisma.affiliateLinkClick.count({ where: { link: { creatorId: actor.userId }, createdAt: { gte: monthStart } } }),
       prisma.affiliateLinkClick.count({ where: { link: { creatorId: actor.userId }, createdAt: { gte: previousMonthStart, lt: monthStart } } }),
       prisma.campaignAssignment.findMany({ where: { influencerId: actor.userId, campaign: { status: { in: ['PUBLISHED', 'PAUSED'] }, deletedAt: null } }, include: { campaign: { include: { organization: { select: { name: true } } } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
       prisma.user.findUnique({ where: { id: actor.userId }, select: { creatorCode: true } }),
+      prisma.storeInfluencerAssignment.findMany({ where: { influencerId: actor.userId }, select: { organizationId: true, compensationMode: true } }),
     ]);
+
+    const barterOrganizationIds = new Set(
+      storeAssignments.filter((assignment: any) => assignment.compensationMode === 'BARTER').map((assignment: any) => assignment.organizationId),
+    );
+    const isBarter = (commission: any) => barterOrganizationIds.has(commission.organizationId);
+    const cashMonthCommissions = monthCommissions.filter((commission: any) => !isBarter(commission));
+    const cashPreviousCommissions = previousCommissions.filter((commission: any) => !isBarter(commission));
 
     const sum = (items: Array<{ amount: unknown }>) => items.reduce((total, item) => total + Number(item.amount), 0);
     const sales = (items: Array<{ orderAmount: unknown }>) => items.reduce((total, item) => total + Number(item.orderAmount), 0);
@@ -32,7 +40,7 @@ export const influencerDashboardRoutes: FastifyPluginAsync = async (app) => {
       const day = new Date(thirtyDaysAgo); day.setDate(thirtyDaysAgo.getDate() + offset);
       daily.set(day.toISOString().slice(0, 10), 0);
     }
-    for (const commission of recentCommissions) {
+    for (const commission of recentCommissions.filter((item: any) => !isBarter(item))) {
       const key = commission.createdAt.toISOString().slice(0, 10);
       daily.set(key, (daily.get(key) ?? 0) + Number(commission.amount));
     }
@@ -40,11 +48,12 @@ export const influencerDashboardRoutes: FastifyPluginAsync = async (app) => {
     return {
       creatorCode: creator?.creatorCode ?? null,
       metrics: {
-        earnings: sum(monthCommissions), sales: sales(monthCommissions), orders: monthOrderCount, clicks: monthClicks,
-        earningsChange: change(sum(monthCommissions), sum(previousCommissions)), clicksChange: change(monthClicks, previousClicks),
+        earnings: sum(cashMonthCommissions), sales: sales(monthCommissions), orders: monthOrderCount, clicks: monthClicks,
+        earningsChange: change(sum(cashMonthCommissions), sum(cashPreviousCommissions)), clicksChange: change(monthClicks, previousClicks),
       },
       earnings: [...daily.entries()].map(([date, amount]) => ({ date, amount })),
       campaigns: assignments.map(({ campaign, status }: any) => ({ id: campaign.id, title: campaign.title, brand: campaign.organization.name, status, deadline: campaign.contentDeadline ?? campaign.applicationDeadline, campaignStatus: campaign.status })),
+      isBarterOnly: storeAssignments.length > 0 && storeAssignments.every((assignment: any) => assignment.compensationMode === 'BARTER'),
       activity: recentCommissions.map((commission: any) => ({ id: `${commission.shopifyOrder.name}-${commission.createdAt.toISOString()}`, title: commission.status === 'REVERSED' ? 'Commission reversed' : commission.status === 'APPROVED' ? 'Commission approved' : 'Commission recorded', detail: `${commission.organization.name} · Order ${commission.shopifyOrder.name}`, amount: commission.status === 'REVERSED' ? 0 : Number(commission.amount), createdAt: commission.createdAt })),
     };
   });

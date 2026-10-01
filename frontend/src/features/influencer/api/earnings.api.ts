@@ -32,6 +32,8 @@ export type BarterSampleFulfillmentItem = {
 };
 
 export type InfluencerEarningsResponse = {
+  isBarterOnly: boolean;
+  barterOrders: number;
   balances: {
     availableToWithdraw: string;
     availableToWithdrawRaw: number;

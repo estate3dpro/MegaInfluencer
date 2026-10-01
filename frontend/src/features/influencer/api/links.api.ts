@@ -15,6 +15,7 @@ export type InfluencerTrackedLink = {
   url: string;
   targetType: "STORE" | "PRODUCT" | "COLLECTION";
   commissionRate: number;
+  isBarter: boolean;
   status: "ACTIVE" | "PAUSED";
   clicks: number;
   orders: number;
@@ -25,6 +26,7 @@ export type InfluencerTrackedLink = {
 };
 
 export type GetInfluencerLinksResponse = {
+  isBarterOnly: boolean;
   links: InfluencerTrackedLink[];
 };
 

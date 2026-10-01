@@ -28,6 +28,9 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
     });
 
     let stores = assignments.map((a: any) => a.organization).filter(Boolean);
+    const barterOrganizationIds = new Set(
+      assignments.filter((assignment: any) => assignment.compensationMode === 'BARTER').map((assignment: any) => assignment.organizationId),
+    );
 
     // If no direct assignment yet, check if creator has affiliate links with organizations
     if (!stores.length) {
@@ -139,7 +142,9 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
     > = {};
 
     const totalSalesAll = commissions.reduce((sum: number, c: any) => sum + Number(c.orderAmount), 0);
-    const totalEarningsAll = commissions.reduce((sum: number, c: any) => sum + Number(c.amount), 0);
+    const totalEarningsAll = commissions
+      .filter((commission: any) => !barterOrganizationIds.has(commission.organizationId))
+      .reduce((sum: number, c: any) => sum + Number(c.amount), 0);
     const totalOrdersAll = commissions.length;
     const totalClicksAll = clicks.length;
     const convAll = totalClicksAll > 0 ? ((totalOrdersAll / totalClicksAll) * 100).toFixed(1) : '0.0';
@@ -162,7 +167,9 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       const storeComms = commissions.filter((c: any) => c.organizationId === store.id);
       const storeClicks = clicks.filter((cl: any) => cl.organizationId === store.id);
       const sSales = storeComms.reduce((sum: number, c: any) => sum + Number(c.orderAmount), 0);
-      const sEarnings = storeComms.reduce((sum: number, c: any) => sum + Number(c.amount), 0);
+      const sEarnings = barterOrganizationIds.has(store.id)
+        ? 0
+        : storeComms.reduce((sum: number, c: any) => sum + Number(c.amount), 0);
       const sOrders = storeComms.length;
       const sClicks = storeClicks.length;
       const sConv = sClicks > 0 ? ((sOrders / sClicks) * 100).toFixed(1) : '0.0';
@@ -256,6 +263,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       timelineBars: allBars,
       timelineLabels,
       timeline: allTimeline,
+      isBarterOnly: assignments.length > 0 && assignments.every((assignment: any) => assignment.compensationMode === 'BARTER'),
     };
   });
 };

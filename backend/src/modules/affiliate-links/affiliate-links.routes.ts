@@ -73,7 +73,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
   app.get('/influencer/affiliate-links', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
     const query = request.query as { search?: string; storeId?: string };
-    const rows = await prisma.affiliateLink.findMany({
+    const [rows, assignments] = await Promise.all([
+      prisma.affiliateLink.findMany({
       where: {
         creatorId: actor.userId,
         ...(query.storeId ? { organizationId: query.storeId } : {}),
@@ -93,17 +94,27 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         commissions: { select: { orderAmount: true, amount: true, status: true } },
       },
       orderBy: { createdAt: 'desc' },
-    });
+      }),
+      prisma.storeInfluencerAssignment.findMany({
+        where: { influencerId: actor.userId },
+        select: { organizationId: true, compensationMode: true },
+      }),
+    ]);
+    const barterOrganizationIds = new Set(
+      assignments.filter((assignment: any) => assignment.compensationMode === 'BARTER').map((assignment: any) => assignment.organizationId),
+    );
 
     const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
     return {
+      isBarterOnly: assignments.length > 0 && assignments.every((assignment: any) => assignment.compensationMode === 'BARTER'),
       links: rows.map((row: any) => {
         const clicks = Number(row._count?.clicks ?? 0);
         const allCommissions = row.commissions ?? [];
         const commissions = allCommissions.filter((commission: any) => commission.status !== 'REVERSED');
         const orders = allCommissions.length;
         const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0);
-        const earnings = commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
+        const isBarter = barterOrganizationIds.has(row.organizationId);
+        const earnings = isBarter ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
 
         return {
           id: row.id,
@@ -119,7 +130,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
           slug: row.slug,
           url: `${baseUrl}/r/${row.slug}`,
           targetType: row.targetType,
-          commissionRate: Number(row.commissionRate),
+          commissionRate: isBarter ? 0 : Number(row.commissionRate),
+          isBarter,
           status: row.status,
           clicks,
           orders,

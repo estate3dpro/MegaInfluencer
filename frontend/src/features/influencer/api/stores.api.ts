@@ -11,6 +11,7 @@ export type TimelinePoint = {
 };
 
 export type InfluencerStoresOverview = {
+  isBarterOnly: boolean;
   stores: Array<{
     id: string;
     name: string;

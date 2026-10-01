@@ -44,7 +44,8 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
       ];
     }
 
-    const rows = await prisma.affiliateCommission.findMany({
+    const [rows, assignments] = await Promise.all([
+      prisma.affiliateCommission.findMany({
       where,
       include: {
         shopifyOrder: {
@@ -78,18 +79,32 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
         },
       },
       orderBy: { createdAt: 'desc' },
-    });
+      }),
+      prisma.storeInfluencerAssignment.findMany({
+        where: { influencerId: actor.userId },
+        select: { organizationId: true, compensationMode: true },
+      }),
+    ]);
+
+    const barterOrganizations = new Set(
+      assignments.filter((assignment: any) => assignment.compensationMode === 'BARTER').map((assignment: any) => assignment.organizationId),
+    );
+    const isBarter = (row: any) => barterOrganizations.has(row.organizationId);
 
     const totalOrders = rows.length;
     const earningRows = rows.filter((row: any) => row.status !== 'REVERSED');
     const totalSales = earningRows.reduce((sum: number, row: any) => sum + Number(row.orderAmount), 0);
-    const totalCommissions = earningRows.reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+    const totalCommissions = earningRows
+      .filter((row: any) => !isBarter(row))
+      .reduce((sum: number, row: any) => sum + Number(row.amount), 0);
 
     return {
       metrics: {
         totalOrders,
         totalSales: inrCurrency.format(totalSales),
         totalCommissions: inrCurrency.format(totalCommissions),
+        barterOrders: rows.filter(isBarter).length,
+        isBarterOnly: rows.length > 0 && rows.every(isBarter),
       },
       orders: rows.map((row: any) => {
         const orderDate = row.shopifyOrder?.processedAt ?? row.shopifyOrder?.createdAt ?? row.createdAt;
@@ -108,9 +123,10 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
           productTitle: row.link?.product?.title ?? 'Storewide referral',
           orderTotal: inrCurrency.format(Number(row.orderAmount)),
           orderTotalRaw: Number(row.orderAmount),
-          commission: inrCurrency.format(row.status === 'REVERSED' ? 0 : Number(row.amount)),
-          commissionRaw: row.status === 'REVERSED' ? 0 : Number(row.amount),
-          commissionRate: `${row.commissionRate}%`,
+          isBarter: isBarter(row),
+          commission: isBarter(row) ? null : inrCurrency.format(row.status === 'REVERSED' ? 0 : Number(row.amount)),
+          commissionRaw: isBarter(row) || row.status === 'REVERSED' ? 0 : Number(row.amount),
+          commissionRate: isBarter(row) ? null : `${row.commissionRate}%`,
           status: row.status === 'APPROVED' ? 'Approved' : row.status === 'PAID' ? 'Paid' : row.status === 'REVERSED' ? 'Cancelled' : 'Pending',
           statusRaw: row.status,
           date: new Date(orderDate).toLocaleDateString('en-IN', {
