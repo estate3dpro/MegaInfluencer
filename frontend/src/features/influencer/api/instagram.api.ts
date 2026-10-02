@@ -40,6 +40,10 @@ export async function startInstagramConnection() {
   return data.authorizationUrl;
 }
 
+export async function disconnectInstagram() {
+  await apiClient.delete("/influencer/instagram/connection");
+}
+
 export async function getInstagramPosts() {
   const { data } = await apiClient.get<{ items: InstagramMedia[] }>("/influencer/instagram/posts", {
     params: { limit: 50 },
