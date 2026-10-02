@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Check, Images, Instagram, Package, Plus, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { ArrowLeft, Check, GitMerge, Images, Instagram, Package, Plus, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,8 @@ import {
   getAdminInfluencerAssignedProducts,
   getAdminInstagramProfile,
   getInfluencer,
+  getInfluencers,
+  mergeAdminInfluencers,
   provisionInfluencerCredentials,
   updateAdminInfluencerAssignedProducts,
   updateInfluencerStatus,
@@ -208,6 +210,8 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
       {/* Assigned Products Section */}
       <AssignedProductsSection influencerId={influencerId} displayName={influencer.displayName} />
 
+      <MergeInfluencerCard influencer={influencer} />
+
       <Card>
         <CardHeader>
           <CardTitle>Account controls</CardTitle>
@@ -223,6 +227,88 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function MergeInfluencerCard({ influencer }: { influencer: import("../api/influencers.api").InfluencerDetails }) {
+  const client = useQueryClient();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [duplicate, setDuplicate] = useState<import("../api/influencers.api").InfluencerListItem | null>(null);
+  const [confirmation, setConfirmation] = useState("");
+  const candidatesQuery = useQuery({
+    queryKey: ["admin", "influencer-merge-candidates", search],
+    queryFn: () => getInfluencers({ page: 1, search: search.trim() || undefined }),
+    enabled: open,
+  });
+  const mergeMutation = useMutation({
+    mutationFn: () => mergeAdminInfluencers(influencer.id, duplicate!.id),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ["admin", "influencers"] });
+      toast.success(`${duplicate?.displayName ?? "Duplicate account"} was merged into ${influencer.displayName}.`);
+      setOpen(false);
+      setDuplicate(null);
+      setConfirmation("");
+      void navigate({ to: "/admin/influencers/$influencerId", params: { influencerId: influencer.id } });
+    },
+    onError: (error: unknown) => {
+      const message = error && typeof error === "object" && "response" in error
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+        : undefined;
+      toast.error(message ?? "Could not merge these accounts. No changes were made.");
+    },
+  });
+  const candidates = (candidatesQuery.data?.influencers ?? []).filter((candidate) => candidate.id !== influencer.id);
+  const canMerge = Boolean(duplicate) && confirmation === "MERGE" && !mergeMutation.isPending;
+
+  return (
+    <Card className="border-amber-500/30 shadow-none">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2"><GitMerge className="h-5 w-5 text-amber-600" /> Merge duplicate account</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">Combine a duplicate creator profile into this one. This profile remains; the duplicate is deleted after its data is moved.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>Merge account</Button>
+      </CardHeader>
+      <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setDuplicate(null); setConfirmation(""); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Merge into {influencer.displayName}</DialogTitle>
+            <DialogDescription>This profile will be kept. Search for and select the duplicate profile to remove.</DialogDescription>
+          </DialogHeader>
+          {!duplicate ? (
+            <div className="space-y-3">
+              <Input placeholder="Search duplicate by name, email, or Instagram handle" value={search} onChange={(event) => setSearch(event.target.value)} autoFocus />
+              <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border p-2">
+                {candidatesQuery.isLoading ? <p className="p-3 text-sm text-muted-foreground">Searching…</p> : null}
+                {!candidatesQuery.isLoading && candidates.map((candidate) => (
+                  <button key={candidate.id} type="button" className="w-full rounded-md p-3 text-left hover:bg-muted" onClick={() => setDuplicate(candidate)}>
+                    <p className="font-medium">{candidate.displayName}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{candidate.email ?? "No email"} · {candidate.instagramUsername ? `@${candidate.instagramUsername}` : "No Instagram"}</p>
+                  </button>
+                ))}
+                {!candidatesQuery.isLoading && !candidates.length ? <p className="p-3 text-sm text-muted-foreground">No other creators found.</p> : null}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                <p><span className="text-muted-foreground">Keep:</span> <b>{influencer.displayName}</b> · {influencer.email ?? "No email"} · {influencer.instagramConnection ? `@${influencer.instagramConnection.username}` : "No Instagram"}</p>
+                <p className="mt-2"><span className="text-muted-foreground">Merge and delete:</span> <b>{duplicate.displayName}</b> · {duplicate.email ?? "No email"} · {duplicate.instagramUsername ? `@${duplicate.instagramUsername}` : "No Instagram"}</p>
+              </div>
+              <p className="text-sm text-muted-foreground">Store assignments, products, campaigns, links, messages, and other creator records are moved to the kept profile. An email or Instagram connection is carried over only when this profile does not already have one.</p>
+              <label className="grid gap-2 text-sm font-medium">Type MERGE to confirm <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>
+              <Button variant="ghost" size="sm" onClick={() => { setDuplicate(null); setConfirmation(""); }}>Choose a different account</Button>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            {duplicate ? <Button variant="destructive" disabled={!canMerge} onClick={() => mergeMutation.mutate()}>{mergeMutation.isPending ? "Merging…" : "Merge and delete duplicate"}</Button> : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
 

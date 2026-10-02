@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { requireRole } from '../../shared/auth/authorization.js';
 import { parseOrThrow } from '../../shared/validation/pagination.js';
-import { getAdminInfluencer, getAdminInfluencerInstagramProfile, listAdminInfluencers, provisionAdminInfluencerCredentials, updateAdminInfluencerStatus } from './influencers.service.js';
+import { getAdminInfluencer, getAdminInfluencerInstagramProfile, listAdminInfluencers, mergeAdminInfluencers, provisionAdminInfluencerCredentials, updateAdminInfluencerStatus } from './influencers.service.js';
 import { getAssignedProductIds, setCreatorProductAssignments } from '../product-assignments/product-assignments.service.js';
 
 const listQuerySchema = z.object({
@@ -17,6 +17,7 @@ const provisionCredentialsSchema = z.object({
   email: z.string().email().max(320).transform((email) => email.trim().toLowerCase()),
   password: z.string().min(12).max(128),
 });
+const mergeInfluencersSchema = z.object({ duplicateInfluencerId: z.string().cuid() });
 
 export const adminInfluencerRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
@@ -51,6 +52,13 @@ export const adminInfluencerRoutes: FastifyPluginAsync = async (app) => {
     const { influencerId } = parseOrThrow(influencerParamsSchema, request.params);
     const input = parseOrThrow(provisionCredentialsSchema, request.body);
     return { influencer: await provisionAdminInfluencerCredentials(app, influencerId, input) };
+  });
+
+  app.post('/admin/influencers/:influencerId/merge', async (request) => {
+    requireRole(request, ['ADMIN']);
+    const { influencerId } = parseOrThrow(influencerParamsSchema, request.params);
+    const { duplicateInfluencerId } = parseOrThrow(mergeInfluencersSchema, request.body);
+    return mergeAdminInfluencers(app, influencerId, duplicateInfluencerId);
   });
 
   // GET influencer assigned products across stores
