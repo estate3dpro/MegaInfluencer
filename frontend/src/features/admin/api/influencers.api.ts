@@ -78,6 +78,13 @@ export async function provisionInfluencerCredentials(id: string, input: { email:
   }>(`/admin/influencers/${id}/credentials`, input);
   return data.influencer;
 }
+export async function mergeAdminInfluencers(id: string, duplicateInfluencerId: string) {
+  const { data } = await apiClient.post<{ influencer: InfluencerDetails; deletedInfluencerId: string }>(
+    `/admin/influencers/${id}/merge`,
+    { duplicateInfluencerId },
+  );
+  return data;
+}
 export async function getAdminInstagramProfile(id: string) {
   const { data } = await apiClient.get<AdminInstagramProfile>(
     `/admin/influencers/${id}/instagram-profile`,

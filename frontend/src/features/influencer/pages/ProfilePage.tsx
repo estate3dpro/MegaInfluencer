@@ -1,4 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
   CircleAlert,
@@ -15,11 +16,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { isApiError } from "@/lib/api/api-error";
 import { queryKeys } from "@/lib/query-keys";
 import { initials } from "@/lib/format";
 import {
   getInstagramProfile,
+  disconnectInstagram,
   startInstagramConnection,
 } from "@/features/influencer/api/instagram.api";
 import {
@@ -41,6 +45,7 @@ function formatDate(value: string | null) {
 
 export function ProfilePage() {
   const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
   const connectionQuery = useQuery({
     queryKey: ["influencer", "instagram-connection"],
     queryFn: getInstagramConnection,
@@ -57,6 +62,13 @@ export function ProfilePage() {
     mutationFn: startInstagramConnection,
     onSuccess: (authorizationUrl) => window.location.assign(authorizationUrl),
   });
+  const disconnectMutation = useMutation({
+    mutationFn: disconnectInstagram,
+    onSuccess: async () => {
+      queryClient.removeQueries({ queryKey: queryKeys.instagram.profile });
+      await queryClient.invalidateQueries({ queryKey: ["influencer", "instagram-connection"] });
+    },
+  });
   const data = profileQuery.data;
   const profileName =
     data?.profile.name || connection?.displayName || user?.name || "Influencer";
@@ -68,6 +80,11 @@ export function ProfilePage() {
     ? connectMutation.error.message
     : connectMutation.error
       ? "Instagram connection could not be started. Please try again."
+      : null;
+  const disconnectError = isApiError(disconnectMutation.error)
+    ? disconnectMutation.error.message
+    : disconnectMutation.error
+      ? "Instagram could not be disconnected. Please try again."
       : null;
 
   function handleConnectInstagram() {
@@ -126,6 +143,9 @@ export function ProfilePage() {
         loading={connectionQuery.isLoading}
         connecting={connectMutation.isPending}
         onConnect={handleConnectInstagram}
+        disconnecting={disconnectMutation.isPending}
+        onDisconnect={() => disconnectMutation.mutateAsync()}
+        disconnectError={disconnectError}
       />
 
       {profileQuery.isLoading ? <ProfileLoading /> : null}
@@ -227,12 +247,20 @@ function InstagramConnectionStatusCard({
   loading,
   connecting,
   onConnect,
+  disconnecting,
+  onDisconnect,
+  disconnectError,
 }: {
   connection: InstagramConnection | null | undefined;
   loading: boolean;
   connecting: boolean;
   onConnect: () => void;
+  disconnecting: boolean;
+  onDisconnect: () => Promise<void>;
+  disconnectError: string | null;
 }) {
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
   if (loading) {
     return <Card><CardContent className="h-32 animate-pulse p-6"><div className="h-5 w-48 rounded bg-muted" /><div className="mt-4 h-4 w-80 max-w-full rounded bg-muted" /></CardContent></Card>;
   }
@@ -275,11 +303,51 @@ function InstagramConnectionStatusCard({
             )}
           </div>
         </div>
-        <Button className="shrink-0" onClick={onConnect} disabled={connecting}>
-          <Instagram className="h-4 w-4" />
-          {connecting ? "Opening Meta Login..." : active ? "Reconnect Account" : "Connect with Instagram"}
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {connection ? (
+            <Button variant="outline" onClick={() => setDisconnectDialogOpen(true)} disabled={disconnecting}>
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          ) : null}
+          <Button className="shrink-0" onClick={onConnect} disabled={connecting}>
+            <Instagram className="h-4 w-4" />
+            {connecting ? "Opening Meta Login..." : active ? "Reconnect Account" : "Connect with Instagram"}
+          </Button>
+        </div>
       </CardContent>
+      {disconnectError ? <p className="px-6 pb-6 text-sm text-destructive">{disconnectError}</p> : null}
+      <Dialog open={disconnectDialogOpen} onOpenChange={(open) => { setDisconnectDialogOpen(open); if (!open) setConfirmation(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Disconnect Instagram?</DialogTitle>
+            <DialogDescription>
+              This removes this Instagram account from MegaInfluencer. Your Instagram account itself will not be deleted. Type DISCONNECT to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="grid gap-2 text-sm font-medium">
+            Confirmation
+            <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder="Type DISCONNECT" autoComplete="off" />
+          </label>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisconnectDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={confirmation !== "DISCONNECT" || disconnecting}
+              onClick={async () => {
+                try {
+                  await onDisconnect();
+                  setDisconnectDialogOpen(false);
+                  setConfirmation("");
+                } catch {
+                  // The mutation error is rendered below the connection card.
+                }
+              }}
+            >
+              {disconnecting ? "Disconnecting..." : "Disconnect Instagram"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
