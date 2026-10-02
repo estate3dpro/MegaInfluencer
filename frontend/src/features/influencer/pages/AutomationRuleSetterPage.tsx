@@ -145,22 +145,22 @@ export function AutomationRuleSetterPage() {
         <div className="space-y-4">
           <SetterSection
             step="01"
-            title="Give this rule a name"
-            description="This is only visible to you and your team."
+            title="Name this automation rule"
+            description="A descriptive internal label to identify this campaign or post."
           >
             <Input
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={100}
-              placeholder="e.g. Autumn collection link"
+              placeholder="e.g. Summer Collection - Price Inquiry DM"
               className="h-11 bg-background"
             />
           </SetterSection>
 
           <SetterSection
             step="02"
-            title="Choose the post to listen to"
-            description="Comments on this Instagram post can start the conversation."
+            title="Select the Instagram post to monitor"
+            description="Choose the Instagram post or reel where qualifying comments will trigger this automation."
           >
             <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-4">
               <div className="flex min-w-0 items-center gap-3">
@@ -183,7 +183,7 @@ export function AutomationRuleSetterPage() {
                   <p className="text-xs text-muted-foreground">
                     {selectedPost?.timestamp
                       ? new Date(selectedPost.timestamp).toLocaleDateString()
-                      : "Choose one Instagram post"}
+                      : "Choose one Instagram post from your connected account"}
                   </p>
                 </div>
               </div>
@@ -195,7 +195,7 @@ export function AutomationRuleSetterPage() {
                   setPostPickerOpen(true);
                 }}
               >
-                Select post
+                {selectedPost ? "Change post" : "Select post"}
               </Button>
             </div>
             {postsQuery.isLoading ? (
@@ -215,8 +215,8 @@ export function AutomationRuleSetterPage() {
 
           <SetterSection
             step="03"
-            title="Set the comment trigger"
-            description="Any of these words in a comment will send the response."
+            title="Set the comment trigger keywords"
+            description="When a user comments on the post with any of these keywords (e.g. 'PRICE', 'LINK'), the DM is sent."
           >
             <div className="rounded-xl border bg-background p-2 focus-within:ring-2 focus-within:ring-ring/30">
               <div className="flex flex-wrap items-center gap-2">
@@ -243,7 +243,7 @@ export function AutomationRuleSetterPage() {
                   onChange={(event) => setKeywordDraft(event.target.value)}
                   onKeyDown={handleKeywordKeyDown}
                   onBlur={addKeyword}
-                  placeholder={keywords.length ? "Add another" : "Type a keyword"}
+                  placeholder={keywords.length ? "Add another keyword" : "e.g. PRICE or LINK"}
                   className="h-8 min-w-32 flex-1 bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground"
                 />
                 <Button type="button" variant="ghost" size="sm" onClick={addKeyword}>
@@ -266,7 +266,7 @@ export function AutomationRuleSetterPage() {
               <span>
                 <span className="block text-sm font-medium">Reply to any comment</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Send the DM for every comment on this post, without requiring a keyword.
+                  Send the DM for every comment on this post, without requiring a specific keyword.
                 </span>
               </span>
               <Switch checked={replyToAnyComment} onCheckedChange={setReplyToAnyComment} />
@@ -291,18 +291,18 @@ export function AutomationRuleSetterPage() {
 
           <SetterSection
             step="04"
-            title="Write the direct message"
-            description="Use {username} to make the first line feel personal."
+            title="Configure the Direct Message response"
+            description="This message will be automatically delivered to the commenter's Instagram DM inbox."
           >
             <Textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               maxLength={1000}
               className="min-h-32 resize-y bg-background"
-              placeholder="Write a helpful reply…"
+              placeholder="Thanks for your comment! Here is the link: https://example.com/product"
             />
             <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-              <span>Instagram allows a reply only after the customer starts the conversation.</span>
+              <span>Personalize with {"{username}"} to greet the commenter by name.</span>
               <span>{message.length}/1000</span>
             </div>
           </SetterSection>
@@ -346,51 +346,57 @@ export function AutomationRuleSetterPage() {
           <Card className="overflow-hidden shadow-card">
             <div className="bg-gradient-to-r from-primary to-fuchsia-500 px-5 py-4 text-primary-foreground">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Instagram className="h-4 w-4" /> Live customer preview
+                <Instagram className="h-4 w-4" /> End-to-End Workflow Preview
               </div>
               <p className="mt-1 text-xs text-primary-foreground/75">
-                This is how the rule will behave.
+                Visual causality: Comment $\rightarrow$ Auto DM Detection $\rightarrow$ Inbox Delivery
               </p>
             </div>
-            <CardContent className="space-y-5 p-5">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Comment
+            <CardContent className="space-y-4 p-5">
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  1. Customer Comments on Post
                 </p>
                 <div className="rounded-xl bg-muted p-3">
-                  <p className="text-sm font-medium">Alex</p>
-                  <p className="mt-1 text-sm">
+                  <p className="text-xs font-semibold text-foreground">@test_user</p>
+                  <p className="mt-0.5 text-sm">
                     {keywords[0]
-                      ? `Can I get the ${keywords[0]}?`
-                      : "Your trigger keyword will appear here."}
+                      ? keywords[0].toUpperCase()
+                      : "PRICE"}
                   </p>
                 </div>
               </div>
-              <div className="flex justify-center">
-                <div className="h-6 border-l border-dashed border-primary" />
+
+              <div className="flex items-center justify-center gap-2 text-xs text-primary font-medium">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Auto DM detects qualifying comment</span>
               </div>
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Automatic DM
+
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  2. Delivered to Customer's Instagram DM
                 </p>
                 <div className="rounded-2xl rounded-tl-sm bg-primary px-3.5 py-3 text-sm leading-6 text-primary-foreground">
                   {renderedMessage || "Your direct message will appear here."}
                 </div>
               </div>
+
               <div className="rounded-xl border border-dashed p-3">
-                <p className="text-xs text-muted-foreground">Listening on</p>
+                <p className="text-xs text-muted-foreground">Selected Post</p>
                 <p className="mt-1 flex items-center gap-2 text-sm font-medium">
                   <span className="grid h-6 w-6 place-items-center rounded bg-primary/10 text-primary">
                     <MessageCircle className="h-3.5 w-3.5" />
                   </span>
-                  {selectedPost?.caption?.trim() ||
-                    (selectedPost ? `${selectedPost.media_type} post` : "Select a post")}
+                  <span className="truncate">
+                    {selectedPost?.caption?.trim() ||
+                      (selectedPost ? `${selectedPost.media_type} post` : "No post selected")}
+                  </span>
                 </p>
               </div>
             </CardContent>
           </Card>
           <p className="mt-3 flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <Send className="h-3.5 w-3.5" /> The rule starts active and can be paused anytime.
+            <Send className="h-3.5 w-3.5" /> Auto DM activates immediately upon saving.
           </p>
         </aside>
       </div>

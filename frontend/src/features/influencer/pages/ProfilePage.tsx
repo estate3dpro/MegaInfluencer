@@ -238,14 +238,14 @@ function InstagramConnectionStatusCard({
   }
 
   const active = connection?.status === "ACTIVE";
-  const label = active ? "Instagram is connected" : connection ? "Instagram connection needs attention" : "Connect your Instagram account";
+  const label = active ? "Instagram Professional Account Connected" : connection ? "Instagram connection needs attention" : "Connect your Instagram Professional Account";
   const description = active
-    ? `@${connection.username} is ready for insights, automations, and inbox tools.`
+    ? `@${connection.username} is connected with permissions to read media, monitor post comments, and send automated direct messages.`
     : connection?.status === "EXPIRED"
-      ? "Your Instagram access has expired. Reconnect to restore insights, automations, and inbox tools."
+      ? "Your Instagram access token has expired. Reconnect via Meta Login to restore automations and messaging."
       : connection?.status === "REVOKED"
         ? "Instagram access was revoked. Reconnect your account to restore platform features."
-        : "Connect a professional Instagram account to unlock creator insights, automations, and the Instagram inbox.";
+        : "Connect an Instagram Professional account via Meta Login to grant permissions for media access, comment monitoring, and automated DM replies.";
 
   return (
     <Card className={active ? "border-success/30 bg-success/5" : "border-primary/25"}>
@@ -255,14 +255,29 @@ function InstagramConnectionStatusCard({
             {active ? <CircleCheck className="h-5 w-5" /> : <Instagram className="h-5 w-5" />}
           </span>
           <div>
-            <p className="font-semibold">{label}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold">{label}</p>
+              {active && (
+                <Badge variant="outline" className="border-success/40 bg-success/10 text-xs text-success">
+                  Meta Verified Access
+                </Badge>
+              )}
+            </div>
             <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">{description}</p>
-            {!active ? <p className="mt-3 text-xs text-muted-foreground">You’ll be redirected to Instagram to approve access, then returned to MegaInfluencer.</p> : null}
+            {active ? (
+              <p className="mt-2 font-mono text-xs text-muted-foreground">
+                Granted scopes: instagram_business_basic, instagram_business_manage_comments, instagram_business_manage_messages
+              </p>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">
+                You’ll be redirected to Meta/Instagram to select your professional account and grant access permissions, then returned here.
+              </p>
+            )}
           </div>
         </div>
         <Button className="shrink-0" onClick={onConnect} disabled={connecting}>
           <Instagram className="h-4 w-4" />
-          {connecting ? "Opening Instagram..." : active ? "Reconnect" : "Connect Instagram"}
+          {connecting ? "Opening Meta Login..." : active ? "Reconnect Account" : "Connect with Instagram"}
         </Button>
       </CardContent>
     </Card>

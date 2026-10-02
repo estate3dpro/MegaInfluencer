@@ -137,7 +137,7 @@ export function InstagramAutomationPage() {
   const webhookLogsQuery = useQuery({
     queryKey: ["influencer", "instagram-webhook-logs"],
     queryFn: getInstagramWebhookLogs,
-    refetchInterval: webhookLogsOpen ? 4000 : 30000,
+    refetchInterval: 3000,
   });
 
   // Mutations
@@ -291,22 +291,27 @@ export function InstagramAutomationPage() {
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-display text-lg font-semibold">
-                {connection ? `@${connection.username} is connected` : "Instagram is not connected"}
+                {connection ? `@${connection.username}` : "Instagram is not connected"}
               </p>
               {connection ? (
-                <Badge className="bg-success/15 text-success hover:bg-success/15">
-                  {connection.status === "ACTIVE" ? "Active" : connection.status}
-                </Badge>
+                <>
+                  <Badge className="bg-success/15 text-success hover:bg-success/15 font-medium">
+                    {connection.status === "ACTIVE" ? "Connected & Active" : connection.status}
+                  </Badge>
+                  <Badge variant="outline" className="border-primary/30 text-xs text-primary">
+                    Instagram Professional Account
+                  </Badge>
+                </>
               ) : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {connection
-                ? "Automations are responding to your audience around the clock."
-                : "Connect Instagram to start responding to comments automatically."}
+                ? "Active permissions: Read post comments (`instagram_business_manage_comments`) and Send Direct Messages (`instagram_business_manage_messages`)."
+                : "Connect an Instagram Professional account via Meta Login to enable automated comment replies and DMs."}
             </p>
             {connection ? (
               <p className="mt-1 font-mono text-xs text-muted-foreground">
-                Development: Instagram account ID {connection.instagramUserId}
+                Instagram Account ID: {connection.instagramUserId}
               </p>
             ) : null}
           </div>
@@ -496,12 +501,18 @@ export function InstagramAutomationPage() {
       <Card className="shadow-card">
         <CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-3">
           <div>
-            <div className="flex items-center gap-2">
-              <CardTitle>Recent activity</CardTitle>
-              <Badge variant="outline" className="text-xs">Live stream</Badge>
+            <div className="flex items-center gap-2.5">
+              <CardTitle>Recent activity & live deliveries</CardTitle>
+              <Badge variant="outline" className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                </span>
+                Live auto-sync
+              </Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Automation performance, comment triggers, and message deliveries.
+              Real-time comment detection and automatic Instagram Direct Message deliveries.
             </p>
           </div>
           <Button
