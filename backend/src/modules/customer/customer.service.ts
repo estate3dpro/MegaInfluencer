@@ -45,6 +45,63 @@ function calculateTier(totalReferrals: number, totalEarned: number): { tier: 'BR
   };
 }
 
+export function calculateOrderTokensAndRewards(
+  orderAmount: number,
+  config?: {
+    isEnabled?: boolean;
+    fixedTokensEnabled?: boolean;
+    fixedTokensPerOrder?: number;
+    spendTokensEnabled?: boolean;
+    spendTokensRate?: number;
+    spendTokensAmount?: number | any;
+    percentageEnabled?: boolean;
+    commissionRate?: number | any;
+    pointsPerCurrency?: number;
+  } | null,
+): { tokens: number; cashReward: number; breakdown: string[] } {
+  if (!config || config.isEnabled === false) {
+    return { tokens: 0, cashReward: 0, breakdown: ['Program Inactive'] };
+  }
+
+  let totalTokens = 0;
+  let cashReward = 0;
+  const breakdown: string[] = [];
+
+  // 1. Fixed Tokens Per Order Rule (if ACTIVE)
+  if (config.fixedTokensEnabled && (config.fixedTokensPerOrder ?? 0) > 0) {
+    const fixed = config.fixedTokensPerOrder ?? 0;
+    totalTokens += fixed;
+    breakdown.push(`+${fixed} tokens (Per Order Rule)`);
+  }
+
+  // 2. Spend Ratio Rule - X Tokens per Y Spent (if ACTIVE)
+  if (
+    config.spendTokensEnabled &&
+    (config.spendTokensRate ?? 0) > 0 &&
+    Number(config.spendTokensAmount ?? 0) > 0
+  ) {
+    const threshold = Number(config.spendTokensAmount);
+    const units = Math.floor(orderAmount / threshold);
+    const spendTokens = units * (config.spendTokensRate ?? 0);
+    totalTokens += spendTokens;
+    breakdown.push(`+${spendTokens} tokens (${config.spendTokensRate} per ₹${threshold} spent)`);
+  }
+
+  // 3. Percentage Commission Rule (if ACTIVE)
+  if (config.percentageEnabled !== false && Number(config.commissionRate ?? 0) > 0) {
+    const rate = Number(config.commissionRate ?? 10);
+    const commCash = (orderAmount * rate) / 100;
+    cashReward += commCash;
+
+    const pointsMultiplier = config.pointsPerCurrency ?? 1;
+    const percentagePoints = Math.round(commCash * pointsMultiplier);
+    totalTokens += percentagePoints;
+    breakdown.push(`+${percentagePoints} tokens (${rate}% of order total)`);
+  }
+
+  return { tokens: totalTokens, cashReward, breakdown };
+}
+
 export async function getOrCreateCustomerProfile(prisma: any, userId: string) {
   let user = await prisma.user.findUnique({
     where: { id: userId },
@@ -59,11 +116,14 @@ export async function getOrCreateCustomerProfile(prisma: any, userId: string) {
   }
 
   if (!user.customerProfile) {
+    const storeConfig = await prisma.storeReferralConfig.findFirst();
+    const welcomeBonus = (storeConfig?.welcomeBonusEnabled ?? true) ? (storeConfig?.welcomeBonusPoints ?? 100) : 0;
+
     const profile = await prisma.customerProfile.create({
       data: {
         userId,
         tier: 'BRONZE',
-        pointsBalance: 100, // 100 bonus welcome points
+        pointsBalance: welcomeBonus,
         totalEarned: 0,
       },
     });
@@ -459,8 +519,15 @@ export async function getCustomerDashboard(app: FastifyInstance, userId: string,
   const referralConfig = {
     isEnabled: storeConfig?.isEnabled ?? true,
     rewardMode: storeConfig?.rewardMode ?? 'POINTS',
+    percentageEnabled: storeConfig?.percentageEnabled ?? true,
     commissionRate: Number(storeConfig?.commissionRate ?? 10),
     pointsPerCurrency: storeConfig?.pointsPerCurrency ?? 1,
+    spendTokensEnabled: storeConfig?.spendTokensEnabled ?? false,
+    spendTokensRate: storeConfig?.spendTokensRate ?? 10,
+    spendTokensAmount: Number(storeConfig?.spendTokensAmount ?? 100),
+    fixedTokensEnabled: storeConfig?.fixedTokensEnabled ?? false,
+    fixedTokensPerOrder: storeConfig?.fixedTokensPerOrder ?? 50,
+    welcomeBonusEnabled: storeConfig?.welcomeBonusEnabled ?? true,
     welcomeBonusPoints: storeConfig?.welcomeBonusPoints ?? 100,
     minPayoutAmount: Number(storeConfig?.minPayoutAmount ?? 500),
     friendDiscountEnabled: storeConfig?.friendDiscountEnabled ?? true,

@@ -31,7 +31,11 @@ import {
   ToggleRight,
   Eye,
   CheckCircle2,
-  Users,
+  XCircle,
+  Calculator,
+  ArrowRight,
+  ShoppingBag,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -58,31 +62,67 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
     enabled: open,
   });
 
+  // Program Master State
+  const [isEnabled, setIsEnabled] = useState<boolean>(true);
   const [rewardMode, setRewardMode] = useState<ReferralRewardMode>("POINTS");
+
+  // Rule 1: Fixed Flat Tokens Per Order (Inactivable)
+  const [fixedTokensEnabled, setFixedTokensEnabled] = useState<boolean>(false);
+  const [fixedTokensPerOrder, setFixedTokensPerOrder] = useState<number>(50);
+
+  // Rule 2: Token Spend Ratio (X tokens per Y spent) (Inactivable)
+  const [spendTokensEnabled, setSpendTokensEnabled] = useState<boolean>(false);
+  const [spendTokensRate, setSpendTokensRate] = useState<number>(10);
+  const [spendTokensAmount, setSpendTokensAmount] = useState<number>(100);
+
+  // Rule 3: Percentage of Order Rule (Inactivable)
+  const [percentageEnabled, setPercentageEnabled] = useState<boolean>(true);
   const [commissionRate, setCommissionRate] = useState<number>(10);
   const [pointsPerCurrency, setPointsPerCurrency] = useState<number>(1);
-  const [welcomeBonusPoints, setWelcomeBonusPoints] = useState<number>(100);
-  const [minPayoutAmount, setMinPayoutAmount] = useState<number>(500);
 
+  // Rule 4: Welcome / Signup Bonus (Inactivable)
+  const [welcomeBonusEnabled, setWelcomeBonusEnabled] = useState<boolean>(true);
+  const [welcomeBonusPoints, setWelcomeBonusPoints] = useState<number>(100);
+
+  // Rule 5: Friend Discount Offer (Inactivable)
   const [friendDiscountEnabled, setFriendDiscountEnabled] = useState<boolean>(true);
   const [friendDiscountType, setFriendDiscountType] = useState<"PERCENTAGE" | "FIXED" | "FREE_SHIPPING">("PERCENTAGE");
   const [friendDiscountValue, setFriendDiscountValue] = useState<number>(10);
 
+  // Payout & UI display settings
+  const [minPayoutAmount, setMinPayoutAmount] = useState<number>(500);
   const [showTierRoadmap, setShowTierRoadmap] = useState<boolean>(true);
   const [showPerformanceCharts, setShowPerformanceCharts] = useState<boolean>(true);
   const [showRewardsStore, setShowRewardsStore] = useState<boolean>(true);
   const [showRecentPurchases, setShowRecentPurchases] = useState<boolean>(true);
 
+  // Branding
   const [programTitle, setProgramTitle] = useState<string>("");
   const [customShareMessage, setCustomShareMessage] = useState<string>("");
+
+  // Live Simulation Test Amount
+  const [testOrderAmount, setTestOrderAmount] = useState<number>(500);
 
   useEffect(() => {
     if (data?.config) {
       const c = data.config;
+      setIsEnabled(c.isEnabled ?? true);
       setRewardMode(c.rewardMode || "POINTS");
+
+      setFixedTokensEnabled(c.fixedTokensEnabled ?? false);
+      setFixedTokensPerOrder(c.fixedTokensPerOrder ?? 50);
+
+      setSpendTokensEnabled(c.spendTokensEnabled ?? false);
+      setSpendTokensRate(c.spendTokensRate ?? 10);
+      setSpendTokensAmount(c.spendTokensAmount ?? 100);
+
+      setPercentageEnabled(c.percentageEnabled ?? true);
       setCommissionRate(c.commissionRate ?? 10);
       setPointsPerCurrency(c.pointsPerCurrency ?? 1);
+
+      setWelcomeBonusEnabled(c.welcomeBonusEnabled ?? true);
       setWelcomeBonusPoints(c.welcomeBonusPoints ?? 100);
+
       setMinPayoutAmount(c.minPayoutAmount ?? 500);
 
       setFriendDiscountEnabled(c.friendDiscountEnabled ?? true);
@@ -102,7 +142,7 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
   const mutation = useMutation({
     mutationFn: (payload: Partial<StoreReferralConfig>) => updateStoreReferralSettings(payload),
     onSuccess: () => {
-      toast.success("Referral program & portal settings updated successfully!");
+      toast.success("Referral token rules & program settings saved successfully!");
       void queryClient.invalidateQueries({ queryKey: ["store", "referral-settings"] });
       onOpenChange(false);
     },
@@ -113,9 +153,17 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
 
   const handleSave = () => {
     mutation.mutate({
+      isEnabled,
       rewardMode,
+      fixedTokensEnabled,
+      fixedTokensPerOrder,
+      spendTokensEnabled,
+      spendTokensRate,
+      spendTokensAmount,
+      percentageEnabled,
       commissionRate,
       pointsPerCurrency,
+      welcomeBonusEnabled,
       welcomeBonusPoints,
       minPayoutAmount,
       friendDiscountEnabled,
@@ -130,21 +178,83 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
     });
   };
 
+  // Live simulation calculation
+  const simulationResults = React.useMemo(() => {
+    let totalTokens = 0;
+    let cashReward = 0;
+    const activeRules: { title: string; reward: string }[] = [];
+
+    if (!isEnabled) {
+      return { totalTokens: 0, cashReward: 0, activeRules: [] };
+    }
+
+    if (fixedTokensEnabled && fixedTokensPerOrder > 0) {
+      totalTokens += fixedTokensPerOrder;
+      activeRules.push({
+        title: "Per Order Fixed Tokens",
+        reward: `+${fixedTokensPerOrder} tokens (flat)`,
+      });
+    }
+
+    if (spendTokensEnabled && spendTokensRate > 0 && spendTokensAmount > 0) {
+      const units = Math.floor(testOrderAmount / spendTokensAmount);
+      const earned = units * spendTokensRate;
+      totalTokens += earned;
+      activeRules.push({
+        title: `Spend Ratio (${spendTokensRate} pts / ₹${spendTokensAmount})`,
+        reward: `+${earned} tokens (${units} × ${spendTokensRate})`,
+      });
+    }
+
+    if (percentageEnabled && commissionRate > 0) {
+      const commCash = (testOrderAmount * commissionRate) / 100;
+      cashReward += commCash;
+      const pts = Math.round(commCash * (pointsPerCurrency || 1));
+      totalTokens += pts;
+      activeRules.push({
+        title: `Order Percentage (${commissionRate}%)`,
+        reward: `+${pts} tokens (₹${commCash.toFixed(2)} val)`,
+      });
+    }
+
+    return { totalTokens, cashReward, activeRules };
+  }, [
+    isEnabled,
+    testOrderAmount,
+    fixedTokensEnabled,
+    fixedTokensPerOrder,
+    spendTokensEnabled,
+    spendTokensRate,
+    spendTokensAmount,
+    percentageEnabled,
+    commissionRate,
+    pointsPerCurrency,
+  ]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <Sliders className="h-5 w-5 text-primary" />
-            <span>Customer Referral Program & Portal Settings</span>
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Sliders className="h-5 w-5 text-primary" />
+              <span>Customer Referral Rules & Token Engine</span>
+            </DialogTitle>
+            <Badge
+              variant={isEnabled ? "default" : "secondary"}
+              className="cursor-pointer"
+              onClick={() => setIsEnabled(!isEnabled)}
+            >
+              {isEnabled ? "● Program Active" : "○ Program Paused"}
+            </Badge>
+          </div>
           <DialogDescription>
-            Control how customer advocates earn rewards, configure point vs. cash systems, and customize what appears on their portal.
+            Configure dynamic earning rules for your advocates. Enable or inactivate each token rule independently based on your store strategy.
           </DialogDescription>
         </DialogHeader>
 
         {isLoading ? (
-          <div className="py-12 text-center text-sm text-muted-foreground animate-pulse">
+          <div className="py-16 text-center text-sm text-muted-foreground animate-pulse">
             Loading store referral configuration...
           </div>
         ) : (
@@ -155,10 +265,10 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
                 <div>
                   <Label className="text-sm font-semibold flex items-center gap-1.5">
                     <Coins className="h-4 w-4 text-primary" />
-                    <span>Store Reward Mode</span>
+                    <span>Store Reward Strategy</span>
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Choose how advocates are compensated on referred orders.
+                    Select the high-level reward redemption system for your advocates.
                   </p>
                 </div>
                 <Badge variant="outline" className="text-xs font-mono">
@@ -181,7 +291,7 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
                     <span className="font-semibold text-xs text-foreground">Points & Rewards Store</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Advocates earn points, unlock VIP tiers (Bronze/Silver/Gold), and claim gift cards.
+                    Advocates earn points, unlock VIP tiers (Bronze/Silver/Gold), and claim vouchers.
                   </p>
                 </button>
 
@@ -199,7 +309,7 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
                     <span className="font-semibold text-xs text-foreground">Direct Cash Commission</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    No points system. Advocates earn direct ₹/USD cash and withdraw via UPI or Bank.
+                    Advocates earn cash commissions directly withdrawable to UPI or Bank accounts.
                   </p>
                 </button>
 
@@ -241,144 +351,424 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
               </div>
             </div>
 
-            {/* 2. PROGRAM RATES & VALUES */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Advocate Reward Rate (%)</Label>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={commissionRate}
-                    onChange={(e) => setCommissionRate(Number(e.target.value))}
-                    className="pr-7 text-xs"
-                  />
-                  <Percent className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                </div>
-                <p className="text-[10px] text-muted-foreground">Commission on referred cart totals.</p>
-              </div>
-
-              {rewardMode === "POINTS" || rewardMode === "HYBRID" ? (
-                <>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Points per ₹1</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={pointsPerCurrency}
-                      onChange={(e) => setPointsPerCurrency(Number(e.target.value))}
-                      className="text-xs"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Points awarded per currency unit.</p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Welcome Bonus Points</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={welcomeBonusPoints}
-                      onChange={(e) => setWelcomeBonusPoints(Number(e.target.value))}
-                      className="text-xs"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Granted on advocate signup.</p>
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label className="text-xs">Minimum Payout Amount (₹)</Label>
-                  <Input
-                    type="number"
-                    min="100"
-                    value={minPayoutAmount}
-                    onChange={(e) => setMinPayoutAmount(Number(e.target.value))}
-                    className="text-xs"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Minimum balance required for cash withdrawal.</p>
-                </div>
-              )}
-            </div>
-
-            {/* 3. FRIEND DISCOUNT INCENTIVE */}
-            <div className="space-y-3 rounded-xl border p-4 bg-muted/20">
+            {/* 2. DYNAMIC & INACTIVABLE TOKEN RULES MANAGER */}
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-sm font-semibold">Friend Incentive Offer</Label>
+                  <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    <span>Dynamic Token Earning Rules</span>
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    The discount given to referred buyers who use the advocate's link or code.
+                    Each rule can be activated or inactivated independently with its own toggle.
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFriendDiscountEnabled(!friendDiscountEnabled)}
-                  className="h-8 gap-1.5 text-xs font-semibold"
-                >
-                  {friendDiscountEnabled ? (
-                    <>
-                      <ToggleRight className="h-5 w-5 text-teal" /> Enabled
-                    </>
-                  ) : (
-                    <>
-                      <ToggleLeft className="h-5 w-5 text-muted-foreground" /> Disabled
-                    </>
-                  )}
-                </Button>
               </div>
 
-              {friendDiscountEnabled ? (
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Discount Type</Label>
-                    <Select
-                      value={friendDiscountType}
-                      onValueChange={(val: any) => setFriendDiscountType(val)}
-                    >
-                      <SelectTrigger className="h-9 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
-                        <SelectItem value="FIXED">Fixed Amount (₹)</SelectItem>
-                        <SelectItem value="FREE_SHIPPING">Free Shipping</SelectItem>
-                      </SelectContent>
-                    </Select>
+              {/* RULE CARD 1: FIXED TOKENS PER ORDER */}
+              <div className={`rounded-xl border transition-all p-4 ${fixedTokensEnabled ? "bg-amber-500/5 border-amber-500/30" : "bg-muted/10 border-border opacity-70"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${fixedTokensEnabled ? "bg-amber-500/20 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground"}`}>
+                      <ShoppingBag className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">Fixed Flat Tokens Per Order</span>
+                        <Badge variant={fixedTokensEnabled ? "default" : "outline"} className="text-[10px] h-4 px-1.5 font-medium">
+                          {fixedTokensEnabled ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Award a fixed token amount for every completed referral order regardless of total.
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Discount Value</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={friendDiscountValue}
-                      onChange={(e) => setFriendDiscountValue(Number(e.target.value))}
-                      disabled={friendDiscountType === "FREE_SHIPPING"}
-                      className="text-xs h-9"
-                    />
-                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFixedTokensEnabled(!fixedTokensEnabled)}
+                    className="h-8 gap-1.5 text-xs font-semibold"
+                  >
+                    {fixedTokensEnabled ? (
+                      <>
+                        <ToggleRight className="h-5 w-5 text-teal" /> Enabled
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft className="h-5 w-5 text-muted-foreground" /> Inactive
+                      </>
+                    )}
+                  </Button>
                 </div>
-              ) : null}
+
+                {fixedTokensEnabled && (
+                  <div className="mt-3 pt-3 border-t border-amber-500/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Tokens Awarded Per Order</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={fixedTokensPerOrder}
+                        onChange={(e) => setFixedTokensPerOrder(Number(e.target.value))}
+                        placeholder="e.g. 50"
+                        className="text-xs h-9"
+                      />
+                      <p className="text-[10px] text-muted-foreground">e.g. Advocate gets 50 tokens on every order.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* RULE CARD 2: TOKENS PER AMOUNT SPENT RATIO */}
+              <div className={`rounded-xl border transition-all p-4 ${spendTokensEnabled ? "bg-emerald-500/5 border-emerald-500/30" : "bg-muted/10 border-border opacity-70"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${spendTokensEnabled ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
+                      <Coins className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">Tokens Per Amount Spent (Spend Ratio)</span>
+                        <Badge variant={spendTokensEnabled ? "default" : "outline"} className="text-[10px] h-4 px-1.5 font-medium">
+                          {spendTokensEnabled ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Award X tokens for every specific currency amount spent (e.g. 10 tokens per ₹100 spent).
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSpendTokensEnabled(!spendTokensEnabled)}
+                    className="h-8 gap-1.5 text-xs font-semibold"
+                  >
+                    {spendTokensEnabled ? (
+                      <>
+                        <ToggleRight className="h-5 w-5 text-teal" /> Enabled
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft className="h-5 w-5 text-muted-foreground" /> Inactive
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {spendTokensEnabled && (
+                  <div className="mt-3 pt-3 border-t border-emerald-500/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Tokens to Award (X Tokens)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={spendTokensRate}
+                        onChange={(e) => setSpendTokensRate(Number(e.target.value))}
+                        placeholder="e.g. 10"
+                        className="text-xs h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">For Every Amount Spent (₹ / $ Y)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={spendTokensAmount}
+                        onChange={(e) => setSpendTokensAmount(Number(e.target.value))}
+                        placeholder="e.g. 100"
+                        className="text-xs h-9"
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground sm:col-span-2">
+                      💡 <strong>Formula:</strong> A ₹500 order awards <strong>{Math.floor(500 / (spendTokensAmount || 1)) * spendTokensRate} tokens</strong> ({spendTokensRate} tokens × {Math.floor(500 / (spendTokensAmount || 1))} steps).
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* RULE CARD 3: PERCENTAGE OF ORDER VALUE */}
+              <div className={`rounded-xl border transition-all p-4 ${percentageEnabled ? "bg-primary/5 border-primary/30" : "bg-muted/10 border-border opacity-70"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${percentageEnabled ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      <Percent className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">Percentage Commission / Tokens</span>
+                        <Badge variant={percentageEnabled ? "default" : "outline"} className="text-[10px] h-4 px-1.5 font-medium">
+                          {percentageEnabled ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Award a direct percentage commission of the total referred order value.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPercentageEnabled(!percentageEnabled)}
+                    className="h-8 gap-1.5 text-xs font-semibold"
+                  >
+                    {percentageEnabled ? (
+                      <>
+                        <ToggleRight className="h-5 w-5 text-teal" /> Enabled
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft className="h-5 w-5 text-muted-foreground" /> Inactive
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {percentageEnabled && (
+                  <div className="mt-3 pt-3 border-t border-primary/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Commission Rate (%)</Label>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={commissionRate}
+                          onChange={(e) => setCommissionRate(Number(e.target.value))}
+                          className="pr-7 text-xs h-9"
+                        />
+                        <Percent className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Points Conversion Multiplier</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={pointsPerCurrency}
+                        onChange={(e) => setPointsPerCurrency(Number(e.target.value))}
+                        className="text-xs h-9"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* RULE CARD 4: WELCOME SIGNUP BONUS */}
+              <div className={`rounded-xl border transition-all p-4 ${welcomeBonusEnabled ? "bg-violet-500/5 border-violet-500/30" : "bg-muted/10 border-border opacity-70"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${welcomeBonusEnabled ? "bg-violet-500/20 text-violet-600 dark:text-violet-400" : "bg-muted text-muted-foreground"}`}>
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">Welcome / Signup Bonus</span>
+                        <Badge variant={welcomeBonusEnabled ? "default" : "outline"} className="text-[10px] h-4 px-1.5 font-medium">
+                          {welcomeBonusEnabled ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Instant bonus tokens granted when a new advocate joins your program.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setWelcomeBonusEnabled(!welcomeBonusEnabled)}
+                    className="h-8 gap-1.5 text-xs font-semibold"
+                  >
+                    {welcomeBonusEnabled ? (
+                      <>
+                        <ToggleRight className="h-5 w-5 text-teal" /> Enabled
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft className="h-5 w-5 text-muted-foreground" /> Inactive
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {welcomeBonusEnabled && (
+                  <div className="mt-3 pt-3 border-t border-violet-500/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Signup Bonus Tokens</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={welcomeBonusPoints}
+                        onChange={(e) => setWelcomeBonusPoints(Number(e.target.value))}
+                        placeholder="e.g. 100"
+                        className="text-xs h-9"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* RULE CARD 5: FRIEND DISCOUNT OFFER */}
+              <div className={`rounded-xl border transition-all p-4 ${friendDiscountEnabled ? "bg-teal/5 border-teal/30" : "bg-muted/10 border-border opacity-70"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${friendDiscountEnabled ? "bg-teal/20 text-teal" : "bg-muted text-muted-foreground"}`}>
+                      <Gift className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">Friend Discount Incentive</span>
+                        <Badge variant={friendDiscountEnabled ? "default" : "outline"} className="text-[10px] h-4 px-1.5 font-medium">
+                          {friendDiscountEnabled ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Discount given at checkout to referred buyers who use the advocate link.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFriendDiscountEnabled(!friendDiscountEnabled)}
+                    className="h-8 gap-1.5 text-xs font-semibold"
+                  >
+                    {friendDiscountEnabled ? (
+                      <>
+                        <ToggleRight className="h-5 w-5 text-teal" /> Enabled
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft className="h-5 w-5 text-muted-foreground" /> Inactive
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {friendDiscountEnabled && (
+                  <div className="mt-3 pt-3 border-t border-teal/20 grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Discount Type</Label>
+                      <Select
+                        value={friendDiscountType}
+                        onValueChange={(val: any) => setFriendDiscountType(val)}
+                      >
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PERCENTAGE">Percentage (%)</SelectItem>
+                          <SelectItem value="FIXED">Fixed Amount (₹)</SelectItem>
+                          <SelectItem value="FREE_SHIPPING">Free Shipping</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Discount Value</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={friendDiscountValue}
+                        onChange={(e) => setFriendDiscountValue(Number(e.target.value))}
+                        disabled={friendDiscountType === "FREE_SHIPPING"}
+                        className="text-xs h-9"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* 4. PORTAL VISIBILITY CONTROLS (WHAT TO SHOW AND WHAT NOT TO SHOW) */}
+            {/* 3. LIVE SIMULATION & PREVIEW CALCULATOR */}
+            <div className="rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-background to-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calculator className="h-4 w-4 text-primary" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+                    Live Calculation Preview
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground">Test Order:</Label>
+                  <Input
+                    type="number"
+                    value={testOrderAmount}
+                    onChange={(e) => setTestOrderAmount(Number(e.target.value))}
+                    className="w-24 h-7 text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="p-3 rounded-lg border bg-background/80 space-y-1.5">
+                  <span className="text-[11px] font-medium text-muted-foreground block">
+                    Total Tokens Earned on ₹{testOrderAmount} Order:
+                  </span>
+                  <div className="text-2xl font-bold text-primary flex items-baseline gap-1">
+                    <span>{simulationResults.totalTokens}</span>
+                    <span className="text-xs font-normal text-muted-foreground">Tokens</span>
+                  </div>
+                  <div className="space-y-1 pt-1">
+                    {simulationResults.activeRules.length === 0 ? (
+                      <span className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+                        <XCircle className="h-3 w-3 text-rose-500" /> No active earning rules enabled.
+                      </span>
+                    ) : (
+                      simulationResults.activeRules.map((r, i) => (
+                        <div key={i} className="text-[11px] flex items-center justify-between text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-teal" /> {r.title}:
+                          </span>
+                          <span className="font-semibold text-foreground">{r.reward}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg border bg-background/80 space-y-1.5">
+                  <span className="text-[11px] font-medium text-muted-foreground block">
+                    Cash Commission Value:
+                  </span>
+                  <div className="text-2xl font-bold text-emerald-600 flex items-baseline gap-1">
+                    <span>₹{simulationResults.cashReward.toFixed(2)}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground pt-1">
+                    Min Payout Threshold: <strong>₹{minPayoutAmount}</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. PORTAL DISPLAY CONTROLS */}
             <div className="space-y-3 rounded-xl border p-4 bg-muted/20">
               <div>
                 <Label className="text-sm font-semibold flex items-center gap-1.5">
                   <Eye className="h-4 w-4 text-primary" />
-                  <span>Customer Portal UI Display Controls</span>
+                  <span>Advocate Portal Visibility Controls</span>
                 </Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Customize which modules and navigation tabs are visible to your advocates.
+                  Choose which modules and sections appear on the customer advocate portal.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                 <div className="flex items-center justify-between p-2.5 rounded-lg border bg-background text-xs">
                   <div>
                     <span className="font-semibold block">VIP Tier Roadmap</span>
-                    <span className="text-[10px] text-muted-foreground">Show Bronze/Silver/Gold rank</span>
+                    <span className="text-[10px] text-muted-foreground">Show Bronze/Silver/Gold tiers</span>
                   </div>
                   <Button
                     type="button"
@@ -464,7 +854,7 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
                 <Input
                   value={programTitle}
                   onChange={(e) => setProgramTitle(e.target.value)}
-                  placeholder="e.g. Urban Threads Advocate Club"
+                  placeholder="e.g. Brand Advocate Club"
                   className="text-xs h-9"
                 />
               </div>
@@ -491,7 +881,7 @@ export const ReferralProgramSettingsModal: React.FC<ReferralProgramSettingsModal
             disabled={mutation.isPending || isLoading}
             className="bg-primary text-primary-foreground"
           >
-            {mutation.isPending ? "Saving..." : "Save Program Settings"}
+            {mutation.isPending ? "Saving..." : "Save Program Rules & Settings"}
           </Button>
         </DialogFooter>
       </DialogContent>

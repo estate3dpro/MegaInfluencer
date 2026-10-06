@@ -154,3 +154,24 @@ export async function sendInstagramDirectMessage(
   });
   return parseResponse<{ recipient_id?: string; message_id?: string }>(response);
 }
+
+/** Subscribe an Instagram connected account to receive comment and messaging webhooks */
+export async function subscribeInstagramWebhooks(accessToken: string, instagramUserId?: string) {
+  const target = instagramUserId ? `${messagingGraphUrl}/${instagramUserId}/subscribed_apps` : `${messagingGraphUrl}/me/subscribed_apps`;
+  const url = new URL(target);
+  url.searchParams.set('subscribed_fields', 'comments,messages');
+  url.searchParams.set('access_token', accessToken.trim());
+
+  try {
+    const response = await fetch(url, { method: 'POST' });
+    return await parseResponse<{ success?: boolean }>(response);
+  } catch (error) {
+    // Fallback using root graph URL
+    const fallbackUrl = new URL(instagramUserId ? `${graphUrl}/${instagramUserId}/subscribed_apps` : `${graphUrl}/me/subscribed_apps`);
+    fallbackUrl.searchParams.set('subscribed_fields', 'comments,messages');
+    fallbackUrl.searchParams.set('access_token', accessToken.trim());
+    const response = await fetch(fallbackUrl, { method: 'POST' });
+    return await parseResponse<{ success?: boolean }>(response);
+  }
+}
+

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { ShoppingBag, CheckCircle2, Clock, Check, Search, Download } from 'lucide-react';
+import { ShoppingBag, CheckCircle2, Clock, Check, Search, Download, Calendar, DollarSign, Tag } from 'lucide-react';
 import { PageHeader } from '@/components/app/PageHeader';
-import { StatusBadge } from '@/components/app/StatusBadge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -39,116 +38,108 @@ export const OrdersPage: React.FC<OrdersPageProps> = ({ referrals }) => {
     .reduce((sum, r) => sum + r.rewardAmount, 0);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      <PageHeader
-        title="Friend Orders & Purchases"
-        description="Every purchase made through your advocate links with commission and validation breakdown."
-        actions={
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="bg-primary/10 text-primary font-semibold text-xs py-1 px-3">
-              Total Earned: {money.format(totalRewards)}
-            </Badge>
-          </div>
-        }
-      />
+    <div className="space-y-4 animate-in fade-in duration-200">
+      {/* Top Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-foreground">Friend Orders</h1>
+          <p className="text-xs text-muted-foreground">Every purchase made through your links</p>
+        </div>
+        <Badge variant="secondary" className="bg-primary/10 text-primary font-bold text-xs py-1 px-2.5 shrink-0">
+          Total: {money.format(totalRewards)}
+        </Badge>
+      </div>
 
       {/* Filter and search controls */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="space-y-2">
+        <div className="relative w-full">
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by order or store…"
+            placeholder="Search orders or stores…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-xs"
+            className="pl-8 h-9 text-xs"
           />
         </div>
 
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {(['ALL', 'APPROVED', 'PENDING'] as const).map((st) => (
-            <Button
+            <button
               key={st}
-              variant={statusFilter === st ? 'default' : 'outline'}
-              size="sm"
               onClick={() => setStatusFilter(st)}
-              className="h-8 text-xs"
+              className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                statusFilter === st
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'bg-muted/60 text-muted-foreground hover:text-foreground'
+              }`}
             >
               {st === 'ALL' ? 'All Orders' : st}
-            </Button>
+            </button>
           ))}
+          <span className="text-[11px] text-muted-foreground ml-auto whitespace-nowrap">
+            {filtered.length} orders
+          </span>
         </div>
       </div>
 
-      {/* Orders Table Card */}
-      <Card className="shadow-card">
-        <CardContent className="p-0">
-          {filtered.length === 0 ? (
-            <div className="p-12 text-center text-sm text-muted-foreground space-y-2">
-              <ShoppingBag className="h-10 w-10 text-muted-foreground mx-auto" />
-              <div className="font-semibold text-foreground">No purchases found</div>
-              <p className="text-xs">Try adjusting your search or share your link with friends to see new orders.</p>
+      {/* Mobile-First Orders List Feed */}
+      {filtered.length === 0 ? (
+        <Card className="shadow-xs border-border">
+          <CardContent className="p-8 text-center text-sm text-muted-foreground space-y-2">
+            <ShoppingBag className="h-9 w-9 text-muted-foreground mx-auto" />
+            <div className="font-semibold text-foreground text-xs">No orders found</div>
+            <p className="text-[11px]">Share your link with friends to see newly attributed purchases here.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2.5">
+          {filtered.map((item) => (
+            <div
+              key={item.id}
+              className="p-3.5 rounded-2xl border border-border bg-card shadow-2xs space-y-2.5 hover:border-primary/30 transition-all"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-8 w-8 rounded-xl bg-teal/10 text-teal flex items-center justify-center shrink-0">
+                    <ShoppingBag className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-bold text-xs text-foreground block truncate">{item.orderName}</span>
+                    <span className="text-[10px] text-muted-foreground block truncate">{item.storeName}</span>
+                  </div>
+                </div>
+
+                <Badge
+                  variant={item.status === 'APPROVED' || item.status === 'PAID' ? 'default' : 'secondary'}
+                  className="text-[10px] px-1.5 h-4 font-mono font-medium shrink-0"
+                >
+                  {item.status}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-border/60">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] text-muted-foreground block font-mono">{item.customerMasked}</span>
+                  <span className="text-[10px] text-muted-foreground block flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {new Date(item.date).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                    })}
+                  </span>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-xs font-bold text-primary block">+{money.format(item.rewardAmount)}</span>
+                  <span className="text-[10px] text-muted-foreground block font-mono">
+                    Order: {money.format(item.orderAmount)} ({item.commissionRate}%)
+                  </span>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-muted-foreground font-semibold uppercase text-[10px] tracking-wider">
-                    <th className="py-3 px-4">Order / ID</th>
-                    <th className="py-3 px-4">Referred Customer</th>
-                    <th className="py-3 px-4">Store</th>
-                    <th className="py-3 px-4">Order Total</th>
-                    <th className="py-3 px-4">Your Reward</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {filtered.map((item) => (
-                    <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-foreground">{item.orderName}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{item.orderId}</div>
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-muted-foreground">
-                        {item.customerMasked}
-                      </td>
-                      <td className="py-3.5 px-4 font-medium text-foreground">
-                        {item.storeName}
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold">
-                        {money.format(item.orderAmount)}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-primary">
-                          +{money.format(item.rewardAmount)}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {item.commissionRate}% reward
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <Badge
-                          variant={item.status === 'APPROVED' || item.status === 'PAID' ? 'default' : 'secondary'}
-                          className="text-[10px]"
-                        >
-                          {item.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3.5 px-4 text-muted-foreground">
-                        {new Date(item.date).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

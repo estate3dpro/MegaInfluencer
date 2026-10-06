@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { config } from '../../config/env.js';
 import { AppError, ForbiddenError } from '../../shared/errors/app-error.js';
 import { createSession } from '../../shared/auth/session.js';
-import { createAuthorizationUrl, exchangeAuthorizationCode, exchangeLongLivedToken, getInstagramMedia, getInstagramProfile as fetchInstagramProfile, getInstagramUser } from './instagram.client.js';
+import { createAuthorizationUrl, exchangeAuthorizationCode, exchangeLongLivedToken, getInstagramMedia, getInstagramProfile as fetchInstagramProfile, getInstagramUser, subscribeInstagramWebhooks } from './instagram.client.js';
 import { createOpaqueToken, decryptToken, encryptToken, hashOpaqueToken } from './instagram.crypto.js';
 import { ensureCreatorCode } from '../../shared/creator-code.js';
 
@@ -83,6 +83,15 @@ async function saveConnection(
     },
     select: { id: true, instagramUserId: true, username: true, displayName: true, tokenExpiresAt: true, status: true },
   });
+
+  // Automatically subscribe account to Meta webhook events
+  try {
+    await subscribeInstagramWebhooks(accessToken, instagramUser.id);
+    app.log.info({ influencerId, instagramUserId: instagramUser.id }, 'Successfully subscribed Instagram account to webhooks');
+  } catch (err) {
+    app.log.warn({ err, influencerId, instagramUserId: instagramUser.id }, 'Failed to subscribe Instagram account to webhooks');
+  }
+
   app.log.info({
     influencerId,
     connectionId: connection.id,

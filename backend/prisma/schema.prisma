@@ -773,15 +773,31 @@ model StoreReferralConfig {
   organizationId         String             @unique
   organization           Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
-  // Program Engine
+  // Program Engine Master Switch
   isEnabled              Boolean            @default(true)
   rewardMode             ReferralRewardMode @default(POINTS)
+  
+  // Rule 1: Percentage of Order Rule (Inactivable)
+  percentageEnabled      Boolean            @default(true)
   commissionRate         Decimal            @default(10) @db.Decimal(5, 2)
   pointsPerCurrency      Int                @default(1)
+
+  // Rule 2: Spend Ratio Rule - X Tokens per Y Amount Spent (Inactivable)
+  spendTokensEnabled     Boolean            @default(false)
+  spendTokensRate        Int                @default(10)
+  spendTokensAmount      Decimal            @default(100) @db.Decimal(10, 2)
+
+  // Rule 3: Fixed Flat Tokens Per Order Rule (Inactivable)
+  fixedTokensEnabled     Boolean            @default(false)
+  fixedTokensPerOrder    Int                @default(50)
+
+  // Rule 4: Welcome / Signup Bonus Rule (Inactivable)
+  welcomeBonusEnabled    Boolean            @default(true)
   welcomeBonusPoints     Int                @default(100)
+
   minPayoutAmount        Decimal            @default(500) @db.Decimal(10, 2)
 
-  // Friend Discount Offer
+  // Friend Discount Offer (Inactivable)
   friendDiscountEnabled  Boolean            @default(true)
   friendDiscountType     String             @default("PERCENTAGE") // PERCENTAGE | FIXED | FREE_SHIPPING
   friendDiscountValue    Decimal            @default(10) @db.Decimal(10, 2)

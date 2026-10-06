@@ -34,8 +34,15 @@ export interface CustomerProfile {
 export interface ReferralConfig {
   isEnabled: boolean;
   rewardMode: 'POINTS' | 'CASHBACK_COMMISSION' | 'DISCOUNT_ONLY' | 'HYBRID';
+  percentageEnabled?: boolean;
   commissionRate: number;
   pointsPerCurrency: number;
+  spendTokensEnabled?: boolean;
+  spendTokensRate?: number;
+  spendTokensAmount?: number;
+  fixedTokensEnabled?: boolean;
+  fixedTokensPerOrder?: number;
+  welcomeBonusEnabled?: boolean;
   welcomeBonusPoints: number;
   minPayoutAmount: number;
   friendDiscountEnabled: boolean;
