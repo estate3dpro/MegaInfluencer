@@ -8,14 +8,19 @@ import {
   Copy,
   DollarSign,
   ExternalLink,
+  Facebook,
   Filter,
+  Instagram,
   Layers,
   Link2,
+  MessageCircle,
   Package,
   Percent,
   Plus,
   Search,
+  Share2,
   ShoppingBag,
+  Sparkles,
   Store,
   TrendingUp,
   Truck,
@@ -40,6 +45,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PlatformLinkGeneratorModal, type PlatformLinkItem } from "@/components/app/PlatformLinkGeneratorModal";
 import { getInfluencerStoresOverview } from "../api/stores.api";
 import { getInfluencerProducts } from "../api/products.api";
 import { createInfluencerLink, getInfluencerLinks } from "../api/links.api";
@@ -176,6 +182,9 @@ async function copyShareLink(url: string | null | undefined) {
 // --------------------------------------------------------------------------
 export function StorePage() {
   const [scope, setScope] = useScope();
+  const [platformModalOpen, setPlatformModalOpen] = useState(false);
+  const [selectedLinkItem, setSelectedLinkItem] = useState<PlatformLinkItem | null>(null);
+
   const storesQuery = useQuery({
     queryKey: queryKeys.stores.influencerOverview,
     queryFn: getInfluencerStoresOverview,
@@ -192,6 +201,17 @@ export function StorePage() {
   const productList = data?.products ?? fallbackProducts;
   const filteredProducts = filterForScope(productList, scope, scopeNameMap);
   const timelineData = data?.scopeData?.[scope]?.timeline ?? data?.timeline ?? [];
+
+  const openPlatformModal = (product: typeof fallbackProducts[0]) => {
+    setSelectedLinkItem({
+      id: product.id || product.name,
+      baseUrl: product.affiliateUrl || `/r/${product.affiliateSlug || "promo"}`,
+      productName: product.name,
+      storeName: product.store,
+      slug: product.affiliateSlug || "product",
+    });
+    setPlatformModalOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -303,13 +323,24 @@ export function StorePage() {
               <p className="text-sm">
                 <b>{product.orders}</b> <span className="text-muted-foreground">orders</span>
               </p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => copyShareLink(product.affiliateUrl)}
-              >
-                Share <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 text-xs"
+                  onClick={() => openPlatformModal(product)}
+                >
+                  <Share2 className="h-3.5 w-3.5 text-primary" /> Platform Links
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copyShareLink(product.affiliateUrl)}
+                  title="Copy link"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
           ))}
           {!filteredProducts.length ? (
@@ -317,15 +348,25 @@ export function StorePage() {
           ) : null}
         </CardContent>
       </Card>
+
+      <PlatformLinkGeneratorModal
+        open={platformModalOpen}
+        onOpenChange={setPlatformModalOpen}
+        linkItem={selectedLinkItem}
+      />
     </div>
   );
 }
 
 // --------------------------------------------------------------------------
-// 2. Products Page
+// 2. Products Page with Dedicated Platform UTM Sections
 // --------------------------------------------------------------------------
 export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: string; campaignTitle?: string }) {
   const [scope, setScope] = useScope();
+  const [platformModalOpen, setPlatformModalOpen] = useState(false);
+  const [selectedLinkItem, setSelectedLinkItem] = useState<PlatformLinkItem | null>(null);
+  const [selectedProductIndex, setSelectedProductIndex] = useState<number>(0);
+
   const storesQuery = useQuery({
     queryKey: queryKeys.stores.influencerOverview,
     queryFn: getInfluencerStoresOverview,
@@ -348,15 +389,197 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
       : `${scopeNameMap[scope] || "Store"} products`;
 
   const productList = productsQuery.data?.products ?? [];
+  const activeProduct = productList[selectedProductIndex] || productList[0] || null;
+
+  const openPlatformModal = (product: typeof productList[0]) => {
+    setSelectedLinkItem({
+      id: product.id || product.name,
+      baseUrl: product.affiliateUrl || `/r/${product.affiliateSlug || "promo"}`,
+      productName: product.name,
+      storeName: product.store,
+      slug: product.affiliateSlug || "product",
+    });
+    setPlatformModalOpen(true);
+  };
+
+  // Helper for inline platform links
+  const getProductBaseUrl = (p: typeof productList[0] | null) => {
+    if (!p) return window.location.origin;
+    if (p.affiliateUrl) {
+      return p.affiliateUrl.startsWith("http")
+        ? p.affiliateUrl
+        : `${window.location.origin}${p.affiliateUrl.startsWith("/") ? "" : "/"}${p.affiliateUrl}`;
+    }
+    return `${window.location.origin}/r/${p.affiliateSlug || "product"}`;
+  };
+
+  const currentBaseUrl = getProductBaseUrl(activeProduct);
+  const currentProductSlug = activeProduct?.name
+    ? activeProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 24)
+    : "product-deal";
+
+  // Dedicated UTM Links for active product
+  const activeWhatsAppUrl = `${currentBaseUrl}?utm_source=whatsapp&utm_medium=social_chat&utm_campaign=${encodeURIComponent(currentProductSlug)}`;
+  const activeFacebookUrl = `${currentBaseUrl}?utm_source=facebook&utm_medium=social_post&utm_campaign=${encodeURIComponent(currentProductSlug)}`;
+  const activeInstagramUrl = `${currentBaseUrl}?utm_source=instagram&utm_medium=story_bio&utm_campaign=${encodeURIComponent(currentProductSlug)}`;
+
+  const activeWhatsAppMsg = activeProduct
+    ? `Hey! Check out *${activeProduct.name}* from *${activeProduct.store}* (${activeProduct.price})! 🛍️\n\n👉 Shop directly here: ${activeWhatsAppUrl}`
+    : `Hey! Check out these exclusive deals! 👉 ${activeWhatsAppUrl}`;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Products"
-        description={campaignId ? "The product selected for this campaign is ready for you to share." : "Discover products from your connected brand stores and share what you love."}
+        title="Products & Platform UTM Links"
+        description={campaignId ? "The product selected for this campaign is ready for you to share." : "Generate dedicated WhatsApp & Facebook UTM tracking links for your assigned products."}
         actions={campaignId ? undefined : <StoreSelector scope={scope} setScope={setScope} stores={storesData?.stores} />}
       />
       <Metrics scope={scope} scopeData={scopeDataMap} showEarnings={!storesData?.isBarterOnly} />
+
+      {/* DEDICATED PLATFORM-SPECIFIC SECTION (WHATSAPP & FACEBOOK UTM GENERATOR) */}
+      {productList.length > 0 && (
+        <Card className="shadow-card border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
+          <CardHeader className="p-5 pb-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wide">
+                    Platform Link Hub
+                  </Badge>
+                  <CardTitle className="text-lg">Platform-Specific UTM Links</CardTitle>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Select an assigned product below to generate distinct trackable links for WhatsApp broadcasts and Facebook posts.
+                </p>
+              </div>
+
+              {/* Product Selector for the Platform Hub */}
+              <div className="w-full sm:w-72">
+                <Select
+                  value={String(selectedProductIndex)}
+                  onValueChange={(val) => setSelectedProductIndex(Number(val))}
+                >
+                  <SelectTrigger className="h-9 bg-background text-xs font-medium">
+                    <SelectValue placeholder="Select assigned product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productList.map((p, idx) => (
+                      <SelectItem key={p.id || p.name} value={String(idx)} className="text-xs">
+                        {p.name} ({p.price})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-5 pt-2 space-y-4">
+            {activeProduct && (
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* 1. WHATSAPP SPECIFIC SECTION */}
+                <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                        <MessageCircle className="h-4 w-4" />
+                        <span>WhatsApp Link (utm_source=whatsapp)</span>
+                      </div>
+                      <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-[10px]">
+                        Chat & Broadcast
+                      </Badge>
+                    </div>
+
+                    <div className="rounded-xl bg-background border p-2.5 space-y-1.5">
+                      <p className="text-[11px] font-medium text-muted-foreground">WhatsApp Unique URL:</p>
+                      <p className="font-mono text-xs text-foreground truncate select-all">
+                        {activeWhatsAppUrl}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-background/70 border p-2.5 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                      {activeWhatsAppMsg}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 text-xs border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(activeWhatsAppUrl);
+                        toast.success("WhatsApp link copied!");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1" /> Copy Link
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold gap-1"
+                      onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(activeWhatsAppMsg)}`, "_blank")}
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" /> Open WhatsApp
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 2. FACEBOOK SPECIFIC SECTION */}
+                <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-sm">
+                        <Facebook className="h-4 w-4" />
+                        <span>Facebook Link (utm_source=facebook)</span>
+                      </div>
+                      <Badge variant="outline" className="border-blue-500/40 text-blue-600 dark:text-blue-400 text-[10px]">
+                        Feed & Groups
+                      </Badge>
+                    </div>
+
+                    <div className="rounded-xl bg-background border p-2.5 space-y-1.5">
+                      <p className="text-[11px] font-medium text-muted-foreground">Facebook Unique URL:</p>
+                      <p className="font-mono text-xs text-foreground truncate select-all">
+                        {activeFacebookUrl}
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-background/70 border text-xs text-muted-foreground space-y-1">
+                      <p className="font-semibold text-foreground">💡 Facebook Attribution Tip:</p>
+                      <p className="text-[11px] leading-relaxed">
+                        Share this link in Facebook Posts, Reels, Group discussions, or Facebook Ads to track Facebook-driven buyers.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 text-xs border-blue-500/30 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(activeFacebookUrl);
+                        toast.success("Facebook link copied!");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5 mr-1" /> Copy FB Link
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold gap-1"
+                      onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(activeFacebookUrl)}`, "_blank")}
+                    >
+                      <Facebook className="h-3.5 w-3.5" /> Post on FB
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* PRODUCTS CARD GRID */}
       <Card className="shadow-card">
         <CardHeader className="p-5 pb-3">
           <CardTitle>{currentScopeTitle}</CardTitle>
@@ -365,10 +588,10 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
         <CardContent className="p-5 pt-2">
           {productList.length > 0 ? (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {productList.map((product) => (
+              {productList.map((product, idx) => (
                 <div
                   key={product.id || product.name}
-                  className="group flex flex-col justify-between overflow-hidden rounded-2xl border bg-card p-4 transition-all hover:shadow-card"
+                  className="group flex flex-col justify-between overflow-hidden rounded-2xl border bg-card p-4 transition-all hover:shadow-card hover:border-primary/40"
                 >
                   <div>
                     <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-muted/40">
@@ -402,13 +625,45 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
                     </div>
                   </div>
 
-                  <Button
-                    className="mt-5 w-full"
-                    variant="outline"
-                    onClick={() => copyShareLink(product.affiliateUrl)}
-                  >
-                    Get share link <Link2 className="ml-1.5 h-4 w-4" />
-                  </Button>
+                  {/* 1-Tap Action Buttons per Product */}
+                  <div className="mt-4 space-y-2">
+                    <Button
+                      className="w-full bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs h-9 border border-primary/20"
+                      variant="ghost"
+                      onClick={() => openPlatformModal(product)}
+                    >
+                      <Share2 className="mr-1.5 h-3.5 w-3.5" /> Platform Links (WA / FB)
+                    </Button>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs text-emerald-600 hover:bg-emerald-500/10 border-emerald-500/30"
+                        onClick={() => {
+                          const base = getProductBaseUrl(product);
+                          const wa = `${base}?utm_source=whatsapp&utm_medium=social_chat`;
+                          navigator.clipboard?.writeText(wa);
+                          toast.success("WhatsApp link copied!");
+                        }}
+                      >
+                        <MessageCircle className="h-3 w-3 mr-1" /> WhatsApp
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs text-blue-600 hover:bg-blue-500/10 border-blue-500/30"
+                        onClick={() => {
+                          const base = getProductBaseUrl(product);
+                          const fb = `${base}?utm_source=facebook&utm_medium=social_post`;
+                          navigator.clipboard?.writeText(fb);
+                          toast.success("Facebook link copied!");
+                        }}
+                      >
+                        <Facebook className="h-3 w-3 mr-1" /> Facebook
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -424,6 +679,12 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
           )}
         </CardContent>
       </Card>
+
+      <PlatformLinkGeneratorModal
+        open={platformModalOpen}
+        onOpenChange={setPlatformModalOpen}
+        linkItem={selectedLinkItem}
+      />
     </div>
   );
 }
@@ -435,6 +696,8 @@ export function LinksPage() {
   const [scope, setScope] = useScope();
   const [search, setSearch] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [platformModalOpen, setPlatformModalOpen] = useState(false);
+  const [selectedLinkItem, setSelectedLinkItem] = useState<PlatformLinkItem | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("storewide");
   const [linkType, setLinkType] = useState<"store" | "product" | "collection">("store");
@@ -686,6 +949,23 @@ export function LinksPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="gap-1 text-xs text-primary border-primary/30 hover:bg-primary/10"
+                    onClick={() => {
+                      setSelectedLinkItem({
+                        id: link.id,
+                        baseUrl: link.url,
+                        productName: link.productTitle || (link.targetType === "COLLECTION" ? "Product Collection" : `${link.storeName} Store`),
+                        storeName: link.storeName,
+                        slug: (link as any).slug || "affiliate",
+                      });
+                      setPlatformModalOpen(true);
+                    }}
+                  >
+                    <Share2 className="h-3.5 w-3.5" /> Platform UTMs
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       navigator.clipboard?.writeText(link.url);
                       toast.success("Tracking link copied to clipboard!");
@@ -710,6 +990,12 @@ export function LinksPage() {
           )}
         </CardContent>
       </Card>
+
+      <PlatformLinkGeneratorModal
+        open={platformModalOpen}
+        onOpenChange={setPlatformModalOpen}
+        linkItem={selectedLinkItem}
+      />
     </div>
   );
 }

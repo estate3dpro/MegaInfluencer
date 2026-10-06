@@ -13,6 +13,7 @@ import {
   Megaphone,
   Plus,
   Search,
+  Share2,
   Sliders,
   Sparkles,
   UserPlus,
@@ -42,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { PlatformLinkGeneratorModal, type PlatformLinkItem } from "@/components/app/PlatformLinkGeneratorModal";
 import { createAffiliateLink, getAffiliateLinks, updateAffiliateLink } from "../api/affiliate-links.api";
 import { ReferralProgramSettingsModal } from "../components/ReferralProgramSettingsModal";
 import {
@@ -403,6 +405,8 @@ export function CreatorsPage() {
 export function AffiliatePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [platformModalOpen, setPlatformModalOpen] = useState(false);
+  const [selectedPlatformLink, setSelectedPlatformLink] = useState<PlatformLinkItem | null>(null);
   const [search, setSearch] = useState("");
   const [linkType, setLinkType] = useState<"CREATOR" | "STORE">("CREATOR");
   const [creatorId, setCreatorId] = useState("");
@@ -621,20 +625,40 @@ export function AffiliatePage() {
                     {formatCurrency(link.revenue)}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <Button
-                      variant={link.status === "ACTIVE" ? "outline" : "secondary"}
-                      size="sm"
-                      className="text-xs h-7"
-                      disabled={statusMutation.isPending}
-                      onClick={() =>
-                        statusMutation.mutate({
-                          id: link.id,
-                          status: link.status === "ACTIVE" ? "PAUSED" : "ACTIVE",
-                        })
-                      }
-                    >
-                      {link.status === "ACTIVE" ? "Active (Pause)" : "Paused (Resume)"}
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7 gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                        onClick={() => {
+                          setSelectedPlatformLink({
+                            id: link.id,
+                            baseUrl: link.url,
+                            productName: link.product || null,
+                            creatorName: link.creator || "Creator Partner",
+                            commissionRate: link.commissionRate,
+                            slug: (link as any).slug || "referral",
+                          });
+                          setPlatformModalOpen(true);
+                        }}
+                      >
+                        <Share2 className="h-3 w-3" /> Platform Links
+                      </Button>
+                      <Button
+                        variant={link.status === "ACTIVE" ? "outline" : "secondary"}
+                        size="sm"
+                        className="text-xs h-7"
+                        disabled={statusMutation.isPending}
+                        onClick={() =>
+                          statusMutation.mutate({
+                            id: link.id,
+                            status: link.status === "ACTIVE" ? "PAUSED" : "ACTIVE",
+                          })
+                        }
+                      >
+                        {link.status === "ACTIVE" ? "Active (Pause)" : "Paused (Resume)"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -733,6 +757,12 @@ export function AffiliatePage() {
       </Dialog>
 
       <ReferralProgramSettingsModal open={settingsModalOpen} onOpenChange={setSettingsModalOpen} />
+
+      <PlatformLinkGeneratorModal
+        open={platformModalOpen}
+        onOpenChange={setPlatformModalOpen}
+        linkItem={selectedPlatformLink}
+      />
     </div>
   );
 }
