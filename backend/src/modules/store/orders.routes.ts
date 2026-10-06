@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { decryptToken } from '../instagram/instagram.crypto.js';
+import { resolveOrderPlatform } from '../../shared/order-platform.js';
 
 type Node = Record<string, any>;
 type Page = { items?: Node[]; pageInfo?: { hasNextPage: boolean; endCursor: string | null }; error?: string };
@@ -140,6 +141,11 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 select: {
                   slug: true,
                   commissionRate: true,
+                  clicks: {
+                    take: 1,
+                    orderBy: { createdAt: 'desc' },
+                    select: { utmSource: true, utmMedium: true, utmCampaign: true },
+                  },
                 },
               },
             },
@@ -185,6 +191,9 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         ? `@${order.creatorCode}`
         : null;
 
+      const clickUtm = commission?.link?.clicks?.[0] ?? null;
+      const sourceInfo = resolveOrderPlatform(order.payload, clickUtm);
+
       return {
         id: order.id,
         shopifyId: order.shopifyId,
@@ -196,6 +205,11 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         fulfillmentStatus: order.fulfillmentStatus ?? 'UNFULFILLED',
         processedAt: order.processedAt,
         creatorCode: order.creatorCode,
+        platform: sourceInfo.platform,
+        platformLabel: sourceInfo.platformLabel,
+        utmSource: sourceInfo.utmSource,
+        utmMedium: sourceInfo.utmMedium,
+        utmCampaign: sourceInfo.utmCampaign,
         creator: creator
           ? {
               id: creator.id,
@@ -466,6 +480,11 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 commissionRate: true,
                 targetType: true,
                 destinationPath: true,
+                clicks: {
+                  take: 1,
+                  orderBy: { createdAt: 'desc' },
+                  select: { utmSource: true, utmMedium: true, utmCampaign: true },
+                },
               },
             },
           },
@@ -499,13 +518,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       };
     });
 
-    const customAttributes = raw.customAttributes ?? [];
-    const utmSource = customAttributes.find((a: any) => (a.key ?? a.name) === 'utm_source')?.value ?? null;
-    const utmMedium = customAttributes.find((a: any) => (a.key ?? a.name) === 'utm_medium')?.value ?? null;
-    const utmCampaign = customAttributes.find((a: any) => (a.key ?? a.name) === 'utm_campaign')?.value ?? null;
-    const linkSlug = customAttributes.find((a: any) => (a.key ?? a.name) === 'mi_link')?.value ?? null;
-
     const commission = order.affiliateCommissions?.[0] ?? null;
+    const clickUtm = commission?.link?.clicks?.[0] ?? null;
+    const sourceInfo = resolveOrderPlatform(raw, clickUtm);
+
+    const customAttributes = raw.customAttributes ?? [];
+    const linkSlug = customAttributes.find((a: any) => (a.key ?? a.name) === 'mi_link')?.value ?? commission?.link?.slug ?? null;
 
     return {
       order: {
@@ -526,9 +544,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         attribution: {
           creatorCode: order.creatorCode,
           linkSlug,
-          utmSource,
-          utmMedium,
-          utmCampaign,
+          platform: sourceInfo.platform,
+          platformLabel: sourceInfo.platformLabel,
+          utmSource: sourceInfo.utmSource,
+          utmMedium: sourceInfo.utmMedium,
+          utmCampaign: sourceInfo.utmCampaign,
+          referrer: sourceInfo.referrer,
           customAttributes,
         },
         commission: commission

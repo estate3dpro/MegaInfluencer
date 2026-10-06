@@ -21,6 +21,11 @@ export type StoreOrder = {
   fulfillmentStatus: string;
   processedAt: string | null;
   creatorCode: string | null;
+  platform?: "WHATSAPP" | "FACEBOOK" | "INSTAGRAM" | "YOUTUBE" | "TIKTOK" | "DIRECT" | "OTHER";
+  platformLabel?: string;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
   creator?: {
     id: string;
     name: string;
@@ -80,9 +85,12 @@ export type OrderDetails = {
   attribution: {
     creatorCode: string | null;
     linkSlug: string | null;
+    platform?: "WHATSAPP" | "FACEBOOK" | "INSTAGRAM" | "YOUTUBE" | "TIKTOK" | "DIRECT" | "OTHER";
+    platformLabel?: string;
     utmSource: string | null;
     utmMedium: string | null;
     utmCampaign: string | null;
+    referrer?: string | null;
     customAttributes: Array<{ key?: string; name?: string; value: string }>;
   };
   commission?: {
@@ -114,6 +122,7 @@ export async function getStoreOrders(
     search?: string;
     financialStatus?: string;
     fulfillmentStatus?: string;
+    platform?: string;
   } = {}
 ) {
   return (
@@ -129,6 +138,7 @@ export async function getStoreOrders(
         search: options.search || undefined,
         financialStatus: options.financialStatus || undefined,
         fulfillmentStatus: options.fulfillmentStatus || undefined,
+        platform: options.platform || undefined,
       },
     })
   ).data;

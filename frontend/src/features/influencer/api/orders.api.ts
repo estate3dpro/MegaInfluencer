@@ -16,6 +16,11 @@ export type InfluencerOrder = {
   isBarter: boolean;
   status: "Approved" | "Pending" | "Paid" | "Cancelled";
   statusRaw: "APPROVED" | "PENDING" | "PAID" | "REVERSED";
+  platform?: "WHATSAPP" | "FACEBOOK" | "INSTAGRAM" | "YOUTUBE" | "TIKTOK" | "TWITTER" | "DIRECT" | "OTHER";
+  platformLabel?: string;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
   date: string;
   createdAt: string;
 };
@@ -27,6 +32,9 @@ export type GetInfluencerOrdersResponse = {
     totalCommissions: string;
     barterOrders: number;
     isBarterOnly: boolean;
+    whatsappOrders?: number;
+    facebookOrders?: number;
+    instagramOrders?: number;
   };
   orders: InfluencerOrder[];
 };
@@ -34,12 +42,14 @@ export type GetInfluencerOrdersResponse = {
 export async function getInfluencerOrders(
   scope: string = "all",
   status: string = "all",
-  search: string = ""
+  search: string = "",
+  platform: string = "all"
 ): Promise<GetInfluencerOrdersResponse> {
   const params: Record<string, string> = {};
   if (scope && scope !== "all") params.scope = scope;
   if (status && status !== "all") params.status = status;
   if (search) params.search = search;
+  if (platform && platform !== "all") params.platform = platform;
 
   return (
     await apiClient.get<GetInfluencerOrdersResponse>("/influencer/orders", {
@@ -47,3 +57,4 @@ export async function getInfluencerOrders(
     })
   ).data;
 }
+

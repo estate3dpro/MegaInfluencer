@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
+import { resolveOrderPlatform } from '../../shared/order-platform.js';
 
 const inrCurrency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -17,6 +18,7 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
       scope?: string;
       status?: string;
       search?: string;
+      platform?: string;
     };
 
     const where: any = {
@@ -46,39 +48,45 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
 
     const [rows, assignments] = await Promise.all([
       prisma.affiliateCommission.findMany({
-      where,
-      include: {
-        shopifyOrder: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            total: true,
-            financialStatus: true,
-            fulfillmentStatus: true,
-            processedAt: true,
-            createdAt: true,
+        where,
+        include: {
+          shopifyOrder: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              total: true,
+              financialStatus: true,
+              fulfillmentStatus: true,
+              processedAt: true,
+              createdAt: true,
+              payload: true,
+            },
           },
-        },
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
           },
-        },
-        link: {
-          select: {
-            slug: true,
-            product: {
-              select: {
-                title: true,
+          link: {
+            select: {
+              slug: true,
+              clicks: {
+                take: 1,
+                orderBy: { createdAt: 'desc' },
+                select: { utmSource: true, utmMedium: true, utmCampaign: true },
+              },
+              product: {
+                select: {
+                  title: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
       }),
       prisma.storeInfluencerAssignment.findMany({
         where: { influencerId: actor.userId },
@@ -91,52 +99,71 @@ export const influencerOrdersRoutes: FastifyPluginAsync = async (app) => {
     );
     const isBarter = (row: any) => barterOrganizations.has(row.organizationId);
 
-    const totalOrders = rows.length;
-    const earningRows = rows.filter((row: any) => row.status !== 'REVERSED');
-    const totalSales = earningRows.reduce((sum: number, row: any) => sum + Number(row.orderAmount), 0);
+    const mappedOrders = rows.map((row: any) => {
+      const orderDate = row.shopifyOrder?.processedAt ?? row.shopifyOrder?.createdAt ?? row.createdAt;
+      const customerEmail = row.shopifyOrder?.email;
+      const customerName = customerEmail
+        ? customerEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+        : 'Valued Customer';
+
+      const clickUtm = row.link?.clicks?.[0] ?? null;
+      const sourceInfo = resolveOrderPlatform(row.shopifyOrder?.payload, clickUtm);
+
+      return {
+        id: row.id,
+        orderId: row.shopifyOrderId,
+        orderNumber: row.shopifyOrder?.name ?? `#ORD-${row.id.slice(-5).toUpperCase()}`,
+        customer: customerName,
+        store: row.organization?.name ?? 'Store',
+        storeSlug: row.organization?.slug ?? 'store',
+        productTitle: row.link?.product?.title ?? 'Storewide referral',
+        orderTotal: inrCurrency.format(Number(row.orderAmount)),
+        orderTotalRaw: Number(row.orderAmount),
+        isBarter: isBarter(row),
+        commission: isBarter(row) ? null : inrCurrency.format(row.status === 'REVERSED' ? 0 : Number(row.amount)),
+        commissionRaw: isBarter(row) || row.status === 'REVERSED' ? 0 : Number(row.amount),
+        commissionRate: isBarter(row) ? null : `${row.commissionRate}%`,
+        status: row.status === 'APPROVED' ? 'Approved' : row.status === 'PAID' ? 'Paid' : row.status === 'REVERSED' ? 'Cancelled' : 'Pending',
+        statusRaw: row.status,
+        platform: sourceInfo.platform,
+        platformLabel: sourceInfo.platformLabel,
+        utmSource: sourceInfo.utmSource,
+        utmMedium: sourceInfo.utmMedium,
+        utmCampaign: sourceInfo.utmCampaign,
+        date: new Date(orderDate).toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        }),
+        createdAt: row.createdAt,
+      };
+    });
+
+    // Optional platform filtering
+    const filteredOrders = query.platform && query.platform !== 'all'
+      ? mappedOrders.filter((o: any) => o.platform.toLowerCase() === query.platform?.toLowerCase() || o.utmSource?.toLowerCase() === query.platform?.toLowerCase())
+      : mappedOrders;
+
+    const totalOrders = filteredOrders.length;
+    const earningRows = filteredOrders.filter((row: any) => row.status !== 'Cancelled');
+    const totalSales = earningRows.reduce((sum: number, row: any) => sum + Number(row.orderTotalRaw), 0);
     const totalCommissions = earningRows
-      .filter((row: any) => !isBarter(row))
-      .reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+      .filter((row: any) => !row.isBarter)
+      .reduce((sum: number, row: any) => sum + Number(row.commissionRaw), 0);
 
     return {
       metrics: {
         totalOrders,
         totalSales: inrCurrency.format(totalSales),
         totalCommissions: inrCurrency.format(totalCommissions),
-        barterOrders: rows.filter(isBarter).length,
-        isBarterOnly: rows.length > 0 && rows.every(isBarter),
+        barterOrders: filteredOrders.filter((o: any) => o.isBarter).length,
+        isBarterOnly: filteredOrders.length > 0 && filteredOrders.every((o: any) => o.isBarter),
+        whatsappOrders: mappedOrders.filter((o: any) => o.platform === 'WHATSAPP').length,
+        facebookOrders: mappedOrders.filter((o: any) => o.platform === 'FACEBOOK').length,
+        instagramOrders: mappedOrders.filter((o: any) => o.platform === 'INSTAGRAM').length,
       },
-      orders: rows.map((row: any) => {
-        const orderDate = row.shopifyOrder?.processedAt ?? row.shopifyOrder?.createdAt ?? row.createdAt;
-        const customerEmail = row.shopifyOrder?.email;
-        const customerName = customerEmail
-          ? customerEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-          : 'Valued Customer';
-
-        return {
-          id: row.id,
-          orderId: row.shopifyOrderId,
-          orderNumber: row.shopifyOrder?.name ?? `#ORD-${row.id.slice(-5).toUpperCase()}`,
-          customer: customerName,
-          store: row.organization?.name ?? 'Store',
-          storeSlug: row.organization?.slug ?? 'store',
-          productTitle: row.link?.product?.title ?? 'Storewide referral',
-          orderTotal: inrCurrency.format(Number(row.orderAmount)),
-          orderTotalRaw: Number(row.orderAmount),
-          isBarter: isBarter(row),
-          commission: isBarter(row) ? null : inrCurrency.format(row.status === 'REVERSED' ? 0 : Number(row.amount)),
-          commissionRaw: isBarter(row) || row.status === 'REVERSED' ? 0 : Number(row.amount),
-          commissionRate: isBarter(row) ? null : `${row.commissionRate}%`,
-          status: row.status === 'APPROVED' ? 'Approved' : row.status === 'PAID' ? 'Paid' : row.status === 'REVERSED' ? 'Cancelled' : 'Pending',
-          statusRaw: row.status,
-          date: new Date(orderDate).toLocaleDateString('en-IN', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          }),
-          createdAt: row.createdAt,
-        };
-      }),
+      orders: filteredOrders,
     };
   });
 };
+

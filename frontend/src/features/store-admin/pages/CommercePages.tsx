@@ -58,6 +58,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getStoreProducts, getStoreProductSyncStatus, syncStoreProducts } from "../api/products.api";
 import { getStoreOrders, syncStoreOrders, updateOrderCommissionStatus } from "../api/orders.api";
+import { PlatformBadge } from "@/components/app/PlatformBadge";
 import { getStoreCustomers, getStoreCustomerDetails } from "../api/customers.api";
 import {
   getStoreDiscounts,
@@ -487,16 +488,18 @@ export function ProductsPage() {
 export function OrdersPage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PAID" | "UNFULFILLED" | "REFUNDED">("ALL");
+  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
   const [orderPage, setOrderPage] = useState(1);
 
   const normalizedOrderSearch = orderSearch.trim();
   const ordersQuery = useQuery({
-    queryKey: ["store", "orders", orderPage, normalizedOrderSearch, statusFilter],
+    queryKey: ["store", "orders", orderPage, normalizedOrderSearch, statusFilter, platformFilter],
     queryFn: () =>
       getStoreOrders(orderPage, {
         search: normalizedOrderSearch || undefined,
         financialStatus: statusFilter === "PAID" ? "PAID" : statusFilter === "REFUNDED" ? "REFUNDED" : undefined,
         fulfillmentStatus: statusFilter === "UNFULFILLED" ? "UNFULFILLED" : undefined,
+        platform: platformFilter === "ALL" ? undefined : platformFilter,
       }),
   });
 
@@ -594,52 +597,84 @@ export function OrdersPage() {
       </section>
 
       {/* Filter Tabs & Search */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative min-w-64 flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9 h-9"
-            placeholder="Search order number (#1001), customer email, or creator..."
-            value={orderSearch}
-            onChange={(e) => {
-              setOrderSearch(e.target.value);
-              setOrderPage(1);
-            }}
-          />
-        </div>
-        <div className="flex rounded-lg border bg-muted/30 p-0.5">
-          {(
-            [
-              { id: "ALL", label: "Platform Orders" },
-              { id: "PAID", label: "Paid" },
-              { id: "UNFULFILLED", label: "To Fulfill" },
-              { id: "REFUNDED", label: "Refunded" },
-            ] as const
-          ).map((t) => (
-            <button
-              key={t.id}
-              onClick={() => {
-                setStatusFilter(t.id);
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="relative min-w-64 flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9 h-9"
+              placeholder="Search order number (#1001), customer email, or creator..."
+              value={orderSearch}
+              onChange={(e) => {
+                setOrderSearch(e.target.value);
                 setOrderPage(1);
               }}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
-                statusFilter === t.id
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+            />
+          </div>
+          <div className="flex rounded-lg border bg-muted/30 p-0.5">
+            {(
+              [
+                { id: "ALL", label: "All Orders" },
+                { id: "PAID", label: "Paid" },
+                { id: "UNFULFILLED", label: "To Fulfill" },
+                { id: "REFUNDED", label: "Refunded" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setStatusFilter(t.id);
+                  setOrderPage(1);
+                }}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  statusFilter === t.id
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Traffic Source / Channel Filter Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-xs font-semibold text-muted-foreground shrink-0">Traffic Channel:</span>
+          {(
+            [
+              { id: "ALL", label: "All Channels" },
+              { id: "WHATSAPP", label: "WhatsApp" },
+              { id: "FACEBOOK", label: "Facebook" },
+              { id: "INSTAGRAM", label: "Instagram" },
+              { id: "DIRECT", label: "Direct / Link" },
+            ] as const
+          ).map((c) => (
+            <Button
+              key={c.id}
+              variant={platformFilter === c.id ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => {
+                setPlatformFilter(c.id);
+                setOrderPage(1);
+              }}
+              className={`h-7 px-2.5 text-xs font-medium ${
+                platformFilter === c.id ? "bg-muted font-semibold shadow-xs" : "text-muted-foreground"
               }`}
             >
-              {t.label}
-            </button>
+              {c.label}
+            </Button>
           ))}
         </div>
       </div>
 
       <PageTable>
-        <table className="w-full min-w-[850px] text-left text-sm">
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-5 py-3 font-medium">Order & Customer</th>
               <th className="px-5 py-3 font-medium">Date</th>
+              <th className="px-5 py-3 font-medium">Traffic Source / Channel</th>
               <th className="px-5 py-3 font-medium">Attribution & Commission</th>
               <th className="px-5 py-3 font-medium">Payment</th>
               <th className="px-5 py-3 font-medium">Fulfillment</th>
@@ -651,14 +686,14 @@ export function OrdersPage() {
             {ordersQuery.isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b last:border-0">
-                  <td colSpan={7} className="px-5 py-4">
+                  <td colSpan={8} className="px-5 py-4">
                     <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
                   </td>
                 </tr>
               ))
             ) : allOrders.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                   No platform-attributed orders found matching your filters.
                 </td>
               </tr>
@@ -695,6 +730,13 @@ export function OrdersPage() {
                             year: "numeric",
                           })
                         : "—"}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <PlatformBadge
+                        platform={order.platform}
+                        platformLabel={order.platformLabel}
+                        utmCampaign={order.utmCampaign}
+                      />
                     </td>
                     <td className="px-5 py-3.5">
                       {order.creatorCode || order.creator ? (

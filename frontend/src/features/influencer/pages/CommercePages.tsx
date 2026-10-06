@@ -46,6 +46,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { PlatformLinkGeneratorModal, type PlatformLinkItem } from "@/components/app/PlatformLinkGeneratorModal";
+import { PlatformBadge } from "@/components/app/PlatformBadge";
 import { getInfluencerStoresOverview } from "../api/stores.api";
 import { getInfluencerProducts } from "../api/products.api";
 import { createInfluencerLink, getInfluencerLinks } from "../api/links.api";
@@ -1000,12 +1001,12 @@ export function LinksPage() {
   );
 }
 
-// --------------------------------------------------------------------------
-// 4. Orders Page
+// 4. Orders Page with Platform Breakdown (WhatsApp, Facebook, Instagram)
 // --------------------------------------------------------------------------
 export function OrdersPage() {
   const [scope, setScope] = useScope();
   const [statusFilter, setStatusFilter] = useState("all");
+  const [platformFilter, setPlatformFilter] = useState("all");
   const [search, setSearch] = useState("");
 
   const storesQuery = useQuery({
@@ -1014,8 +1015,8 @@ export function OrdersPage() {
   });
 
   const ordersQuery = useQuery({
-    queryKey: queryKeys.orders.influencer(scope, statusFilter, search),
-    queryFn: () => getInfluencerOrders(scope, statusFilter, search),
+    queryKey: ["influencer", "orders", scope, statusFilter, search, platformFilter],
+    queryFn: () => getInfluencerOrders(scope, statusFilter, search, platformFilter),
   });
 
   const ordersData = ordersQuery.data;
@@ -1038,47 +1039,87 @@ export function OrdersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Orders"
-        description="See every purchase attributed to your shared links and social promotions."
+        title="Attributed Orders & Platform Channels"
+        description="Track all customer purchases driven across WhatsApp, Facebook, Instagram, and direct referral links."
         actions={<StoreSelector scope={scope} setScope={setScope} stores={storesQuery.data?.stores} />}
       />
 
       <Metrics scope={scope} scopeData={scopeDataMap} showEarnings={!ordersData?.metrics.isBarterOnly} />
 
+      {/* Platform & Status Filters */}
       <Card className="shadow-card">
-        <CardHeader className="flex flex-col gap-4 p-5 pb-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              ["all", "All Orders"],
-              ["approved", "Approved"],
-              ["pending", "Pending"],
-              ["paid", "Paid"],
-            ].map(([val, label]) => (
-              <Button
-                key={val}
-                size="sm"
-                variant={statusFilter === val ? "default" : "outline"}
-                onClick={() => setStatusFilter(val)}
-              >
-                {label}
-              </Button>
-            ))}
+        <CardHeader className="flex flex-col gap-4 p-5 pb-3 space-y-2">
+          {/* Top Row: Search & Status Filter */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground mr-1">Status:</span>
+              {[
+                ["all", "All Orders"],
+                ["approved", "Approved"],
+                ["pending", "Pending"],
+                ["paid", "Paid"],
+              ].map(([val, label]) => (
+                <Button
+                  key={val}
+                  size="sm"
+                  variant={statusFilter === val ? "default" : "outline"}
+                  className="h-8 text-xs font-medium"
+                  onClick={() => setStatusFilter(val)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search order # or store..."
+                className="h-8 pl-9 text-xs"
+              />
+            </div>
           </div>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search order # or store..."
-              className="h-9 pl-9"
-            />
+
+          {/* Bottom Row: Platform Specific Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t">
+            <span className="text-xs font-semibold text-muted-foreground mr-1">Channel / Source:</span>
+            {[
+              { id: "all", label: "All Platforms", icon: Layers, count: undefined },
+              { id: "whatsapp", label: "WhatsApp", icon: MessageCircle, color: "text-emerald-600", count: ordersData?.metrics.whatsappOrders },
+              { id: "facebook", label: "Facebook", icon: Facebook, color: "text-blue-600", count: ordersData?.metrics.facebookOrders },
+              { id: "instagram", label: "Instagram", icon: Instagram, color: "text-pink-600", count: ordersData?.metrics.instagramOrders },
+            ].map((p) => {
+              const Icon = p.icon;
+              const isActive = platformFilter === p.id;
+              return (
+                <Button
+                  key={p.id}
+                  size="sm"
+                  variant={isActive ? "secondary" : "ghost"}
+                  className={`h-7 px-2.5 text-xs font-medium gap-1.5 ${isActive ? "bg-primary/10 text-primary border border-primary/20 shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setPlatformFilter(p.id)}
+                >
+                  <Icon className={`h-3.5 w-3.5 ${p.color || ""}`} />
+                  <span>{p.label}</span>
+                  {p.count !== undefined && p.count > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-[10px] font-bold">
+                      {p.count}
+                    </Badge>
+                  )}
+                </Button>
+              );
+            })}
           </div>
         </CardHeader>
+
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-[850px] text-left text-sm">
             <thead className="border-y bg-muted/40 text-xs text-muted-foreground">
               <tr>
                 <th className="px-5 py-3 font-medium">Order details</th>
+                <th className="px-5 py-3 font-medium">Traffic Source / Channel</th>
                 <th className="px-5 py-3 font-medium">Store</th>
                 <th className="px-5 py-3 font-medium">Product / Link</th>
                 <th className="px-5 py-3 font-medium">Order Total</th>
@@ -1091,30 +1132,38 @@ export function OrdersPage() {
               {orderList.length > 0 ? (
                 orderList.map((order) => (
                   <tr key={order.id} className="border-b transition-colors hover:bg-muted/20 last:border-0">
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-3.5">
                       <p className="font-semibold text-foreground">{order.orderNumber}</p>
                       <p className="text-xs text-muted-foreground">{order.customer}</p>
                     </td>
-                    <td className="px-5 py-4 font-medium text-foreground">{order.store}</td>
-                    <td className="px-5 py-4 text-muted-foreground truncate max-w-44" title={order.productTitle}>
+                    <td className="px-5 py-3.5">
+                      <PlatformBadge
+                        platform={order.platform}
+                        utmSource={order.utmSource}
+                        utmCampaign={order.utmCampaign}
+                        showCampaign={true}
+                      />
+                    </td>
+                    <td className="px-5 py-3.5 font-medium text-foreground">{order.store}</td>
+                    <td className="px-5 py-3.5 text-muted-foreground truncate max-w-44" title={order.productTitle}>
                       {order.productTitle}
                     </td>
-                    <td className="px-5 py-4 font-medium">{order.orderTotal}</td>
+                    <td className="px-5 py-3.5 font-medium">{order.orderTotal}</td>
                     {!ordersData?.metrics.isBarterOnly ? (
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-3.5">
                         {order.isBarter ? <p className="text-xs font-semibold text-amber-600">Barter order</p> : <><p className="font-display font-bold text-primary">{order.commission}</p><p className="text-[11px] text-muted-foreground">{order.commissionRate} rate</p></>}
                       </td>
                     ) : null}
-                    <td className="px-5 py-4">{getStatusBadge(order.status)}</td>
-                    <td className="px-5 py-4 text-right text-xs text-muted-foreground">{order.date}</td>
+                    <td className="px-5 py-3.5">{getStatusBadge(order.status)}</td>
+                    <td className="px-5 py-3.5 text-right text-xs text-muted-foreground">{order.date}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={ordersData?.metrics.isBarterOnly ? 6 : 7} className="py-14 text-center text-muted-foreground">
+                  <td colSpan={ordersData?.metrics.isBarterOnly ? 7 : 8} className="py-14 text-center text-muted-foreground">
                     <ShoppingBag className="mx-auto h-9 w-9 opacity-40" />
                     <p className="mt-2 font-medium">No attributed orders found</p>
-                    <p className="text-xs">Purchases from your shared referral links will appear here in real-time.</p>
+                    <p className="text-xs">Purchases from your shared WhatsApp, Facebook, or Instagram links will appear here in real-time.</p>
                   </td>
                 </tr>
               )}

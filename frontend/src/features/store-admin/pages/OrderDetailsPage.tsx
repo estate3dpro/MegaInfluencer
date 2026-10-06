@@ -32,6 +32,7 @@ import {
   Link2,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
+import { PlatformBadge } from "@/components/app/PlatformBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -427,12 +428,16 @@ export function OrderDetailsPage() {
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Channel Attribution</p>
-              <p className="mt-1 text-lg font-bold tracking-tight text-foreground">
-                {attribution.creatorCode ? `@${attribution.creatorCode}` : "Direct Store"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
+              <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                <PlatformBadge
+                  platform={attribution.platform}
+                  platformLabel={attribution.platformLabel}
+                  utmCampaign={attribution.utmCampaign}
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
                 <Sparkles className="h-3 w-3 text-coral" />
-                <span>{attribution.utmSource ? `Via ${attribution.utmSource}` : "Organic Checkout"}</span>
+                <span>{attribution.creatorCode ? `@${attribution.creatorCode}` : "Organic Checkout"}</span>
               </p>
             </div>
             <div className="grid h-12 w-12 place-items-center rounded-xl bg-coral/10 text-coral">
@@ -621,7 +626,7 @@ export function OrderDetailsPage() {
             </CardHeader>
 
             <CardContent className="p-5 space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="rounded-xl border p-4 bg-muted/20 space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Attributed Creator</p>
                   {commission?.creator || attribution.creatorCode ? (
@@ -643,6 +648,22 @@ export function OrderDetailsPage() {
                       Direct store order (no creator code captured)
                     </p>
                   )}
+                </div>
+
+                <div className="rounded-xl border p-4 bg-muted/20 space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traffic Channel</p>
+                  <div className="pt-1">
+                    <PlatformBadge
+                      platform={attribution.platform}
+                      platformLabel={attribution.platformLabel}
+                      utmCampaign={attribution.utmCampaign}
+                    />
+                    {attribution.referrer ? (
+                      <p className="text-[11px] text-muted-foreground mt-2 truncate" title={attribution.referrer}>
+                        Ref: {attribution.referrer}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="rounded-xl border p-4 bg-muted/20 space-y-2">
@@ -684,7 +705,7 @@ export function OrderDetailsPage() {
                   <div className="rounded-lg border bg-background p-3 text-xs">
                     <span className="text-muted-foreground block text-[11px]">UTM Medium</span>
                     <span className="font-semibold text-foreground mt-0.5 block">
-                      {attribution.utmMedium || "instagram"}
+                      {attribution.utmMedium || (attribution.platform?.toLowerCase() ?? "social")}
                     </span>
                   </div>
                   <div className="rounded-lg border bg-background p-3 text-xs">
