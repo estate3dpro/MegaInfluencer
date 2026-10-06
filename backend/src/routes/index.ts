@@ -27,10 +27,14 @@ import { influencerOrdersRoutes } from '../modules/influencer-orders/influencer-
 import { influencerEarningsRoutes } from '../modules/influencer-earnings/influencer-earnings.routes.js';
 import { notificationsRoutes } from '../modules/notifications/notifications.routes.js';
 import { contactInquiriesRoutes } from '../modules/contact-inquiries/contact-inquiries.routes.js';
+import { customerRoutes } from '../modules/customer/customer.routes.js';
+import { storeReferralSettingsRoutes } from '../modules/store/referral-settings.routes.js';
 
 export function registerRoutes(app: FastifyInstance) {
   app.register(healthRoutes);
   app.register(identityRoutes, { prefix: '/api/v1' });
+  app.register(customerRoutes, { prefix: '/api/v1' });
+  app.register(storeReferralSettingsRoutes, { prefix: '/api/v1' });
   app.register(adminInfluencerRoutes, { prefix: '/api/v1' });
   app.register(adminStoreRoutes, { prefix: '/api/v1' });
   app.register(adminOverviewRoutes, { prefix: '/api/v1' });

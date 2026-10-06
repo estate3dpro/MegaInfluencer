@@ -13,6 +13,7 @@ import {
   Megaphone,
   Plus,
   Search,
+  Sliders,
   Sparkles,
   UserPlus,
   UsersRound,
@@ -42,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { createAffiliateLink, getAffiliateLinks, updateAffiliateLink } from "../api/affiliate-links.api";
+import { ReferralProgramSettingsModal } from "../components/ReferralProgramSettingsModal";
 import {
   assignStoreCreator,
   getAvailableCreators,
@@ -400,6 +402,7 @@ export function CreatorsPage() {
 // -------------------------------------------------------------
 export function AffiliatePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [linkType, setLinkType] = useState<"CREATOR" | "STORE">("CREATOR");
   const [creatorId, setCreatorId] = useState("");
@@ -495,12 +498,22 @@ export function AffiliatePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Creator Tracking Links"
+        title="Creator Tracking Links & Referral Program"
         description="Generate unique referral links with UTM parameters, auto-attribution, and custom commission rules."
         actions={
-          <Button onClick={() => setDialogOpen(true)} size="sm">
-            <Plus className="h-4 w-4" /> Create tracking link
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSettingsModalOpen(true)}
+              className="border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <Sliders className="h-4 w-4 mr-1.5" /> Customer Portal Settings
+            </Button>
+            <Button onClick={() => setDialogOpen(true)} size="sm">
+              <Plus className="h-4 w-4" /> Create tracking link
+            </Button>
+          </div>
         }
       />
 
@@ -718,6 +731,8 @@ export function AffiliatePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReferralProgramSettingsModal open={settingsModalOpen} onOpenChange={setSettingsModalOpen} />
     </div>
   );
 }

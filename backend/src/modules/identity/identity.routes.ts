@@ -32,7 +32,7 @@ export const identityRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/me', async (request) => {
-    const actor = requireRole(request, ['ADMIN', 'STORE_OWNER', 'INFLUENCER']);
+    const actor = requireRole(request, ['ADMIN', 'STORE_OWNER', 'INFLUENCER', 'CUSTOMER']);
     const user = await app.prisma.user.findUnique({
       where: { id: actor.userId },
       select: { id: true, email: true, displayName: true, role: true, status: true },

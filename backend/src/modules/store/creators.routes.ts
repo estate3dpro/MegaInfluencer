@@ -309,10 +309,35 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       throw new AppError('COMMISSION_NOT_FOUND', 'Commission not found', 404);
     }
 
+    const oldStatus = existing.status;
     const updated = await prisma.affiliateCommission.update({
       where: { id: commissionId },
       data: { status: body.status },
     });
+
+    if (existing.creatorId) {
+      const profile = await prisma.customerProfile.findUnique({ where: { userId: existing.creatorId } });
+      if (profile) {
+        const points = Math.round(Number(existing.amount));
+        if (oldStatus === 'PENDING' && (body.status === 'APPROVED' || body.status === 'PAID')) {
+          await prisma.customerProfile.update({
+            where: { userId: existing.creatorId },
+            data: {
+              pointsBalance: { increment: points },
+              totalEarned: { increment: Number(existing.amount) },
+            },
+          });
+        } else if ((oldStatus === 'APPROVED' || oldStatus === 'PAID') && body.status === 'REVERSED') {
+          await prisma.customerProfile.update({
+            where: { userId: existing.creatorId },
+            data: {
+              pointsBalance: { decrement: Math.min(profile.pointsBalance, points) },
+              totalEarned: { decrement: Number(existing.amount) },
+            },
+          });
+        }
+      }
+    }
 
     return { ok: true, commission: updated };
   });

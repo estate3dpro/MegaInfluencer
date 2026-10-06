@@ -2,7 +2,7 @@ import type { FastifyRequest } from 'fastify';
 
 import { ForbiddenError, UnauthorizedError } from '../errors/app-error.js';
 
-export const platformRoles = ['ADMIN', 'STORE_OWNER', 'INFLUENCER'] as const;
+export const platformRoles = ['ADMIN', 'STORE_OWNER', 'INFLUENCER', 'CUSTOMER'] as const;
 export type PlatformRole = (typeof platformRoles)[number];
 
 export interface AuthenticatedActor {

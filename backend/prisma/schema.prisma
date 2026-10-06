@@ -11,6 +11,7 @@ enum UserRole {
   ADMIN
   STORE_OWNER
   INFLUENCER
+  CUSTOMER
 }
 
 enum UserStatus {
@@ -137,6 +138,9 @@ model User {
   status                UserStatus             @default(ACTIVE)
   creatorCode           String?                @unique
   influencerProfile     InfluencerProfile?
+  customerProfile       CustomerProfile?
+  customerRewards       CustomerRewardClaim[]
+  milestoneClaims       CustomerMilestoneClaim[]
   ownedOrganizations    Organization[]         @relation("OrganizationOwner")
   storeAssignments      StoreInfluencerAssignment[] @relation("AssignedInfluencer")
   productAssignments    ProductInfluencerAssignment[] @relation("ProductAssignedInfluencer")
@@ -381,6 +385,10 @@ model Organization {
   discountCodes DiscountCode[]
   campaignPayouts CampaignPayout[]
   barterFulfillments BarterSampleFulfillment[]
+  referralConfig    StoreReferralConfig?
+  referralOffers    StoreReferralOffer[]
+  rewardItems       StoreRewardItem[]
+  referralMilestones StoreReferralMilestone[]
   ownerId   String
   owner     User               @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   createdAt DateTime           @default(now())
@@ -720,4 +728,164 @@ model ContactInquiry {
 
   @@index([status, createdAt])
 }
+
+model CustomerProfile {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone           String?
+  avatarUrl       String?
+  tier            String   @default("BRONZE") // BRONZE, SILVER, GOLD, PLATINUM
+  pointsBalance   Int      @default(0)
+  totalEarned     Decimal  @default(0) @db.Decimal(12, 2)
+  payoutMethod    String?  // UPI, PAYPAL, BANK, STORE_CREDIT
+  payoutDetails   Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CustomerRewardClaim {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  rewardTitle    String
+  rewardType     String       // DISCOUNT_CODE, CASH_PAYOUT, GIFT_CARD, STORE_CREDIT
+  rewardValue    Decimal      @db.Decimal(12, 2)
+  pointsCost     Int
+  code           String?
+  status         String       @default("COMPLETED") // COMPLETED, PENDING, REJECTED
+  details        Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+enum ReferralRewardMode {
+  POINTS              // Points + Rewards Store + VIP Tiers
+  CASHBACK_COMMISSION // Direct cash wallet + UPI/Bank payouts (no points)
+  DISCOUNT_ONLY       // Store coupon codes only
+  HYBRID              // Both points and cash withdrawal
+}
+
+model StoreReferralConfig {
+  id                     String             @id @default(cuid())
+  organizationId         String             @unique
+  organization           Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Program Engine
+  isEnabled              Boolean            @default(true)
+  rewardMode             ReferralRewardMode @default(POINTS)
+  commissionRate         Decimal            @default(10) @db.Decimal(5, 2)
+  pointsPerCurrency      Int                @default(1)
+  welcomeBonusPoints     Int                @default(100)
+  minPayoutAmount        Decimal            @default(500) @db.Decimal(10, 2)
+
+  // Friend Discount Offer
+  friendDiscountEnabled  Boolean            @default(true)
+  friendDiscountType     String             @default("PERCENTAGE") // PERCENTAGE | FIXED | FREE_SHIPPING
+  friendDiscountValue    Decimal            @default(10) @db.Decimal(10, 2)
+
+  // UI Visibility Controls (What store admin decides to show/hide)
+  showTierRoadmap        Boolean            @default(true)
+  showPerformanceCharts  Boolean            @default(true)
+  showRewardsStore       Boolean            @default(true)
+  showRecentPurchases    Boolean            @default(true)
+  
+  // Custom Branding / Messaging
+  programTitle           String?            @default("Customer Advocate & Referral Rewards")
+  customShareMessage     String?            @default("Get 10% off with my link, and support me!")
+  accentColor            String?            @default("#6c5ce7")
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+}
+
+model StoreReferralOffer {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  organization           Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title                  String
+  description            String?
+  rewardMode             ReferralRewardMode @default(POINTS)
+  advocateRewardRate     Decimal            @default(10) @db.Decimal(5, 2)
+  friendDiscountType     String             @default("PERCENTAGE") // PERCENTAGE | FIXED | FREE_SHIPPING
+  friendDiscountValue    Decimal            @default(10) @db.Decimal(10, 2)
+  status                 String             @default("ACTIVE") // ACTIVE | PAUSED | EXPIRED
+  isFeatured             Boolean            @default(false)
+  badgeText              String?
+  bannerText             String?
+  startsAt               DateTime?          @default(now())
+  expiresAt              DateTime?
+  usageCount             Int                @default(0)
+  totalSales             Decimal            @default(0) @db.Decimal(12, 2)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([organizationId, status])
+}
+
+model StoreRewardItem {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?
+  type               String       @default("DISCOUNT_CODE") // DISCOUNT_CODE, PRODUCT_LINK, GIFT_CARD, STORE_CREDIT, CASH_PAYOUT, PRODUCT_GIFT
+  pointsCost         Int          @default(500)
+  rewardValue        Decimal      @default(500) @db.Decimal(10, 2)
+  category           String       @default("VOUCHER")       // VOUCHER, PRODUCT, CASH, GIFT, PERK
+  badge              String?      // POPULAR, HOT, VIP, DIAMOND, EXCLUSIVE
+  icon               String?      @default("Gift")
+  couponCode         String?      // Explicit promo discount code (e.g. "VIP20OFF", "FLAT500")
+  productName        String?      // Name of assigned product/gift item
+  productLink        String?      // Destination URL to the product
+  codeTemplate       String?      // e.g. "VIP-{RANDOM}", "SAVE10"
+  stockQuantity      Int?         // null = unlimited
+  status             String       @default("ACTIVE")        // ACTIVE, PAUSED, OUT_OF_STOCK
+  minTier            String?      // BRONZE, SILVER, GOLD, PLATINUM
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([organizationId, status])
+}
+
+model StoreReferralMilestone {
+  id             String                   @id @default(cuid())
+  organizationId String
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  targetType     String                   @default("REFERRAL_COUNT") // REFERRAL_COUNT, SALES_AMOUNT
+  targetValue    Decimal                  @default(5) @db.Decimal(10, 2)
+  rewardType     String                   @default("POINTS")         // POINTS, DISCOUNT_CODE, GIFT_CARD, CASH_PAYOUT, PRODUCT_GIFT
+  pointsBonus    Int                      @default(250)
+  rewardValue    Decimal                  @default(250) @db.Decimal(10, 2)
+  badgeText      String?                  // e.g. "STARTER", "PRO", "LEGEND", "VIP"
+  icon           String?                  @default("Trophy")
+  status         String                   @default("ACTIVE")         // ACTIVE, PAUSED
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  claims         CustomerMilestoneClaim[]
+
+  @@index([organizationId, status])
+}
+
+model CustomerMilestoneClaim {
+  id             String                 @id @default(cuid())
+  userId         String
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestoneId    String
+  milestone      StoreReferralMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  pointsAwarded  Int                    @default(0)
+  rewardValue    Decimal                @default(0) @db.Decimal(10, 2)
+  claimedAt      DateTime               @default(now())
+
+  @@unique([userId, milestoneId])
+  @@index([userId])
+}
+
+
+
 

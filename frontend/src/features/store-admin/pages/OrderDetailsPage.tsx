@@ -476,6 +476,37 @@ export function OrderDetailsPage() {
         </Card>
       </section>
 
+      {/* Pending Commission Approval Notice */}
+      {commission && commission.status === "PENDING" ? (
+        <Card className="border-amber-500/30 bg-amber-500/5 shadow-sm">
+          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-amber-500/15 text-amber-700 shrink-0">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-foreground">
+                  Commission Awaiting Store Approval ({formatMoney(commission.amount, order.currency)})
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  This referral order requires store admin confirmation. Once approved, earnings and reward points will be immediately credited to the advocate's account balance.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                className="bg-teal text-white hover:bg-teal/90 shadow-sm"
+                onClick={() => commissionStatusMutation.mutate("APPROVED")}
+                disabled={commissionStatusMutation.isPending}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1.5" /> Approve Commission
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Main 2-Column Section */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left 2 Columns: Purchased Items & Marketing Attribution */}

@@ -29,7 +29,7 @@ export async function registerUser(
     email: string;
     password: string;
     displayName: string;
-    role: 'STORE_OWNER' | 'INFLUENCER';
+    role: 'STORE_OWNER' | 'INFLUENCER' | 'CUSTOMER';
     firstName?: string;
     lastName?: string;
     phone?: string;
@@ -56,9 +56,20 @@ export async function registerUser(
             },
           }
         : {}),
+      ...(input.role === 'CUSTOMER'
+        ? {
+            customerProfile: {
+              create: {
+                phone: input.phone || null,
+                pointsBalance: 100, // Welcome gift of 100 reward points
+                tier: 'BRONZE',
+              },
+            },
+          }
+        : {}),
     },
   });
-  if (user.role === 'INFLUENCER') await ensureCreatorCode(app.prisma, user.id);
+  if (user.role === 'INFLUENCER' || user.role === 'CUSTOMER') await ensureCreatorCode(app.prisma, user.id);
 
   return toUserResponse(user);
 }

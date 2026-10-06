@@ -1,5 +1,5 @@
-  import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -57,7 +57,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getStoreProducts, getStoreProductSyncStatus, syncStoreProducts } from "../api/products.api";
-import { getStoreOrders, syncStoreOrders } from "../api/orders.api";
+import { getStoreOrders, syncStoreOrders, updateOrderCommissionStatus } from "../api/orders.api";
 import { getStoreCustomers, getStoreCustomerDetails } from "../api/customers.api";
 import {
   getStoreDiscounts,
@@ -515,6 +515,26 @@ export function OrdersPage() {
   const creatorSalesAmount = summary?.creatorSales ?? allOrders.filter((o) => o.creatorCode).reduce((sum, o) => sum + Number(o.total ?? 0), 0);
   const unfulfilledCount = summary?.unfulfilledCount ?? allOrders.filter((o) => !o.fulfillmentStatus || /processing|unfulfilled/i.test(o.fulfillmentStatus)).length;
 
+  const queryClient = useQueryClient();
+  const commissionStatusMutation = useMutation({
+    mutationFn: ({ orderId, status }: { orderId: string; status: "PENDING" | "APPROVED" | "PAID" | "REVERSED" }) =>
+      updateOrderCommissionStatus(orderId, status),
+    onSuccess: (_, vars) => {
+      toast.success(
+        vars.status === "APPROVED"
+          ? "Commission approved & reward points credited!"
+          : vars.status === "PAID"
+          ? "Commission marked as paid!"
+          : `Commission status updated to ${vars.status}`
+      );
+      void ordersQuery.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["store", "orders"] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || "Failed to update commission status.");
+    },
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -678,14 +698,47 @@ export function OrdersPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       {order.creatorCode || order.creator ? (
-                        <div className="space-y-0.5">
-                          <Badge variant="outline" className="border-coral/30 bg-coral/10 font-medium text-coral text-xs">
-                            <Instagram className="mr-1 h-3 w-3" /> {order.creator?.handle ?? `@${order.creatorCode}`}
-                          </Badge>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant="outline" className="border-coral/30 bg-coral/10 font-medium text-coral text-xs">
+                              <Instagram className="mr-1 h-3 w-3" /> {order.creator?.handle ?? `@${order.creatorCode}`}
+                            </Badge>
+                          </div>
                           {order.commission ? (
-                            <span className="text-[11px] text-muted-foreground block">
-                              Commission: {formatCurrency(order.commission.amount, order.currency)} ({order.commission.status})
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[11px] font-semibold text-foreground">
+                                {formatCurrency(order.commission.amount, order.currency)} ({order.commission.rate}%)
+                              </span>
+                              {order.commission.status === "PENDING" ? (
+                                <div className="inline-flex items-center gap-1.5">
+                                  <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 text-[10px] py-0 px-1.5 font-medium">
+                                    <Clock className="h-2.5 w-2.5 mr-1" /> Pending Approval
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[10px] border-teal/40 text-teal hover:bg-teal/10 hover:text-teal font-medium"
+                                    onClick={() => commissionStatusMutation.mutate({ orderId: order.id, status: "APPROVED" })}
+                                    disabled={commissionStatusMutation.isPending}
+                                    title="Approve commission & credit advocate rewards"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                                  </Button>
+                                </div>
+                              ) : order.commission.status === "APPROVED" ? (
+                                <Badge variant="outline" className="border-teal/30 bg-teal/5 text-teal text-[10px] py-0 px-1.5 font-medium">
+                                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> Approved
+                                </Badge>
+                              ) : order.commission.status === "PAID" ? (
+                                <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 text-[10px] py-0 px-1.5 font-medium">
+                                  Paid
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive" className="text-[10px] py-0 px-1.5">
+                                  Reversed
+                                </Badge>
+                              )}
+                            </div>
                           ) : null}
                         </div>
                       ) : (

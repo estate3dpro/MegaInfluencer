@@ -7,7 +7,12 @@ export function registerCors(app: FastifyInstance) {
   app.register(cors, {
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
     origin: (origin, callback) => {
-      if (!origin || config.clientOrigins.includes(origin)) {
+      if (
+        !origin ||
+        config.clientOrigins.includes(origin) ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:')
+      ) {
         callback(null, true);
         return;
       }

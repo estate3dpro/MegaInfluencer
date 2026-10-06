@@ -61,6 +61,7 @@ import { Route as InfluencerProductsRouteImport } from './routes/influencer/prod
 import { Route as InfluencerProfileRouteImport } from './routes/influencer/profile'
 import { Route as InfluencerStoreRouteImport } from './routes/influencer/store'
 import { Route as InfluencerSupportRouteImport } from './routes/influencer/support'
+import { Route as RSlugRouteImport } from './routes/r/$slug'
 import { Route as StoreAdminIndexRouteImport } from './routes/store-admin.index'
 import { Route as StoreAdminPageRouteImport } from './routes/store-admin/$page'
 import { Route as StoreAdminAffiliateRouteImport } from './routes/store-admin/affiliate'
@@ -69,6 +70,7 @@ import { Route as StoreAdminCampaignsRouteImport } from './routes/store-admin/ca
 import { Route as StoreAdminCommissionsRouteImport } from './routes/store-admin/commissions'
 import { Route as StoreAdminCreatorDirectoryRouteImport } from './routes/store-admin/creator-directory'
 import { Route as StoreAdminCreatorsRouteImport } from './routes/store-admin/creators'
+import { Route as StoreAdminCustomerReferralsRouteImport } from './routes/store-admin/customer-referrals'
 import { Route as StoreAdminCustomersRouteImport } from './routes/store-admin/customers'
 import { Route as StoreAdminDashboardRouteImport } from './routes/store-admin/dashboard'
 import { Route as StoreAdminDiscountsRouteImport } from './routes/store-admin/discounts'
@@ -362,6 +364,11 @@ const InfluencerSupportRoute = InfluencerSupportRouteImport.update({
   path: '/support',
   getParentRoute: () => InfluencerRoute,
 } as any)
+const RSlugRoute = RSlugRouteImport.update({
+  id: '/r/$slug',
+  path: '/r/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StoreAdminIndexRoute = StoreAdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -403,6 +410,12 @@ const StoreAdminCreatorsRoute = StoreAdminCreatorsRouteImport.update({
   path: '/creators',
   getParentRoute: () => StoreAdminRoute,
 } as any)
+const StoreAdminCustomerReferralsRoute =
+  StoreAdminCustomerReferralsRouteImport.update({
+    id: '/customer-referrals',
+    path: '/customer-referrals',
+    getParentRoute: () => StoreAdminRoute,
+  } as any)
 const StoreAdminCustomersRoute = StoreAdminCustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
@@ -616,6 +629,7 @@ export interface FileRoutesByFullPath {
   '/influencer/profile': typeof InfluencerProfileRoute
   '/influencer/store': typeof InfluencerStoreRoute
   '/influencer/support': typeof InfluencerSupportRoute
+  '/r/$slug': typeof RSlugRoute
   '/store-admin/$page': typeof StoreAdminPageRoute
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
@@ -623,6 +637,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
+  '/store-admin/customer-referrals': typeof StoreAdminCustomerReferralsRoute
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
@@ -702,11 +717,13 @@ export interface FileRoutesByTo {
   '/influencer/profile': typeof InfluencerProfileRoute
   '/influencer/store': typeof InfluencerStoreRoute
   '/influencer/support': typeof InfluencerSupportRoute
+  '/r/$slug': typeof RSlugRoute
   '/store-admin/$page': typeof StoreAdminPageRoute
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
+  '/store-admin/customer-referrals': typeof StoreAdminCustomerReferralsRoute
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
@@ -791,6 +808,7 @@ export interface FileRoutesById {
   '/influencer/profile': typeof InfluencerProfileRoute
   '/influencer/store': typeof InfluencerStoreRoute
   '/influencer/support': typeof InfluencerSupportRoute
+  '/r/$slug': typeof RSlugRoute
   '/store-admin/$page': typeof StoreAdminPageRoute
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
@@ -798,6 +816,7 @@ export interface FileRoutesById {
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
+  '/store-admin/customer-referrals': typeof StoreAdminCustomerReferralsRoute
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
@@ -885,6 +904,7 @@ export interface FileRouteTypes {
     | '/influencer/profile'
     | '/influencer/store'
     | '/influencer/support'
+    | '/r/$slug'
     | '/store-admin/$page'
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
@@ -892,6 +912,7 @@ export interface FileRouteTypes {
     | '/store-admin/commissions'
     | '/store-admin/creator-directory'
     | '/store-admin/creators'
+    | '/store-admin/customer-referrals'
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
@@ -971,11 +992,13 @@ export interface FileRouteTypes {
     | '/influencer/profile'
     | '/influencer/store'
     | '/influencer/support'
+    | '/r/$slug'
     | '/store-admin/$page'
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
     | '/store-admin/commissions'
     | '/store-admin/creator-directory'
+    | '/store-admin/customer-referrals'
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
@@ -1059,6 +1082,7 @@ export interface FileRouteTypes {
     | '/influencer/profile'
     | '/influencer/store'
     | '/influencer/support'
+    | '/r/$slug'
     | '/store-admin/$page'
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
@@ -1066,6 +1090,7 @@ export interface FileRouteTypes {
     | '/store-admin/commissions'
     | '/store-admin/creator-directory'
     | '/store-admin/creators'
+    | '/store-admin/customer-referrals'
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
@@ -1112,6 +1137,7 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   StoreAdminRoute: typeof StoreAdminRouteWithChildren
   TermsOfServiceRoute: typeof TermsOfServiceRoute
+  RSlugRoute: typeof RSlugRoute
   StoreLoginRoute: typeof StoreLoginRoute
   StoreRegisterRoute: typeof StoreRegisterRoute
 }
@@ -1482,6 +1508,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InfluencerSupportRouteImport
       parentRoute: typeof InfluencerRoute
     }
+    '/r/$slug': {
+      id: '/r/$slug'
+      path: '/r/$slug'
+      fullPath: '/r/$slug'
+      preLoaderRoute: typeof RSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/store-admin/': {
       id: '/store-admin/'
       path: '/'
@@ -1536,6 +1569,13 @@ declare module '@tanstack/react-router' {
       path: '/creators'
       fullPath: '/store-admin/creators'
       preLoaderRoute: typeof StoreAdminCreatorsRouteImport
+      parentRoute: typeof StoreAdminRoute
+    }
+    '/store-admin/customer-referrals': {
+      id: '/store-admin/customer-referrals'
+      path: '/customer-referrals'
+      fullPath: '/store-admin/customer-referrals'
+      preLoaderRoute: typeof StoreAdminCustomerReferralsRouteImport
       parentRoute: typeof StoreAdminRoute
     }
     '/store-admin/customers': {
@@ -1964,6 +2004,7 @@ interface StoreAdminRouteChildren {
   StoreAdminCommissionsRoute: typeof StoreAdminCommissionsRoute
   StoreAdminCreatorDirectoryRoute: typeof StoreAdminCreatorDirectoryRoute
   StoreAdminCreatorsRoute: typeof StoreAdminCreatorsRouteWithChildren
+  StoreAdminCustomerReferralsRoute: typeof StoreAdminCustomerReferralsRoute
   StoreAdminCustomersRoute: typeof StoreAdminCustomersRoute
   StoreAdminDashboardRoute: typeof StoreAdminDashboardRoute
   StoreAdminDiscountsRoute: typeof StoreAdminDiscountsRoute
@@ -1987,6 +2028,7 @@ const StoreAdminRouteChildren: StoreAdminRouteChildren = {
   StoreAdminCommissionsRoute: StoreAdminCommissionsRoute,
   StoreAdminCreatorDirectoryRoute: StoreAdminCreatorDirectoryRoute,
   StoreAdminCreatorsRoute: StoreAdminCreatorsRouteWithChildren,
+  StoreAdminCustomerReferralsRoute: StoreAdminCustomerReferralsRoute,
   StoreAdminCustomersRoute: StoreAdminCustomersRoute,
   StoreAdminDashboardRoute: StoreAdminDashboardRoute,
   StoreAdminDiscountsRoute: StoreAdminDiscountsRoute,
@@ -2017,6 +2059,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   StoreAdminRoute: StoreAdminRouteWithChildren,
   TermsOfServiceRoute: TermsOfServiceRoute,
+  RSlugRoute: RSlugRoute,
   StoreLoginRoute: StoreLoginRoute,
   StoreRegisterRoute: StoreRegisterRoute,
 }
