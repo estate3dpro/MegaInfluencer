@@ -181,7 +181,7 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       if (orderPayload.platform) {
         matchedPlatform = normalizePlatform(orderPayload.platform);
       } else {
-        const matchingClick = allClicksInRange.find((c) => c.linkId === comm.linkId);
+        const matchingClick = allClicksInRange.find((c: any) => c.linkId === comm.linkId);
         if (matchingClick) {
           matchedPlatform = normalizePlatform(matchingClick.utmSource, matchingClick.referrer);
         }
@@ -194,9 +194,9 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const totalClicksCount = allClicksInRange.length;
-    const totalSalesCurrent = currentCommissions.reduce((sum, c) => sum + Number(c.orderAmount || 0), 0);
-    const totalSalesPrevious = previousCommissions.reduce((sum, c) => sum + Number(c.orderAmount || 0), 0);
-    const totalEarningsCurrent = currentCommissions.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const totalSalesCurrent = currentCommissions.reduce((sum: number, c: any) => sum + Number(c.orderAmount || 0), 0);
+    const totalSalesPrevious = previousCommissions.reduce((sum: number, c: any) => sum + Number(c.orderAmount || 0), 0);
+    const totalEarningsCurrent = currentCommissions.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
     const totalOrdersCount = currentCommissions.length;
 
     // Platform breakdown list strictly for WhatsApp, Facebook, Instagram, Custom
@@ -311,7 +311,7 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       {
         label: 'Commission Earned',
         value: formatInr(totalEarningsCurrent),
-        change: formatChange(totalEarningsCurrent, previousCommissions.reduce((sum, c) => sum + Number(c.amount || 0), 0)),
+        change: formatChange(totalEarningsCurrent, previousCommissions.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0)),
       },
       {
         label: 'Total Orders',

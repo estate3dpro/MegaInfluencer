@@ -216,7 +216,7 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       if (orderPayload.platform) {
         matchedPlatform = normalizePlatform(orderPayload.platform);
       } else {
-        const matchingClick = allClicksInRange.find((c) => c.linkId === comm.linkId);
+        const matchingClick = allClicksInRange.find((c: any) => c.linkId === comm.linkId);
         if (matchingClick) {
           matchedPlatform = normalizePlatform(matchingClick.utmSource, matchingClick.referrer);
         }
