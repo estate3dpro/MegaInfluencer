@@ -11,6 +11,28 @@ export type AnalyticsTimelinePoint = {
   clicks: number;
   orders: number;
   sales: number;
+  commissions: number;
+  whatsappClicks?: number;
+  instagramClicks?: number;
+  facebookClicks?: number;
+  youtubeClicks?: number;
+  tiktokClicks?: number;
+  otherClicks?: number;
+};
+
+export type PlatformPerformanceItem = {
+  platform: string;
+  name: string;
+  clicks: number;
+  uniqueVisitors: number;
+  orders: number;
+  sales: number;
+  commissions: number;
+  conversionRate: number;
+  share: number;
+  topMedium: string;
+  color: string;
+  badgeClass: string;
 };
 
 export type PlacementShare = {
@@ -48,6 +70,7 @@ export type TopProductItem = {
 
 export type StoreAnalyticsResponse = {
   summary: {
+    totalClicks?: MetricItem;
     totalInstagramClicks: MetricItem;
     totalCreatorSales: MetricItem;
     totalCreatorOrders: MetricItem;
@@ -56,15 +79,23 @@ export type StoreAnalyticsResponse = {
     avgOrderValue: number;
     totalStoreOrders: number;
   };
+  platformBreakdown: PlatformPerformanceItem[];
+  allPlatforms: PlatformPerformanceItem[];
+  platformTimeline: AnalyticsTimelinePoint[];
   timeline: AnalyticsTimelinePoint[];
-  placements: PlacementShare[];
+  creatorsList: Array<{ id: string; name: string; code: string | null }>;
+  placements?: PlacementShare[];
   leaderboard: CreatorLeaderboardItem[];
   topProducts: TopProductItem[];
 };
 
-export async function getStoreAnalytics(range: "7d" | "30d" | "90d" = "30d") {
+export async function getStoreAnalytics(
+  range: string = "30d",
+  platform: string = "all",
+  creatorId?: string,
+) {
   const response = await apiClient.get<StoreAnalyticsResponse>("/store/analytics", {
-    params: { range },
+    params: { range, platform, creatorId },
   });
   return response.data;
 }

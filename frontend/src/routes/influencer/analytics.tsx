@@ -1,8 +1,6 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { AnalyticsPage } from "@/features/influencer/pages/AnalyticsPage";
 
 export const Route = createFileRoute("/influencer/analytics")({
-  beforeLoad: () => {
-    throw redirect({ to: "/influencer/store" });
-  },
-  component: () => null,
+  component: AnalyticsPage,
 });

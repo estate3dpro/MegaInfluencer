@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -16,17 +16,13 @@ import {
   Check,
   Share2,
   ExternalLink,
-  QrCode,
-  Sparkles,
-  Link2,
   MessageCircle,
   Facebook,
   Instagram,
   Globe,
-  Tag,
   Sliders,
+  Sparkles,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 
 export interface PlatformLinkItem {
@@ -89,11 +85,17 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
     ? linkItem.baseUrl
     : `${window.location.origin}${linkItem.baseUrl.startsWith("/") ? "" : "/"}${linkItem.baseUrl}`;
 
-  const cleanCampaign = customCampaign.trim() || (linkItem.creatorCode ? `${linkItem.creatorCode.toLowerCase()}-promo` : "referral");
+  const cleanCampaign =
+    customCampaign.trim() ||
+    (linkItem.creatorCode ? `${linkItem.creatorCode.toLowerCase()}-promo` : "referral");
 
   // 1. WhatsApp Dedicated Link & Share Copy
   const whatsappUrl = `${rawBase}?utm_source=whatsapp&utm_medium=social_chat&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
-  const whatsappMessage = `Hey! Check out ${linkItem.productName ? `*${linkItem.productName}*` : `these exclusive picks`} from *${linkItem.storeName || "our brand"}*! 🎁\n\n👉 Shop directly here: ${whatsappUrl}${linkItem.creatorCode ? `\n(Use code: *${linkItem.creatorCode}* at checkout)` : ""}`;
+  const whatsappMessage = `Hey! Check out ${
+    linkItem.productName ? `*${linkItem.productName}*` : `these exclusive picks`
+  } from *${linkItem.storeName || "our brand"}*! 🎁\n\n👉 Shop directly here: ${whatsappUrl}${
+    linkItem.creatorCode ? `\n(Use code: *${linkItem.creatorCode}* at checkout)` : ""
+  }`;
 
   // 2. Facebook Dedicated Link
   const facebookUrl = `${rawBase}?utm_source=facebook&utm_medium=social_post&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
@@ -102,21 +104,25 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
   const instagramUrl = `${rawBase}?utm_source=instagram&utm_medium=story_bio&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
 
   // 4. Custom UTM Link
-  const customUrl = `${rawBase}?utm_source=${encodeURIComponent(customSource || "direct")}&utm_medium=${encodeURIComponent(customMedium || "referral")}&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
+  const customUrl = `${rawBase}?utm_source=${encodeURIComponent(
+    customSource || "direct",
+  )}&utm_medium=${encodeURIComponent(
+    customMedium || "referral",
+  )}&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+      <DialogContent className="sm:max-w-xl w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 rounded-2xl">
+        <DialogHeader className="pr-8">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">
               <Share2 className="h-5 w-5" />
             </div>
-            <div>
-              <DialogTitle className="text-base sm:text-lg font-bold">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-base sm:text-lg font-bold leading-tight truncate">
                 Platform-Specific Campaign Link Hub
               </DialogTitle>
-              <DialogDescription className="text-xs">
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5 leading-normal">
                 Generate dedicated links with pre-tagged UTM sources for WhatsApp, Facebook, and Instagram.
               </DialogDescription>
             </div>
@@ -124,115 +130,119 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
         </DialogHeader>
 
         {/* Selected Product / Creator Summary Banner */}
-        <div className="p-3.5 rounded-xl bg-muted/40 border space-y-1.5 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-foreground truncate">
+        <div className="p-3 sm:p-3.5 rounded-xl bg-muted/40 border border-border space-y-1.5 text-xs min-w-0">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className="font-bold text-foreground truncate min-w-0">
               {linkItem.productName ? `Product: ${linkItem.productName}` : "Entire Storefront Link"}
             </span>
             {linkItem.commissionRate !== undefined && (
-              <Badge variant="secondary" className="bg-teal/10 text-teal text-[10px] font-bold">
+              <Badge variant="secondary" className="bg-teal/10 text-teal text-[10px] font-bold shrink-0">
                 {linkItem.commissionRate}% Commission
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-3 text-muted-foreground text-[11px] font-mono">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-[11px] font-mono">
             <span>Creator: {linkItem.creatorName || "Storewide"}</span>
-            {linkItem.creatorCode && <span>Code: #{linkItem.creatorCode}</span>}
+            {linkItem.creatorCode && (
+              <span className="text-primary font-semibold">Code: #{linkItem.creatorCode}</span>
+            )}
           </div>
         </div>
 
         {/* Platform Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
-          <TabsList className="grid grid-cols-4 w-full h-11 p-1 bg-muted/60 rounded-xl">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4 min-w-0">
+          <TabsList className="grid grid-cols-4 w-full h-auto p-1 bg-muted/60 rounded-xl gap-1">
             {/* WhatsApp Tab Button */}
             <TabsTrigger
               value="whatsapp"
-              className="flex items-center gap-1.5 text-xs data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg"
+              className="flex items-center justify-center gap-1.5 text-xs py-2 px-1 sm:px-2 min-w-0 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all"
             >
-              <MessageCircle className="h-4 w-4" />
-              <span className="hidden sm:inline">WhatsApp</span>
+              <MessageCircle className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline truncate">WhatsApp</span>
             </TabsTrigger>
 
             {/* Facebook Tab Button */}
             <TabsTrigger
               value="facebook"
-              className="flex items-center gap-1.5 text-xs data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg"
+              className="flex items-center justify-center gap-1.5 text-xs py-2 px-1 sm:px-2 min-w-0 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all"
             >
-              <Facebook className="h-4 w-4" />
-              <span className="hidden sm:inline">Facebook</span>
+              <Facebook className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline truncate">Facebook</span>
             </TabsTrigger>
 
             {/* Instagram Tab Button */}
             <TabsTrigger
               value="instagram"
-              className="flex items-center gap-1.5 text-xs data-[state=active]:bg-pink-600 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg"
+              className="flex items-center justify-center gap-1.5 text-xs py-2 px-1 sm:px-2 min-w-0 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg transition-all"
             >
-              <Instagram className="h-4 w-4" />
-              <span className="hidden sm:inline">Instagram</span>
+              <Instagram className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline truncate">Instagram</span>
             </TabsTrigger>
 
             {/* Custom UTM Builder */}
             <TabsTrigger
               value="custom"
-              className="flex items-center gap-1.5 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg"
+              className="flex items-center justify-center gap-1.5 text-xs py-2 px-1 sm:px-2 min-w-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg transition-all"
             >
-              <Sliders className="h-4 w-4" />
-              <span className="hidden sm:inline">Custom</span>
+              <Sliders className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline truncate">Custom</span>
             </TabsTrigger>
           </TabsList>
 
           {/* 1. WHATSAPP SECTION */}
-          <TabsContent value="whatsapp" className="space-y-4 animate-in fade-in duration-200">
-            <div className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
-                  <MessageCircle className="h-4 w-4" />
-                  <span>WhatsApp Broadcast & Chat Link</span>
+          <TabsContent value="whatsapp" className="space-y-4 animate-in fade-in duration-200 mt-0">
+            <div className="p-3.5 sm:p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 space-y-3 min-w-0">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm min-w-0">
+                  <MessageCircle className="h-4 w-4 shrink-0" />
+                  <span className="truncate">WhatsApp Broadcast & Chat Link</span>
                 </div>
-                <Badge className="bg-emerald-600/15 text-emerald-600 dark:text-emerald-400 text-[10px]">
+                <Badge className="bg-emerald-600/15 text-emerald-600 dark:text-emerald-400 text-[10px] shrink-0">
                   utm_source=whatsapp
                 </Badge>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs text-muted-foreground">Generated WhatsApp Tracking Link</Label>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-background border text-xs font-mono select-all">
-                  <span className="truncate flex-1 text-foreground">{whatsappUrl}</span>
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-background border text-xs font-mono min-w-0">
+                  <span className="truncate flex-1 min-w-0 text-foreground select-all">{whatsappUrl}</span>
                   <Button
                     size="sm"
                     onClick={() => handleCopy(whatsappUrl, "wa_link")}
                     className="h-7 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 text-xs font-bold"
                   >
-                    {copiedKey === "wa_link" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                    {copiedKey === "wa_link" ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
                     {copiedKey === "wa_link" ? "Copied" : "Copy Link"}
                   </Button>
                 </div>
               </div>
 
               {/* Ready-to-Send Social Message Preview */}
-              <div className="space-y-1">
+              <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs text-muted-foreground">Pre-Formatted Message Copy</Label>
-                <div className="p-2.5 rounded-xl bg-background border text-xs whitespace-pre-wrap text-foreground relative">
+                <div className="p-3 rounded-xl bg-background border text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground leading-relaxed select-text">
                   {whatsappMessage}
                 </div>
               </div>
 
               {/* 1-Click Action Buttons */}
-              <div className="flex items-center gap-2 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 <Button
                   onClick={() => handleCopy(whatsappMessage, "wa_msg")}
                   variant="outline"
                   size="sm"
-                  className="flex-1 text-xs font-semibold"
+                  className="w-full text-xs font-semibold h-9"
                 >
                   {copiedKey === "wa_msg" ? <Check className="h-3.5 w-3.5 mr-1 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
                   {copiedKey === "wa_msg" ? "Copied Message!" : "Copy Full Message"}
                 </Button>
 
                 <Button
-                  onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappMessage)}`, "_blank")}
+                  onClick={() =>
+                    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappMessage)}`, "_blank")
+                  }
                   size="sm"
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold gap-1.5"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold gap-1.5 h-9"
                 >
                   <MessageCircle className="h-4 w-4" /> Open WhatsApp
                 </Button>
@@ -241,28 +251,28 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
           </TabsContent>
 
           {/* 2. FACEBOOK SECTION */}
-          <TabsContent value="facebook" className="space-y-4 animate-in fade-in duration-200">
-            <div className="p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-sm">
-                  <Facebook className="h-4 w-4" />
-                  <span>Facebook Posts & Ads Link</span>
+          <TabsContent value="facebook" className="space-y-4 animate-in fade-in duration-200 mt-0">
+            <div className="p-3.5 sm:p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 space-y-3 min-w-0">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-sm min-w-0">
+                  <Facebook className="h-4 w-4 shrink-0" />
+                  <span className="truncate">Facebook Posts & Ads Link</span>
                 </div>
-                <Badge className="bg-blue-600/15 text-blue-600 dark:text-blue-400 text-[10px]">
+                <Badge className="bg-blue-600/15 text-blue-600 dark:text-blue-400 text-[10px] shrink-0">
                   utm_source=facebook
                 </Badge>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs text-muted-foreground">Generated Facebook Campaign URL</Label>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-background border text-xs font-mono select-all">
-                  <span className="truncate flex-1 text-foreground">{facebookUrl}</span>
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-background border text-xs font-mono min-w-0">
+                  <span className="truncate flex-1 min-w-0 text-foreground select-all">{facebookUrl}</span>
                   <Button
                     size="sm"
                     onClick={() => handleCopy(facebookUrl, "fb_link")}
                     className="h-7 px-2.5 bg-blue-600 hover:bg-blue-500 text-white shrink-0 text-xs font-bold"
                   >
-                    {copiedKey === "fb_link" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                    {copiedKey === "fb_link" ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
                     {copiedKey === "fb_link" ? "Copied" : "Copy Link"}
                   </Button>
                 </div>
@@ -272,20 +282,22 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
                 💡 <strong>Facebook Sharing Tip:</strong> Paste this URL in Facebook Feed Posts, Groups, or Facebook Ad Campaign landing URLs to attribute clicks and orders automatically to this influencer.
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 <Button
                   onClick={() => handleCopy(facebookUrl, "fb_copy_btn")}
                   variant="outline"
                   size="sm"
-                  className="flex-1 text-xs font-semibold"
+                  className="w-full text-xs font-semibold h-9"
                 >
                   <Copy className="h-3.5 w-3.5 mr-1" /> Copy Facebook Link
                 </Button>
 
                 <Button
-                  onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(facebookUrl)}`, "_blank")}
+                  onClick={() =>
+                    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(facebookUrl)}`, "_blank")
+                  }
                   size="sm"
-                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold gap-1.5"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold gap-1.5 h-9"
                 >
                   <Facebook className="h-4 w-4" /> Post on Facebook
                 </Button>
@@ -294,28 +306,28 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
           </TabsContent>
 
           {/* 3. INSTAGRAM SECTION */}
-          <TabsContent value="instagram" className="space-y-4 animate-in fade-in duration-200">
-            <div className="p-4 rounded-2xl border border-pink-500/20 bg-pink-500/5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold text-sm">
-                  <Instagram className="h-4 w-4" />
-                  <span>Instagram Story Sticker & Bio Link</span>
+          <TabsContent value="instagram" className="space-y-4 animate-in fade-in duration-200 mt-0">
+            <div className="p-3.5 sm:p-4 rounded-2xl border border-pink-500/20 bg-pink-500/5 space-y-3 min-w-0">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold text-sm min-w-0">
+                  <Instagram className="h-4 w-4 shrink-0" />
+                  <span className="truncate">Instagram Story Sticker & Bio Link</span>
                 </div>
-                <Badge className="bg-pink-600/15 text-pink-600 dark:text-pink-400 text-[10px]">
+                <Badge className="bg-pink-600/15 text-pink-600 dark:text-pink-400 text-[10px] shrink-0">
                   utm_source=instagram
                 </Badge>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5 min-w-0">
                 <Label className="text-xs text-muted-foreground">Instagram Story & Bio URL</Label>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-background border text-xs font-mono select-all">
-                  <span className="truncate flex-1 text-foreground">{instagramUrl}</span>
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-background border text-xs font-mono min-w-0">
+                  <span className="truncate flex-1 min-w-0 text-foreground select-all">{instagramUrl}</span>
                   <Button
                     size="sm"
                     onClick={() => handleCopy(instagramUrl, "ig_link")}
                     className="h-7 px-2.5 bg-pink-600 hover:bg-pink-500 text-white shrink-0 text-xs font-bold"
                   >
-                    {copiedKey === "ig_link" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
+                    {copiedKey === "ig_link" ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
                     {copiedKey === "ig_link" ? "Copied" : "Copy Link"}
                   </Button>
                 </div>
@@ -324,20 +336,31 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
               <div className="p-3 rounded-xl bg-background/80 border text-[11px] text-muted-foreground leading-relaxed">
                 📸 <strong>Instagram Tip:</strong> Add this as a <strong>Link Sticker</strong> in your Instagram Story, or put it in your profile <strong>Link in Bio</strong> to track conversions from followers!
               </div>
+
+              <div className="pt-1">
+                <Button
+                  onClick={() => handleCopy(instagramUrl, "ig_copy_btn")}
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs font-semibold h-9"
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1" /> Copy Instagram Link for Bio/Story
+                </Button>
+              </div>
             </div>
           </TabsContent>
 
           {/* 4. CUSTOM UTM BUILDER */}
-          <TabsContent value="custom" className="space-y-4 animate-in fade-in duration-200">
-            <div className="p-4 rounded-2xl border border-border bg-card space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-bold text-sm text-foreground">
-                  <Globe className="h-4 w-4 text-primary" />
-                  <span>Custom Campaign UTM Generator</span>
+          <TabsContent value="custom" className="space-y-4 animate-in fade-in duration-200 mt-0">
+            <div className="p-3.5 sm:p-4 rounded-2xl border border-border bg-card space-y-3 min-w-0">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="flex items-center gap-2 font-bold text-sm text-foreground min-w-0">
+                  <Globe className="h-4 w-4 text-primary shrink-0" />
+                  <span className="truncate">Custom Campaign UTM Generator</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">UTM Source (Platform)</Label>
                   <Input
@@ -356,7 +379,7 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
                     className="h-8 text-xs"
                   />
                 </div>
-                <div className="space-y-1 col-span-2">
+                <div className="space-y-1 sm:col-span-2">
                   <Label className="text-xs">UTM Campaign Name</Label>
                   <Input
                     placeholder="e.g. summer-flash-sale"
@@ -367,10 +390,10 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
                 </div>
               </div>
 
-              <div className="space-y-1 pt-1">
+              <div className="space-y-1.5 pt-1 min-w-0">
                 <Label className="text-xs text-muted-foreground">Generated Custom URL</Label>
-                <div className="flex items-center gap-2 p-2 rounded-xl bg-muted/40 border text-xs font-mono select-all">
-                  <span className="truncate flex-1 text-foreground">{customUrl}</span>
+                <div className="flex items-center gap-2 p-2 rounded-xl bg-muted/40 border text-xs font-mono min-w-0">
+                  <span className="truncate flex-1 min-w-0 text-foreground select-all">{customUrl}</span>
                   <Button
                     size="sm"
                     onClick={() => handleCopy(customUrl, "custom_link")}

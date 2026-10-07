@@ -4,13 +4,34 @@ import { AppError } from '../../shared/errors/app-error.js';
 
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
+function normalizePlatform(utmSource?: string | null, referrer?: string | null): string {
+  const src = (utmSource || '').toLowerCase().trim();
+  const ref = (referrer || '').toLowerCase().trim();
+
+  if (src.includes('whatsapp') || src.includes('wa') || ref.includes('whatsapp') || ref.includes('wa.me')) return 'whatsapp';
+  if (src.includes('facebook') || src.includes('fb') || ref.includes('facebook') || ref.includes('fb.me')) return 'facebook';
+  if (src.includes('instagram') || src.includes('ig') || ref.includes('instagram')) return 'instagram';
+  return 'custom';
+}
+
+const PLATFORM_CONFIG: Record<string, { name: string; color: string; bg: string }> = {
+  whatsapp: { name: 'WhatsApp', color: '#10b981', bg: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
+  facebook: { name: 'Facebook', color: '#1877f2', bg: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
+  instagram: { name: 'Instagram', color: '#e1306c', bg: 'bg-pink-500/10 text-pink-600 border-pink-500/20' },
+  custom: { name: 'Custom UTM / Direct', color: '#6366f1', bg: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' },
+};
+
 export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
 
   app.get('/store/analytics', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER', 'ADMIN']);
-    const query = request.query as { range?: '7d' | '30d' | '90d' };
-    const days = query.range === '7d' ? 7 : query.range === '90d' ? 90 : 30;
+    const query = request.query as {
+      range?: 'today' | '7d' | '30d' | '90d' | 'all';
+      platform?: string;
+      creatorId?: string;
+    };
+    const days = query.range === 'today' ? 1 : query.range === '7d' ? 7 : query.range === '90d' ? 90 : query.range === 'all' ? 365 : 30;
 
     const organization = await prisma.organization.findFirst({
       where: { ownerId: actor.userId },
@@ -22,13 +43,24 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const now = new Date();
-    const startDate = startOfDay(new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000));
+    const startDate = query.range === 'today'
+      ? startOfDay(now)
+      : startOfDay(new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000));
     const prevStartDate = startOfDay(new Date(startDate.getTime() - days * 24 * 60 * 60 * 1000));
 
-    const activeCommissionWhere = {
+    const activeCommissionWhere: any = {
       organizationId: organization.id,
       status: { not: 'REVERSED' as const },
     };
+
+    const clickWhere: any = {
+      organizationId: organization.id,
+    };
+
+    if (query.creatorId && query.creatorId !== 'all') {
+      activeCommissionWhere.creatorId = query.creatorId;
+      clickWhere.link = { creatorId: query.creatorId };
+    }
 
     // 1. Fetch live metrics from DB
     const [
@@ -42,10 +74,10 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       totalOrdersInRange,
     ] = await Promise.all([
       prisma.affiliateLinkClick.count({
-        where: { organizationId: organization.id, createdAt: { gte: startDate } },
+        where: { ...clickWhere, createdAt: { gte: startDate } },
       }),
       prisma.affiliateLinkClick.count({
-        where: { organizationId: organization.id, createdAt: { gte: prevStartDate, lt: startDate } },
+        where: { ...clickWhere, createdAt: { gte: prevStartDate, lt: startDate } },
       }),
       prisma.affiliateCommission.findMany({
         where: { ...activeCommissionWhere, createdAt: { gte: startDate } },
@@ -56,7 +88,7 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
           creatorId: true,
           linkId: true,
           createdAt: true,
-          shopifyOrder: { select: { id: true, name: true, total: true } },
+          shopifyOrder: { select: { id: true, name: true, total: true, payload: true } },
         },
       }),
       prisma.affiliateCommission.findMany({
@@ -64,12 +96,14 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         select: { amount: true, orderAmount: true, creatorId: true },
       }),
       prisma.affiliateLinkClick.findMany({
-        where: { organizationId: organization.id, createdAt: { gte: startDate } },
+        where: { ...clickWhere, createdAt: { gte: startDate } },
         select: {
           id: true,
           linkId: true,
+          visitorHash: true,
           utmMedium: true,
           utmSource: true,
+          referrer: true,
           createdAt: true,
           link: { select: { creatorId: true, slug: true } },
         },
@@ -98,6 +132,7 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
           displayName: true,
           creatorCode: true,
           email: true,
+          influencerProfile: { select: { firstName: true, lastName: true } },
           instagramConnection: {
             select: { username: true, status: true },
           },
@@ -129,21 +164,141 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     const avgOrderValue =
       totalCreatorOrders > 0 ? Math.round(totalCreatorSales / totalCreatorOrders) : 0;
 
-    // 2. Timeline Aggregation (Day by Day)
-    const timelineMap = new Map<string, { date: string; day: string; clicks: number; orders: number; sales: number }>();
-    for (let i = 0; i < days; i++) {
-      const d = new Date(startDate);
-      d.setDate(startDate.getDate() + i);
+    // Platform aggregation map strictly for WhatsApp, Facebook, Instagram, Custom
+    const platformMap = new Map<string, {
+      platform: string;
+      name: string;
+      clicks: number;
+      visitors: Set<string>;
+      orders: number;
+      sales: number;
+      commissions: number;
+      topMedium: string;
+      mediumCounts: Record<string, number>;
+      color: string;
+      badgeClass: string;
+    }>();
+
+    Object.entries(PLATFORM_CONFIG).forEach(([key, cfg]) => {
+      platformMap.set(key, {
+        platform: key,
+        name: cfg.name,
+        clicks: 0,
+        visitors: new Set<string>(),
+        orders: 0,
+        sales: 0,
+        commissions: 0,
+        topMedium: key === 'custom' ? 'custom' : 'social',
+        mediumCounts: {},
+        color: cfg.color,
+        badgeClass: cfg.bg,
+      });
+    });
+
+    for (const c of allClicksInRange) {
+      const pKey = normalizePlatform(c.utmSource, c.referrer);
+      const entry = platformMap.get(pKey) || platformMap.get('custom')!;
+      entry.clicks += 1;
+      if (c.visitorHash) entry.visitors.add(c.visitorHash);
+      if (c.utmMedium) {
+        entry.mediumCounts[c.utmMedium] = (entry.mediumCounts[c.utmMedium] || 0) + 1;
+      }
+    }
+
+    platformMap.forEach((entry) => {
+      const topM = Object.entries(entry.mediumCounts).sort((a, b) => b[1] - a[1])[0];
+      if (topM) entry.topMedium = topM[0];
+    });
+
+    for (const comm of currentCommissions) {
+      let matchedPlatform = 'custom';
+      const orderPayload = (comm.shopifyOrder?.payload as any) || {};
+      if (orderPayload.platform) {
+        matchedPlatform = normalizePlatform(orderPayload.platform);
+      } else {
+        const matchingClick = allClicksInRange.find((c) => c.linkId === comm.linkId);
+        if (matchingClick) {
+          matchedPlatform = normalizePlatform(matchingClick.utmSource, matchingClick.referrer);
+        }
+      }
+
+      const entry = platformMap.get(matchedPlatform) || platformMap.get('custom')!;
+      entry.orders += 1;
+      entry.sales += Number(comm.orderAmount || 0);
+      entry.commissions += Number(comm.amount || 0);
+    }
+
+    const platformBreakdown = Array.from(platformMap.values())
+      .map((p) => {
+        const convRate = p.clicks > 0 ? Number(((p.orders / p.clicks) * 100).toFixed(1)) : 0;
+        const share = currentClicks > 0 ? Number(((p.clicks / currentClicks) * 100).toFixed(1)) : 0;
+        return {
+          platform: p.platform,
+          name: p.name,
+          clicks: p.clicks,
+          uniqueVisitors: p.visitors.size || p.clicks,
+          orders: p.orders,
+          sales: p.sales,
+          commissions: p.commissions,
+          conversionRate: convRate,
+          share,
+          topMedium: p.topMedium,
+          color: p.color,
+          badgeClass: p.badgeClass,
+        };
+      })
+      .sort((a, b) => b.clicks - a.clicks || b.sales - a.sales);
+
+    // Timeline Aggregation (Day by Day)
+    const timelineSteps = Math.min(days, 30);
+    const stepSize = Math.max(1, Math.floor(days / timelineSteps));
+    const timelineMap = new Map<string, any>();
+
+    for (let i = 0; i < timelineSteps; i++) {
+      const d = new Date(startDate.getTime() + i * stepSize * 24 * 60 * 60 * 1000);
       const iso = d.toISOString().slice(0, 10);
       const dayStr = `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}`;
-      timelineMap.set(iso, { date: iso, day: dayStr, clicks: 0, orders: 0, sales: 0 });
+      timelineMap.set(iso, {
+        date: iso,
+        day: dayStr,
+        clicks: 0,
+        orders: 0,
+        sales: 0,
+        commissions: 0,
+        whatsappClicks: 0,
+        facebookClicks: 0,
+        instagramClicks: 0,
+        customClicks: 0,
+      });
     }
 
     for (const click of allClicksInRange) {
       if (click.createdAt) {
         const iso = click.createdAt.toISOString().slice(0, 10);
-        const item = timelineMap.get(iso);
-        if (item) item.clicks += 1;
+        let item = timelineMap.get(iso);
+        if (!item) {
+          const dayStr = `${click.createdAt.getDate()} ${click.createdAt.toLocaleString('default', { month: 'short' })}`;
+          item = {
+            date: iso,
+            day: dayStr,
+            clicks: 0,
+            orders: 0,
+            sales: 0,
+            commissions: 0,
+            whatsappClicks: 0,
+            facebookClicks: 0,
+            instagramClicks: 0,
+            customClicks: 0,
+          };
+          timelineMap.set(iso, item);
+        }
+
+        const p = normalizePlatform(click.utmSource, click.referrer);
+        item.clicks += 1;
+        if (p === 'whatsapp') item.whatsappClicks += 1;
+        else if (p === 'facebook') item.facebookClicks += 1;
+        else if (p === 'instagram') item.instagramClicks += 1;
+        else item.customClicks += 1;
       }
     }
 
@@ -154,61 +309,14 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         if (item) {
           item.orders += 1;
           item.sales += Number(comm.orderAmount || 0);
+          item.commissions += Number(comm.amount || 0);
         }
       }
     }
 
-    // 3. Instagram Placements Breakdown (DMs, Stories, Bio, etc.)
-    const placementCounts: Record<string, number> = {
-      dm_automation: 0,
-      story_link: 0,
-      bio_link: 0,
-      other: 0,
-    };
+    const timeline = Array.from(timelineMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
-    for (const click of allClicksInRange) {
-      const med = String(click.utmMedium || '').toLowerCase();
-      if (med.includes('dm') || med.includes('auto') || med.includes('message')) {
-        placementCounts.dm_automation += 1;
-      } else if (med.includes('story')) {
-        placementCounts.story_link += 1;
-      } else if (med.includes('bio')) {
-        placementCounts.bio_link += 1;
-      } else {
-        placementCounts.other += 1;
-      }
-    }
-
-    const totalPlacements = currentClicks || 1;
-    const placements = [
-      {
-        name: 'Instagram DM Automations',
-        clicks: placementCounts.dm_automation,
-        share: Math.round((placementCounts.dm_automation / totalPlacements) * 100),
-        color: 'bg-primary',
-      },
-      {
-        name: 'Instagram Story Stickers',
-        clicks: placementCounts.story_link,
-        share: Math.round((placementCounts.story_link / totalPlacements) * 100),
-        color: 'bg-coral',
-      },
-      {
-        name: 'Bio & Link-in-Bio',
-        clicks: placementCounts.bio_link,
-        share: Math.round((placementCounts.bio_link / totalPlacements) * 100),
-        color: 'bg-teal',
-      },
-      {
-        name: 'Direct & Other Sources',
-        clicks: placementCounts.other,
-        share: Math.round((placementCounts.other / totalPlacements) * 100),
-        color: 'bg-indigo',
-      },
-    ];
-
-    // 4. Creator Leaderboard Calculation
-    // Map clicks per creator
+    // Creator Leaderboard
     const creatorClicksMap = new Map<string, number>();
     for (const click of allClicksInRange) {
       const cId = click.link?.creatorId;
@@ -217,7 +325,6 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Map commissions and sales per creator
     const creatorCommissionsMap = new Map<string, { orders: number; sales: number; commission: number }>();
     for (const comm of currentCommissions) {
       if (comm.creatorId) {
@@ -285,7 +392,7 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         rank: rank + 1,
       }));
 
-    // 5. Top Performing Products
+    // Top Products
     const productSalesMap = new Map<string, { product: any; sales: number; count: number }>();
     for (const link of affiliateLinks) {
       if (link.product) {
@@ -314,8 +421,14 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         orders: count,
       }));
 
+    const selectedPlatformFilter = query.platform && query.platform !== 'all' ? query.platform.toLowerCase() : null;
+
     return {
       summary: {
+        totalClicks: {
+          value: currentClicks,
+          change: calcChange(currentClicks, previousClicks),
+        },
         totalInstagramClicks: {
           value: currentClicks,
           change: calcChange(currentClicks, previousClicks),
@@ -339,8 +452,13 @@ export const storeAnalyticsRoutes: FastifyPluginAsync = async (app) => {
         avgOrderValue,
         totalStoreOrders: totalOrdersInRange,
       },
-      timeline: Array.from(timelineMap.values()),
-      placements,
+      platformBreakdown: selectedPlatformFilter
+        ? platformBreakdown.filter((p) => p.platform === selectedPlatformFilter)
+        : platformBreakdown,
+      allPlatforms: platformBreakdown,
+      platformTimeline: timeline,
+      timeline,
+      creatorsList: creatorsWithUsers.map((c: any) => ({ id: c.id, name: c.displayName, code: c.creatorCode })),
       leaderboard,
       topProducts,
     };
