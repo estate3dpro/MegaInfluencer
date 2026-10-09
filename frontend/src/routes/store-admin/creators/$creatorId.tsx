@@ -93,8 +93,8 @@ function Page() {
   const allProducts = productsQuery.data?.products ?? [];
   const assignedProducts = allProducts.filter((p) => p.isAssigned);
 
-  const filteredModalProducts = allProducts.filter((p) =>
-    p.title.toLowerCase().includes(searchQuery.trim().toLowerCase())
+  const filteredModalProducts = allProducts.filter((p: any) =>
+    (p.title || p.name || "").toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   const cards = [

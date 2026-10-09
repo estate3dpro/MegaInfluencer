@@ -688,8 +688,8 @@ export function AffiliatePage() {
   };
 
   const allProducts = productsQuery.data?.products ?? [];
-  const filteredProducts = allProducts.filter((p) =>
-    p.title.toLowerCase().includes(productSearch.toLowerCase())
+  const filteredProducts = allProducts.filter((p: any) =>
+    (p.title || p.name || "").toLowerCase().includes((productSearch || "").toLowerCase())
   );
 
   return (
@@ -762,6 +762,116 @@ export function AffiliatePage() {
           </tbody>
         </table>
       </PageTable>
+
+      {/* Create Link Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Affiliate Tracking Link</DialogTitle>
+            <DialogDescription>
+              Generate a unique short URL with attached UTM parameters for creator and channel attribution.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <div className="space-y-1.5">
+              <Label>Link Scope</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={linkType === "CREATOR" ? "default" : "outline"}
+                  onClick={() => setLinkType("CREATOR")}
+                  className="text-xs"
+                >
+                  Creator Specific
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={linkType === "STORE" ? "default" : "outline"}
+                  onClick={() => {
+                    setLinkType("STORE");
+                    setCreatorId("");
+                  }}
+                  className="text-xs"
+                >
+                  General / Storewide
+                </Button>
+              </div>
+            </div>
+
+            {linkType === "CREATOR" && (
+              <div className="space-y-1.5">
+                <Label>Select Creator Partner *</Label>
+                <Select value={creatorId} onValueChange={setCreatorId}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Choose creator..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(creatorsQuery.data ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                        {c.displayName} {c.creatorCode ? `(@${c.creatorCode})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Target Destination *</Label>
+              <Select value={productId} onValueChange={setProductId}>
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Storewide Homepage" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="store" className="text-xs font-semibold">
+                    🏠 Entire Storefront (Home)
+                  </SelectItem>
+                  {filteredProducts.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs">
+                      📦 {p.title || p.name} ({p.price ? `₹${p.price}` : "Product"})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Commission Rate (%)</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={commissionRate}
+                onChange={(e) => setCommissionRate(e.target.value)}
+                className="text-xs font-mono"
+                placeholder="10"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} size="sm">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={createMutation.isPending || (linkType === "CREATOR" && !creatorId)}
+              onClick={() => {
+                createMutation.mutate({
+                  creatorId: linkType === "CREATOR" ? creatorId : null,
+                  productId: productId === "store" ? null : productId,
+                  commissionRate: Number(commissionRate) || 10,
+                  targetType: productId === "store" ? "STORE" : "PRODUCT",
+                });
+              }}
+            >
+              {createMutation.isPending ? "Creating..." : "Create Tracking Link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <PlatformLinkGeneratorModal open={platformModalOpen} onOpenChange={setPlatformModalOpen} linkItem={selectedPlatformLink} />
     </div>
