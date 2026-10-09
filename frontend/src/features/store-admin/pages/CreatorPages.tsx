@@ -616,7 +616,9 @@ export function AffiliatePage() {
   const [search, setSearch] = useState("");
   const [linkType, setLinkType] = useState<"CREATOR" | "STORE">("CREATOR");
   const [creatorId, setCreatorId] = useState("");
+  const [destinationType, setDestinationType] = useState<"STORE" | "PRODUCT" | "COLLECTION">("STORE");
   const [productId, setProductId] = useState("store");
+  const [collectionProductIds, setCollectionProductIds] = useState<string[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [commissionRate, setCommissionRate] = useState("10");
 
@@ -646,6 +648,8 @@ export function AffiliatePage() {
       setLinkType("CREATOR");
       setCreatorId("");
       setProductId("store");
+      setDestinationType("STORE");
+      setCollectionProductIds([]);
       toast.success("Affiliate link created successfully");
     },
     onError: () => toast.error("Could not create the tracking link"),
@@ -749,7 +753,7 @@ export function AffiliatePage() {
                 <tr key={link.id} className="hover:bg-muted/15 transition-colors">
                   <td className="px-5 py-3.5">
                     <span className="font-mono font-bold text-primary">/r/{link.slug}</span>
-                    <p className="text-[11px] text-muted-foreground truncate max-w-xs">{link.productTitle || "Storewide Link"}</p>
+                    <p className="text-[11px] text-muted-foreground truncate max-w-xs">{link.productTitle || (link.targetType === "COLLECTION" ? "Product Collection" : "Storewide Link")}</p>
                   </td>
                   <td className="px-5 py-3.5 font-medium">{link.creatorName || "Storewide"}</td>
                   <td className="px-5 py-3.5 font-semibold text-teal">{link.commissionRate}%</td>
@@ -828,16 +832,35 @@ export function AffiliatePage() {
               </div>
             )}
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <Label>Target Destination *</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["STORE", "PRODUCT", "COLLECTION"] as const).map((type) => (
+                  <Button
+                    key={type}
+                    type="button"
+                    size="sm"
+                    variant={destinationType === type ? "default" : "outline"}
+                    className="text-[11px]"
+                    onClick={() => {
+                      setDestinationType(type);
+                      if (type !== "PRODUCT") setProductId("store");
+                      if (type !== "COLLECTION") setCollectionProductIds([]);
+                    }}
+                  >
+                    {type === "STORE" ? "Entire Store" : type === "PRODUCT" ? "One Product" : "Collection"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {destinationType === "PRODUCT" && (
+              <div className="space-y-1.5">
               <Select value={productId} onValueChange={setProductId}>
                 <SelectTrigger className="text-xs">
-                  <SelectValue placeholder="Storewide Homepage" />
+                  <SelectValue placeholder="Choose a product" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="store" className="text-xs font-semibold">
-                    🏠 Entire Storefront (Home)
-                  </SelectItem>
                   {filteredProducts.map((p: any) => (
                     <SelectItem key={p.id} value={p.id} className="text-xs">
                       📦 {p.title || p.name} ({p.price ? `₹${p.price}` : "Product"})
@@ -845,7 +868,40 @@ export function AffiliatePage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+              </div>
+            )}
+
+            {destinationType === "COLLECTION" && (
+              <div className="space-y-2 rounded-lg border p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs">Select collection products *</Label>
+                  <span className="text-[11px] text-muted-foreground">{collectionProductIds.length} selected</span>
+                </div>
+                <Input
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Search products..."
+                  className="h-8 text-xs"
+                />
+                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                  {filteredProducts.map((product: any) => {
+                    const selected = collectionProductIds.includes(product.id);
+                    return (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => setCollectionProductIds((ids) => selected ? ids.filter((id) => id !== product.id) : [...ids, product.id])}
+                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs ${selected ? "bg-primary/10 text-primary" : "hover:bg-muted"}`}
+                      >
+                        <span className="truncate">{product.title || product.name || "Untitled product"}</span>
+                        <span className="ml-2 shrink-0">{selected ? "✓" : "+"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground">Orders are counted only when they contain one of these products.</p>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>Commission Rate (%)</Label>
@@ -867,13 +923,13 @@ export function AffiliatePage() {
             </Button>
             <Button
               size="sm"
-              disabled={createMutation.isPending || (linkType === "CREATOR" && !creatorId)}
+              disabled={createMutation.isPending || (linkType === "CREATOR" && !creatorId) || (destinationType === "PRODUCT" && productId === "store") || (destinationType === "COLLECTION" && collectionProductIds.length < 2)}
               onClick={() => {
                 createMutation.mutate({
                   creatorId: linkType === "CREATOR" ? creatorId : null,
-                  productId: productId === "store" ? null : productId,
+                  productId: destinationType === "PRODUCT" ? productId : null,
+                  productIds: destinationType === "COLLECTION" ? collectionProductIds : undefined,
                   commissionRate: Number(commissionRate) || 10,
-                  targetType: productId === "store" ? "STORE" : "PRODUCT",
                 });
               }}
             >

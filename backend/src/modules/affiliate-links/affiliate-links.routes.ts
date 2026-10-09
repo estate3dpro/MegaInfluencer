@@ -10,6 +10,7 @@ import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 
 const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
+  productIds: z.array(z.string().min(1)).min(2).max(50).optional(),
   commissionRate: z.coerce.number().min(0).max(100).default(10), expiresAt: z.coerce.date().optional().nullable(),
 });
 const updateLinkSchema = z.object({ status: z.enum(['ACTIVE', 'PAUSED']).optional(), expiresAt: z.coerce.date().optional().nullable() });
@@ -31,8 +32,13 @@ function escapeHtml(value: string) {
 function asLink(row: any, baseUrl: string) {
   const clicks = Number(row._count?.clicks ?? 0);
   const commissions = (row.commissions ?? []).filter((commission: any) => commission.status !== 'REVERSED');
-  const orders = commissions.length;
-  const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0);
+  const trackedOrders = (row.trackedOrders ?? []).filter((order: any) => !['refunded', 'voided', 'cancelled'].includes(String(order.financialStatus ?? '').toLowerCase()));
+  // Creator links use their commission ledger. Store-owned links still retain
+  // visit/order analytics without creating a creator commission.
+  const orders = row.creatorId ? commissions.length : trackedOrders.length;
+  const revenue = row.creatorId
+    ? commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
+    : trackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
   const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
   return { id: row.id, creatorId: row.creatorId, creator: row.creator?.displayName ?? null, creatorCode: row.creator?.creatorCode ?? null, productId: row.productId, product: row.product?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionRate: Number(row.commissionRate), status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, storeCredits, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
 }
@@ -44,7 +50,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
     const rows = await prisma.affiliateLink.findMany({
       where: { organizationId: organization.id, ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ slug: { contains: query.search, mode: 'insensitive' } }, { creator: { displayName: { contains: query.search, mode: 'insensitive' } } }, { creator: { creatorCode: { contains: query.search, mode: 'insensitive' } } }, { product: { title: { contains: query.search, mode: 'insensitive' } } }] } : {}) },
-      include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }, orderBy: { createdAt: 'desc' },
+      include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
     });
     const baseUrl = getFrontendBaseUrl(request);
     return { links: rows.map((row: any) => asLink(row, baseUrl)) };
@@ -52,6 +58,12 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/store/affiliate-links', async (request, reply) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const input = createLinkSchema.parse(request.body);
+    if (input.productId && input.productIds?.length) {
+      throw new AppError('INVALID_LINK_TARGET', 'Choose either one product or a collection of products.', 422);
+    }
+    if (input.productIds && new Set(input.productIds).size !== input.productIds.length) {
+      throw new AppError('DUPLICATE_PRODUCTS', 'A product can only be selected once.', 422);
+    }
     if (input.creatorId) {
       const assigned = await prisma.storeInfluencerAssignment.findUnique({ where: { organizationId_influencerId: { organizationId: organization.id, influencerId: input.creatorId } } });
       if (!assigned) throw new AppError('CREATOR_NOT_ASSIGNED', 'Choose a creator assigned to this store.', 422);
@@ -59,7 +71,13 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     }
     const product = input.productId ? await prisma.shopifyProduct.findFirst({ where: { id: input.productId, organizationId: organization.id }, select: { id: true, handle: true } }) : null;
     if (input.productId && !product) throw new AppError('PRODUCT_NOT_FOUND', 'The selected product does not belong to this store.', 422);
-    const link = await prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, targetType: product ? 'PRODUCT' : 'STORE', destinationPath: product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug() }, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
+    const collectionProducts = input.productIds?.length
+      ? await prisma.shopifyProduct.findMany({ where: { id: { in: input.productIds }, organizationId: organization.id }, select: { id: true } })
+      : [];
+    if (input.productIds?.length && collectionProducts.length !== input.productIds.length) {
+      throw new AppError('PRODUCT_NOT_FOUND', 'One or more selected products do not belong to this store.', 422);
+    }
+    const link = await prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, targetType: collectionProducts.length ? 'COLLECTION' : product ? 'PRODUCT' : 'STORE', destinationPath: product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug(), products: collectionProducts.length ? { create: input.productIds!.map((productId, position) => ({ productId, position })) } : undefined }, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } } });
     const baseUrl = getFrontendBaseUrl(request);
     return reply.code(201).send({ link: asLink(link, baseUrl) });
   });
@@ -458,11 +476,35 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     if (linkSlug) {
       link = await prisma.affiliateLink.findFirst({
         where: { slug: String(linkSlug), organizationId: organization.id },
-        select: { id: true, creatorId: true, commissionRate: true, creator: { select: { id: true, creatorCode: true } } },
+        select: {
+          id: true,
+          creatorId: true,
+          commissionRate: true,
+          targetType: true,
+          creator: { select: { id: true, creatorCode: true, role: true } },
+          products: { select: { product: { select: { shopifyId: true } } } },
+        },
       });
       if (link?.creator) {
         creator = link.creator;
         trackedCreatorCode = creator.creatorCode ?? trackedCreatorCode;
+      }
+
+      // A collection link only attributes an order when at least one purchased
+      // product belongs to that collection. Visitors may browse anywhere, but
+      // unrelated purchases are not credited to this link.
+      if (link?.targetType === 'COLLECTION') {
+        const canonicalId = (value: unknown) => String(value ?? '').split('/').pop();
+        const collectionProductIds = new Set(link.products.map((item: any) => canonicalId(item.product.shopifyId)).filter(Boolean));
+        const hasCollectionProduct = lineItems.some((item: any) => {
+          const orderedProductId = canonicalId(item.product_id ?? item.productId ?? item.product?.id);
+          return orderedProductId && collectionProductIds.has(orderedProductId);
+        });
+        if (!hasCollectionProduct) {
+          link = null;
+          creator = null;
+          trackedCreatorCode = null;
+        }
       }
     }
 
@@ -522,6 +564,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         fulfillmentStatus,
         processedAt,
         creatorCode: trackedCreatorCode ?? null,
+        affiliateLinkId: link?.id ?? null,
         payload: payload as Prisma.InputJsonValue,
       },
       update: {
@@ -533,6 +576,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         fulfillmentStatus,
         processedAt,
         creatorCode: trackedCreatorCode ?? null,
+        affiliateLinkId: link?.id ?? null,
         payload: payload as Prisma.InputJsonValue,
       },
     });
@@ -586,6 +630,10 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           slug: `link_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
         },
         select: { id: true, creatorId: true, commissionRate: true },
+      });
+      await prisma.shopifyOrder.update({
+        where: { id: order.id },
+        data: { affiliateLinkId: link.id },
       });
     }
 
