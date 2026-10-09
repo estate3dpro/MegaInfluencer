@@ -661,7 +661,15 @@ export function AffiliatePage() {
     onError: () => toast.error("Could not update link status"),
   });
 
-  const links = linksQuery.data?.links ?? [];
+  // API clients in this app may return either the body directly or an Axios-style
+  // `{ data: body }` envelope. Normalize it here so a valid API response is never
+  // rendered as an empty state.
+  const getLinksFromResponse = (response: any): any[] => {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.links)) return response.links;
+    return response?.data ? getLinksFromResponse(response.data) : [];
+  };
+  const links = getLinksFromResponse(linksQuery.data);
   const rawBase = typeof window !== "undefined" ? window.location.origin : "";
 
   const handleCopyLink = async (slug: string) => {
@@ -745,9 +753,9 @@ export function AffiliatePage() {
                   </td>
                   <td className="px-5 py-3.5 font-medium">{link.creatorName || "Storewide"}</td>
                   <td className="px-5 py-3.5 font-semibold text-teal">{link.commissionRate}%</td>
-                  <td className="px-5 py-3.5 text-center font-mono">{link.clicks.toLocaleString()}</td>
-                  <td className="px-5 py-3.5 text-center font-mono font-bold">{link.orders}</td>
-                  <td className="px-5 py-3.5 text-right font-mono font-bold">{formatCurrency(link.revenue)}</td>
+                  <td className="px-5 py-3.5 text-center font-mono">{Number(link.clicks ?? 0).toLocaleString()}</td>
+                  <td className="px-5 py-3.5 text-center font-mono font-bold">{Number(link.orders ?? 0)}</td>
+                  <td className="px-5 py-3.5 text-right font-mono font-bold">{formatCurrency(Number(link.revenue ?? 0))}</td>
                   <td className="px-5 py-3.5 text-right pr-6">
                     <div className="flex justify-end gap-1.5">
                       <Button size="sm" variant="ghost" onClick={() => handleCopyLink(link.slug)} className="h-7 px-2 text-xs">
