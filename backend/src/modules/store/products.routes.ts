@@ -376,6 +376,27 @@ export const storeProductsRoutes: FastifyPluginAsync = async (app) => {
     return reply.status(202).send({ sync, alreadyRunning: false });
   });
 
+  // GET /store/products/assignable
+  app.get('/store/products/assignable', async (request) => {
+    const actor = requireRole(request, ['STORE_OWNER']);
+    const store = await storeFor(app, actor.userId);
+
+    const products = await prisma.shopifyProduct.findMany({
+      where: { organizationId: store.id },
+      select: {
+        id: true,
+        title: true,
+        price: true,
+        imageUrl: true,
+        handle: true,
+        vendor: true,
+      },
+      orderBy: { title: 'asc' },
+    });
+
+    return { products };
+  });
+
   // GET /store/products/:productId - Deep details for product
   app.get('/store/products/:productId', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']);
