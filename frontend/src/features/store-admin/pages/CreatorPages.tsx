@@ -110,8 +110,8 @@ function PageTable({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CreatorAvatar({ name, tone = "bg-primary/10 text-primary" }: { name: string; tone?: string }) {
-  const initials = name
+function CreatorAvatar({ name, tone = "bg-primary/10 text-primary" }: { name?: string | null; tone?: string }) {
+  const initials = (name ?? "")
     .split(" ")
     .map((part) => part[0])
     .slice(0, 2)
@@ -687,10 +687,12 @@ export function AffiliatePage() {
     setPlatformModalOpen(true);
   };
 
-  const allProducts = productsQuery.data?.products ?? [];
-  const filteredProducts = allProducts.filter((p: any) =>
-    (p.title || p.name || "").toLowerCase().includes((productSearch || "").toLowerCase())
-  );
+  const allProducts = Array.isArray(productsQuery.data?.products) ? productsQuery.data.products : [];
+  const normalizedProductSearch = productSearch.toLowerCase();
+  const filteredProducts = allProducts.filter((product: any) => {
+    const productName = String(product?.title ?? product?.name ?? "");
+    return productName.toLowerCase().includes(normalizedProductSearch);
+  });
 
   return (
     <div className="space-y-6">
