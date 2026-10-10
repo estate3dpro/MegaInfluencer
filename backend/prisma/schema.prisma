@@ -375,6 +375,7 @@ model Organization {
   shopifyConnectionMethod     ShopifyConnectionMethod?
   encryptedShopifyAccessToken String?
   shopifyProducts             ShopifyProduct[]
+  shopifyCollections          ShopifyCollection[]
   shopifyOrders               ShopifyOrder[]
   affiliateLinks              AffiliateLink[]
   affiliateClicks             AffiliateLinkClick[]
@@ -503,12 +504,46 @@ model ShopifyProduct {
   organization             Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   affiliateLinks           AffiliateLink[]
   affiliateLinkCollections AffiliateLinkProduct[]
+  collectionMemberships      ShopifyCollectionProduct[]
   productAssignments       ProductInfluencerAssignment[]
   campaigns                Campaign[]                    @relation("CampaignProduct")
   barterFulfillments       BarterSampleFulfillment[]
 
   @@unique([organizationId, shopifyId])
   @@index([organizationId, syncedAt])
+}
+
+model ShopifyCollection {
+  id              String                     @id @default(cuid())
+  organizationId  String
+  shopifyId       String
+  title           String
+  handle          String?
+  descriptionHtml String?
+  imageUrl        String?
+  productCount    Int                        @default(0)
+  payload         Json
+  syncedAt        DateTime                   @updatedAt
+  createdAt       DateTime                   @default(now())
+  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products        ShopifyCollectionProduct[]
+  affiliateLinks  AffiliateLink[]
+
+  @@unique([organizationId, shopifyId])
+  @@index([organizationId, syncedAt])
+}
+
+model ShopifyCollectionProduct {
+  id           String            @id @default(cuid())
+  collectionId String
+  productId    String
+  position     Int               @default(0)
+  collection   ShopifyCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product      ShopifyProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, productId])
+  @@index([productId])
+  @@index([collectionId, position])
 }
 
 model ShopifyOrder {
@@ -542,6 +577,7 @@ model AffiliateLink {
   organizationId  String
   creatorId       String?
   productId       String?
+  collectionId    String?
   slug            String                  @unique
   targetType      AffiliateLinkTargetType @default(STORE)
   destinationPath String                  @default("/")
@@ -553,6 +589,7 @@ model AffiliateLink {
   organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   creator         User?                   @relation(fields: [creatorId], references: [id], onDelete: SetNull)
   product         ShopifyProduct?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  collection      ShopifyCollection?      @relation(fields: [collectionId], references: [id], onDelete: SetNull)
   products        AffiliateLinkProduct[]
   clicks          AffiliateLinkClick[]
   commissions     AffiliateCommission[]
@@ -561,6 +598,7 @@ model AffiliateLink {
   @@index([organizationId, status])
   @@index([creatorId, createdAt])
   @@index([productId])
+  @@index([collectionId])
 }
 
 model AffiliateLinkProduct {

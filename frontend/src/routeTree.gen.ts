@@ -67,6 +67,7 @@ import { Route as StoreAdminPageRouteImport } from './routes/store-admin/$page'
 import { Route as StoreAdminAffiliateRouteImport } from './routes/store-admin/affiliate'
 import { Route as StoreAdminAnalyticsRouteImport } from './routes/store-admin/analytics'
 import { Route as StoreAdminCampaignsRouteImport } from './routes/store-admin/campaigns'
+import { Route as StoreAdminCollectionsRouteImport } from './routes/store-admin/collections'
 import { Route as StoreAdminCommissionsRouteImport } from './routes/store-admin/commissions'
 import { Route as StoreAdminCreatorDirectoryRouteImport } from './routes/store-admin/creator-directory'
 import { Route as StoreAdminCreatorsRouteImport } from './routes/store-admin/creators'
@@ -394,6 +395,11 @@ const StoreAdminCampaignsRoute = StoreAdminCampaignsRouteImport.update({
   path: '/campaigns',
   getParentRoute: () => StoreAdminRoute,
 } as any)
+const StoreAdminCollectionsRoute = StoreAdminCollectionsRouteImport.update({
+  id: '/collections',
+  path: '/collections',
+  getParentRoute: () => StoreAdminRoute,
+} as any)
 const StoreAdminCommissionsRoute = StoreAdminCommissionsRouteImport.update({
   id: '/commissions',
   path: '/commissions',
@@ -634,6 +640,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
   '/store-admin/campaigns': typeof StoreAdminCampaignsRouteWithChildren
+  '/store-admin/collections': typeof StoreAdminCollectionsRoute
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
@@ -721,6 +728,7 @@ export interface FileRoutesByTo {
   '/store-admin/$page': typeof StoreAdminPageRoute
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
+  '/store-admin/collections': typeof StoreAdminCollectionsRoute
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/customer-referrals': typeof StoreAdminCustomerReferralsRoute
@@ -813,6 +821,7 @@ export interface FileRoutesById {
   '/store-admin/affiliate': typeof StoreAdminAffiliateRoute
   '/store-admin/analytics': typeof StoreAdminAnalyticsRoute
   '/store-admin/campaigns': typeof StoreAdminCampaignsRouteWithChildren
+  '/store-admin/collections': typeof StoreAdminCollectionsRoute
   '/store-admin/commissions': typeof StoreAdminCommissionsRoute
   '/store-admin/creator-directory': typeof StoreAdminCreatorDirectoryRoute
   '/store-admin/creators': typeof StoreAdminCreatorsRouteWithChildren
@@ -909,6 +918,7 @@ export interface FileRouteTypes {
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
     | '/store-admin/campaigns'
+    | '/store-admin/collections'
     | '/store-admin/commissions'
     | '/store-admin/creator-directory'
     | '/store-admin/creators'
@@ -996,6 +1006,7 @@ export interface FileRouteTypes {
     | '/store-admin/$page'
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
+    | '/store-admin/collections'
     | '/store-admin/commissions'
     | '/store-admin/creator-directory'
     | '/store-admin/customer-referrals'
@@ -1087,6 +1098,7 @@ export interface FileRouteTypes {
     | '/store-admin/affiliate'
     | '/store-admin/analytics'
     | '/store-admin/campaigns'
+    | '/store-admin/collections'
     | '/store-admin/commissions'
     | '/store-admin/creator-directory'
     | '/store-admin/creators'
@@ -1550,6 +1562,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StoreAdminCampaignsRouteImport
       parentRoute: typeof StoreAdminRoute
     }
+    '/store-admin/collections': {
+      id: '/store-admin/collections'
+      path: '/collections'
+      fullPath: '/store-admin/collections'
+      preLoaderRoute: typeof StoreAdminCollectionsRouteImport
+      parentRoute: typeof StoreAdminRoute
+    }
     '/store-admin/commissions': {
       id: '/store-admin/commissions'
       path: '/commissions'
@@ -2001,6 +2020,7 @@ interface StoreAdminRouteChildren {
   StoreAdminAffiliateRoute: typeof StoreAdminAffiliateRoute
   StoreAdminAnalyticsRoute: typeof StoreAdminAnalyticsRoute
   StoreAdminCampaignsRoute: typeof StoreAdminCampaignsRouteWithChildren
+  StoreAdminCollectionsRoute: typeof StoreAdminCollectionsRoute
   StoreAdminCommissionsRoute: typeof StoreAdminCommissionsRoute
   StoreAdminCreatorDirectoryRoute: typeof StoreAdminCreatorDirectoryRoute
   StoreAdminCreatorsRoute: typeof StoreAdminCreatorsRouteWithChildren
@@ -2025,6 +2045,7 @@ const StoreAdminRouteChildren: StoreAdminRouteChildren = {
   StoreAdminAffiliateRoute: StoreAdminAffiliateRoute,
   StoreAdminAnalyticsRoute: StoreAdminAnalyticsRoute,
   StoreAdminCampaignsRoute: StoreAdminCampaignsRouteWithChildren,
+  StoreAdminCollectionsRoute: StoreAdminCollectionsRoute,
   StoreAdminCommissionsRoute: StoreAdminCommissionsRoute,
   StoreAdminCreatorDirectoryRoute: StoreAdminCreatorDirectoryRoute,
   StoreAdminCreatorsRoute: StoreAdminCreatorsRouteWithChildren,

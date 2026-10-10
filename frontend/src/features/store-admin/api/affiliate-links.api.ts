@@ -5,11 +5,13 @@ export type AffiliateLink = {
   slug: string; url: string; targetType: "STORE" | "PRODUCT" | "COLLECTION"; commissionRate: number;
   status: "ACTIVE" | "PAUSED"; expiresAt: string | null; clicks: number; orders: number;
   revenue: number; storeCredits: number; conversion: number; createdAt: string;
+  collectionId?: string | null; collection?: string | null;
 };
 export type CreateAffiliateLinkInput = {
   creatorId?: string | null;
   productId?: string | null;
   productIds?: string[];
+  collectionId?: string | null;
   commissionRate: number;
 };
 export async function getAffiliateLinks(params?: { search?: string; status?: "ACTIVE" | "PAUSED" }) {

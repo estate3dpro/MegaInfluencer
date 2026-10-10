@@ -11,6 +11,7 @@ import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
   productIds: z.array(z.string().min(1)).min(2).max(50).optional(),
+  collectionId: z.string().min(1).optional().nullable(),
   commissionRate: z.coerce.number().min(0).max(100).default(10), expiresAt: z.coerce.date().optional().nullable(),
 });
 const updateLinkSchema = z.object({ status: z.enum(['ACTIVE', 'PAUSED']).optional(), expiresAt: z.coerce.date().optional().nullable() });
@@ -40,7 +41,7 @@ function asLink(row: any, baseUrl: string) {
     ? commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
     : trackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
   const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
-  return { id: row.id, creatorId: row.creatorId, creator: row.creator?.displayName ?? null, creatorCode: row.creator?.creatorCode ?? null, productId: row.productId, product: row.product?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionRate: Number(row.commissionRate), status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, storeCredits, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
+  return { id: row.id, creatorId: row.creatorId, creator: row.creator?.displayName ?? null, creatorCode: row.creator?.creatorCode ?? null, productId: row.productId, product: row.product?.title ?? null, collectionId: row.collectionId ?? null, collection: row.collection?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionRate: Number(row.commissionRate), status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, storeCredits, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
 }
 
 export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
@@ -50,7 +51,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
     const rows = await prisma.affiliateLink.findMany({
       where: { organizationId: organization.id, ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ slug: { contains: query.search, mode: 'insensitive' } }, { creator: { displayName: { contains: query.search, mode: 'insensitive' } } }, { creator: { creatorCode: { contains: query.search, mode: 'insensitive' } } }, { product: { title: { contains: query.search, mode: 'insensitive' } } }] } : {}) },
-      include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
+      include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
     });
     const baseUrl = getFrontendBaseUrl(request);
     return { links: rows.map((row: any) => asLink(row, baseUrl)) };
@@ -58,8 +59,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/store/affiliate-links', async (request, reply) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const input = createLinkSchema.parse(request.body);
-    if (input.productId && input.productIds?.length) {
-      throw new AppError('INVALID_LINK_TARGET', 'Choose either one product or a collection of products.', 422);
+    if ([input.productId, input.collectionId, input.productIds?.length ? 'products' : null].filter(Boolean).length > 1) {
+      throw new AppError('INVALID_LINK_TARGET', 'Choose one product, one Shopify collection, or a custom product collection.', 422);
     }
     if (input.productIds && new Set(input.productIds).size !== input.productIds.length) {
       throw new AppError('DUPLICATE_PRODUCTS', 'A product can only be selected once.', 422);
@@ -71,13 +72,15 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     }
     const product = input.productId ? await prisma.shopifyProduct.findFirst({ where: { id: input.productId, organizationId: organization.id }, select: { id: true, handle: true } }) : null;
     if (input.productId && !product) throw new AppError('PRODUCT_NOT_FOUND', 'The selected product does not belong to this store.', 422);
+    const collection = input.collectionId ? await prisma.shopifyCollection.findFirst({ where: { id: input.collectionId, organizationId: organization.id }, select: { id: true, title: true, handle: true } }) : null;
+    if (input.collectionId && !collection) throw new AppError('COLLECTION_NOT_FOUND', 'The selected Shopify collection does not belong to this store.', 422);
     const collectionProducts = input.productIds?.length
       ? await prisma.shopifyProduct.findMany({ where: { id: { in: input.productIds }, organizationId: organization.id }, select: { id: true } })
       : [];
     if (input.productIds?.length && collectionProducts.length !== input.productIds.length) {
       throw new AppError('PRODUCT_NOT_FOUND', 'One or more selected products do not belong to this store.', 422);
     }
-    const link = await prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, targetType: collectionProducts.length ? 'COLLECTION' : product ? 'PRODUCT' : 'STORE', destinationPath: product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug(), products: collectionProducts.length ? { create: input.productIds!.map((productId, position) => ({ productId, position })) } : undefined }, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } } });
+    const link = await prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, collectionId: collection?.id, targetType: collection || collectionProducts.length ? 'COLLECTION' : product ? 'PRODUCT' : 'STORE', destinationPath: collection?.handle ? `/collections/${collection.handle}` : product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug(), products: collectionProducts.length ? { create: input.productIds!.map((productId, position) => ({ productId, position })) } : undefined }, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } } });
     const baseUrl = getFrontendBaseUrl(request);
     return reply.code(201).send({ link: asLink(link, baseUrl) });
   });
@@ -85,7 +88,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/store/affiliate-links/:linkId', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const { linkId } = request.params as { linkId: string }; const input = updateLinkSchema.parse(request.body);
     const existing = await prisma.affiliateLink.findFirst({ where: { id: linkId, organizationId: organization.id } }); if (!existing) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
-    const link = await prisma.affiliateLink.update({ where: { id: linkId }, data: input, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
+    const link = await prisma.affiliateLink.update({ where: { id: linkId }, data: input, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
     const baseUrl = getFrontendBaseUrl(request); return { link: asLink(link, baseUrl) };
   });
 
@@ -272,10 +275,21 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
   app.get('/r/:slug', async (request, reply) => {
-    const { slug: linkSlug } = request.params as { slug: string }; const link = await prisma.affiliateLink.findUnique({ where: { slug: linkSlug }, include: { organization: { select: { name: true, shopDomain: true } }, creator: { select: { creatorCode: true } }, products: { include: { product: { select: { title: true, handle: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } } } });
+    const { slug: linkSlug } = request.params as { slug: string }; const link = await prisma.affiliateLink.findUnique({ where: { slug: linkSlug }, include: { organization: { select: { name: true, shopDomain: true } }, creator: { select: { creatorCode: true } }, collection: { select: { handle: true } }, products: { include: { product: { select: { title: true, handle: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } } } });
     if (!link || link.status !== 'ACTIVE' || (link.expiresAt && link.expiresAt <= new Date())) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'This affiliate link is unavailable.', 404);
     const query = request.query as Record<string, string | undefined>; const visitorHash = request.headers['user-agent'] ? createHash('sha256').update(`${request.headers['user-agent']}|${request.ip}`).digest('hex') : null;
     await prisma.affiliateLinkClick.create({ data: { organizationId: link.organizationId, linkId: link.id, visitorHash, referrer: request.headers.referer?.slice(0, 2_000), utmSource: query.utm_source?.slice(0, 255), utmMedium: query.utm_medium?.slice(0, 255), utmCampaign: query.utm_campaign?.slice(0, 255) } });
+    if (link.targetType === 'COLLECTION' && link.collection?.handle) {
+      const destination = safeDestination(link.organization.shopDomain, `/collections/${link.collection.handle}`);
+      destination.searchParams.set('mi_link', link.slug);
+      if (link.creatorId) {
+        const creatorCode = link.creator?.creatorCode ?? await ensureCreatorCode(prisma, link.creatorId);
+        destination.searchParams.set('mi_creator_code', creatorCode);
+        destination.searchParams.set('utm_creator_code', creatorCode);
+      }
+      for (const key of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']) if (query[key]) destination.searchParams.set(key, query[key]!);
+      return reply.redirect(destination.toString(), 302);
+    }
     if (link.targetType === 'COLLECTION') {
       const creatorCode = link.creatorId ? (link.creator?.creatorCode ?? await ensureCreatorCode(prisma, link.creatorId)) : null;
       const cards = link.products.map((item: any) => {
@@ -483,6 +497,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           targetType: true,
           creator: { select: { id: true, creatorCode: true, role: true } },
           products: { select: { product: { select: { shopifyId: true } } } },
+          collection: { select: { products: { select: { product: { select: { shopifyId: true } } } } } },
         },
       });
       if (link?.creator) {
@@ -495,7 +510,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       // unrelated purchases are not credited to this link.
       if (link?.targetType === 'COLLECTION') {
         const canonicalId = (value: unknown) => String(value ?? '').split('/').pop();
-        const collectionProductIds = new Set(link.products.map((item: any) => canonicalId(item.product.shopifyId)).filter(Boolean));
+        const membership = link.collection?.products ?? link.products;
+        const collectionProductIds = new Set(membership.map((item: any) => canonicalId(item.product.shopifyId)).filter(Boolean));
         const hasCollectionProduct = lineItems.some((item: any) => {
           const orderedProductId = canonicalId(item.product_id ?? item.productId ?? item.product?.id);
           return orderedProductId && collectionProductIds.has(orderedProductId);

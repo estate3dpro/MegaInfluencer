@@ -15,6 +15,7 @@ import {
   Megaphone,
   Package,
   Plus,
+  RefreshCw,
   Search,
   Share2,
   Sliders,
@@ -63,6 +64,7 @@ import {
   type StoreCreator,
 } from "../api/creators.api";
 import { getStoreProducts } from "../api/products.api";
+import { getStoreCollections, syncStoreCollections, type StoreCollection } from "../api/collections.api";
 import { getStoreCampaigns } from "@/features/campaigns/api/campaigns.api";
 
 function formatCurrency(amount: number, currency = "INR") {
@@ -618,6 +620,8 @@ export function AffiliatePage() {
   const [creatorId, setCreatorId] = useState("");
   const [destinationType, setDestinationType] = useState<"STORE" | "PRODUCT" | "COLLECTION">("STORE");
   const [productId, setProductId] = useState("store");
+  const [collectionId, setCollectionId] = useState("");
+  // Kept while migrating old custom-product collection drafts; Shopify collections are now the active flow.
   const [collectionProductIds, setCollectionProductIds] = useState<string[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [commissionRate, setCommissionRate] = useState("10");
@@ -639,6 +643,11 @@ export function AffiliatePage() {
     queryFn: () => getStoreProducts(1, { all: true }),
     enabled: dialogOpen,
   });
+  const collectionsQuery = useQuery({
+    queryKey: ["store", "collections", "affiliate-link"],
+    queryFn: () => getStoreCollections(),
+    enabled: dialogOpen,
+  });
 
   const createMutation = useMutation({
     mutationFn: createAffiliateLink,
@@ -649,7 +658,7 @@ export function AffiliatePage() {
       setCreatorId("");
       setProductId("store");
       setDestinationType("STORE");
-      setCollectionProductIds([]);
+      setCollectionId("");
       toast.success("Affiliate link created successfully");
     },
     onError: () => toast.error("Could not create the tracking link"),
@@ -700,11 +709,7 @@ export function AffiliatePage() {
   };
 
   const allProducts = Array.isArray(productsQuery.data?.products) ? productsQuery.data.products : [];
-  const normalizedProductSearch = productSearch.toLowerCase();
-  const filteredProducts = allProducts.filter((product: any) => {
-    const productName = String(product?.title ?? product?.name ?? "");
-    return productName.toLowerCase().includes(normalizedProductSearch);
-  });
+  const filteredProducts = allProducts.filter((product: any) => String(product?.title ?? product?.name ?? "").toLowerCase().includes(productSearch.toLowerCase()));
 
   return (
     <div className="space-y-6">
@@ -753,9 +758,9 @@ export function AffiliatePage() {
                 <tr key={link.id} className="hover:bg-muted/15 transition-colors">
                   <td className="px-5 py-3.5">
                     <span className="font-mono font-bold text-primary">/r/{link.slug}</span>
-                    <p className="text-[11px] text-muted-foreground truncate max-w-xs">{link.productTitle || (link.targetType === "COLLECTION" ? "Product Collection" : "Storewide Link")}</p>
+                    <p className="text-[11px] text-muted-foreground truncate max-w-xs">{link.product || link.productTitle || link.collection || (link.targetType === "COLLECTION" ? "Custom product collection" : "Storewide Link")}</p>
                   </td>
-                  <td className="px-5 py-3.5 font-medium">{link.creatorName || "Storewide"}</td>
+                  <td className="px-5 py-3.5 font-medium">{link.creator || link.creatorName || "Storewide"}</td>
                   <td className="px-5 py-3.5 font-semibold text-teal">{link.commissionRate}%</td>
                   <td className="px-5 py-3.5 text-center font-mono">{Number(link.clicks ?? 0).toLocaleString()}</td>
                   <td className="px-5 py-3.5 text-center font-mono font-bold">{Number(link.orders ?? 0)}</td>
@@ -845,7 +850,7 @@ export function AffiliatePage() {
                     onClick={() => {
                       setDestinationType(type);
                       if (type !== "PRODUCT") setProductId("store");
-                      if (type !== "COLLECTION") setCollectionProductIds([]);
+                      if (type !== "COLLECTION") setCollectionId("");
                     }}
                   >
                     {type === "STORE" ? "Entire Store" : type === "PRODUCT" ? "One Product" : "Collection"}
@@ -861,7 +866,7 @@ export function AffiliatePage() {
                   <SelectValue placeholder="Choose a product" />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredProducts.map((p: any) => (
+                  {allProducts.map((p: any) => (
                     <SelectItem key={p.id} value={p.id} className="text-xs">
                       📦 {p.title || p.name} ({p.price ? `₹${p.price}` : "Product"})
                     </SelectItem>
@@ -872,6 +877,23 @@ export function AffiliatePage() {
             )}
 
             {destinationType === "COLLECTION" && (
+              <div className="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+                <Label className="text-xs">Select synced Shopify collection *</Label>
+                <Select value={collectionId} onValueChange={setCollectionId}>
+                  <SelectTrigger className="bg-background text-xs"><SelectValue placeholder="Choose a Shopify collection" /></SelectTrigger>
+                  <SelectContent>
+                    {(collectionsQuery.data ?? []).map((collection) => (
+                      <SelectItem key={collection.id} value={collection.id} className="text-xs">
+                        {collection.title} ({collection.productCount} products)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">The link opens Shopify's collection page and credits orders containing its synced products.</p>
+              </div>
+            )}
+
+            {false && destinationType === "COLLECTION" && (
               <div className="space-y-2 rounded-lg border p-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-xs">Select collection products *</Label>
@@ -923,12 +945,12 @@ export function AffiliatePage() {
             </Button>
             <Button
               size="sm"
-              disabled={createMutation.isPending || (linkType === "CREATOR" && !creatorId) || (destinationType === "PRODUCT" && productId === "store") || (destinationType === "COLLECTION" && collectionProductIds.length < 2)}
+              disabled={createMutation.isPending || (linkType === "CREATOR" && !creatorId) || (destinationType === "PRODUCT" && productId === "store") || (destinationType === "COLLECTION" && !collectionId)}
               onClick={() => {
                 createMutation.mutate({
                   creatorId: linkType === "CREATOR" ? creatorId : null,
                   productId: destinationType === "PRODUCT" ? productId : null,
-                  productIds: destinationType === "COLLECTION" ? collectionProductIds : undefined,
+                  collectionId: destinationType === "COLLECTION" ? collectionId : null,
                   commissionRate: Number(commissionRate) || 10,
                 });
               }}
@@ -945,7 +967,44 @@ export function AffiliatePage() {
 }
 
 // -------------------------------------------------------------
-// 3. CAMPAIGNS PAGE
+// 3. SHOPIFY COLLECTIONS PAGE
+// -------------------------------------------------------------
+export function CollectionsPage() {
+  const [search, setSearch] = useState("");
+  const client = useQueryClient();
+  const collectionsQuery = useQuery({ queryKey: ["store", "collections", search], queryFn: () => getStoreCollections(search) });
+  const syncMutation = useMutation({
+    mutationFn: syncStoreCollections,
+    onSuccess: (result) => {
+      toast.success(result.alreadyRunning ? "Collection sync is already in progress" : "Shopify collection sync started");
+      window.setTimeout(() => client.invalidateQueries({ queryKey: ["store", "collections"] }), 1800);
+    },
+    onError: () => toast.error("Could not start the Shopify collection sync"),
+  });
+  const collections = collectionsQuery.data ?? [];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Shopify Collections"
+        description="Sync your Shopify collections, see their products, and create trackable creator links for each collection."
+        actions={<Button size="sm" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} className="gap-1.5"><RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />{syncMutation.isPending ? "Starting sync..." : "Sync collections"}</Button>}
+      />
+      <div className="rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 via-background to-teal/5 p-4 text-sm">
+        <div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/15 text-primary"><Layers className="h-5 w-5" /></span><div><p className="font-semibold">Use Shopify collections as affiliate destinations</p><p className="mt-0.5 text-xs text-muted-foreground">A collection link opens the collection on your Shopify storefront and only attributes orders containing products currently synced into that collection.</p></div></div>
+      </div>
+      <div className="relative max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="h-9 pl-9 text-xs" placeholder="Search Shopify collections..." /></div>
+      <PageTable>
+        <table className="w-full min-w-[760px] text-left text-xs"><thead className="border-y bg-muted/40 text-muted-foreground font-semibold"><tr><th className="px-5 py-3.5">Collection</th><th className="px-5 py-3.5">Shopify handle</th><th className="px-5 py-3.5 text-center">Products</th><th className="px-5 py-3.5 text-center">Active links</th><th className="px-5 py-3.5 text-right pr-6">Action</th></tr></thead><tbody className="divide-y divide-border/60">
+          {collectionsQuery.isLoading ? Array.from({ length: 4 }).map((_, index) => <tr key={index}><td colSpan={5} className="px-5 py-4"><div className="h-5 w-2/3 animate-pulse rounded bg-muted" /></td></tr>) : collections.length === 0 ? <tr><td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">No synced collections yet. Sync Shopify collections to start creating collection affiliate links.</td></tr> : collections.map((collection: StoreCollection) => <tr key={collection.id} className="hover:bg-muted/15"><td className="px-5 py-3.5"><div className="flex items-center gap-3">{collection.imageUrl ? <img src={collection.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" /> : <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary"><Layers className="h-4 w-4" /></span>}<div><p className="font-semibold text-foreground">{collection.title}</p><p className="text-[11px] text-muted-foreground">Synced {new Date(collection.syncedAt).toLocaleDateString("en-IN")}</p></div></div></td><td className="px-5 py-3.5 font-mono text-muted-foreground">/collections/{collection.handle || "—"}</td><td className="px-5 py-3.5 text-center font-semibold">{collection.productCount}</td><td className="px-5 py-3.5 text-center">{collection.activeLinksCount}</td><td className="px-5 py-3.5 text-right pr-6"><Button asChild size="sm" variant="outline" className="h-7 text-xs"><Link to="/store-admin/affiliate"><Link2 className="mr-1 h-3.5 w-3.5" />Create link</Link></Button></td></tr>)}
+        </tbody></table>
+      </PageTable>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 4. CAMPAIGNS PAGE
 // -------------------------------------------------------------
 export function CampaignsPage() {
   const query = useQuery({ queryKey: ["store", "campaigns"], queryFn: getStoreCampaigns });

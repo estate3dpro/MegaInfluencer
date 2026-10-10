@@ -116,6 +116,7 @@ export const storeAdminNav: NavGroup[] = [
     label: "Commerce",
     items: [
       { title: "Products", url: "/store-admin/products", icon: Package },
+      { title: "Collections", url: "/store-admin/collections", icon: Boxes },
       { title: "Orders", url: "/store-admin/orders", icon: ShoppingCart },
       { title: "Customers", url: "/store-admin/customers", icon: Users2 },
       { title: "Customer Referrals", url: "/store-admin/customer-referrals", icon: Gift },

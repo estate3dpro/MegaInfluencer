@@ -5,6 +5,7 @@ import { adminInfluencerRoutes } from '../modules/admin/influencers.routes.js';
 import { adminStoreRoutes } from '../modules/admin/stores.routes.js';
 import { adminOverviewRoutes } from '../modules/admin/overview.routes.js';
 import { storeProductsRoutes } from '../modules/store/products.routes.js';
+import { storeCollectionsRoutes } from '../modules/store/collections.routes.js';
 import { storeOrdersRoutes } from '../modules/store/orders.routes.js';
 import { storeCreatorsRoutes } from '../modules/store/creators.routes.js';
 import { storeCustomersRoutes } from '../modules/store/customers.routes.js';
@@ -42,6 +43,7 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(storeDashboardRoutes, { prefix: '/api/v1' });
   app.register(storeAnalyticsRoutes, { prefix: '/api/v1' });
   app.register(storeProductsRoutes, { prefix: '/api/v1' });
+  app.register(storeCollectionsRoutes, { prefix: '/api/v1' });
   app.register(storeOrdersRoutes, { prefix: '/api/v1' });
   app.register(storeCreatorsRoutes, { prefix: '/api/v1' });
   app.register(storeCustomersRoutes, { prefix: '/api/v1' });
