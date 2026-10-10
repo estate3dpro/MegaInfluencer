@@ -14,10 +14,10 @@ const collectionProductsQuery = `query CollectionProducts($id: ID!, $after: Stri
 async function storeFor(app: Parameters<FastifyPluginAsync>[0], userId: string) {
   const store = await app.prisma.organization.findFirst({
     where: { ownerId: userId },
-    select: { id: true, platform: true, connectionStatus: true, shopDomain: true, encryptedShopifyAccessToken: true, shopifyConnectionMethod: true },
+    select: { id: true, platform: true, connectionStatus: true, shopDomain: true, appUrl: true, encryptedShopifyAccessToken: true, shopifyConnectionMethod: true },
   });
   if (!store || store.platform !== 'SHOPIFY') throw new AppError('SHOPIFY_STORE_NOT_FOUND', 'No Shopify store is connected to this account.', 404);
-  if (store.connectionStatus !== 'CONNECTED' || !store.shopDomain || !store.encryptedShopifyAccessToken) {
+  if (store.connectionStatus !== 'CONNECTED' || !store.shopDomain || !store.encryptedShopifyAccessToken || (store.shopifyConnectionMethod === 'CLI_APP' && !store.appUrl)) {
     throw new AppError('SHOPIFY_NOT_CONNECTED', 'Complete the Shopify connection before syncing collections.', 409);
   }
   return store;
@@ -27,6 +27,14 @@ async function fetchCollections(store: Awaited<ReturnType<typeof storeFor>>, aft
   const shop = store.shopDomain!.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const token = decryptToken(store.encryptedShopifyAccessToken!);
   try {
+    if (store.shopifyConnectionMethod === 'CLI_APP') {
+      const url = new URL(`${store.appUrl!.replace(/\/$/, '')}/app/api/bridge/collections`);
+      url.searchParams.set('shop', shop); url.searchParams.set('first', '100'); if (after) url.searchParams.set('after', after);
+      const response = await fetch(url, { headers: { 'X-MegaChat-Bridge-Token': token } });
+      const body = await response.json().catch(() => null) as any;
+      if (!response.ok || !body?.items || !body.pageInfo) throw new AppError('SHOPIFY_COLLECTIONS_UNAVAILABLE', body?.error ?? 'Shopify bridge could not return collections.', 502);
+      return { nodes: body.items.map((item: any) => ({ id: item.shopifyGid, title: item.title, handle: item.handle, descriptionHtml: item.description, image: item.imageUrl ? { url: item.imageUrl } : null, productsCount: { count: item.productCount ?? item.products?.length ?? 0 }, products: { nodes: item.products ?? [] } })), pageInfo: body.pageInfo } as { nodes: CollectionNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
+    }
     const response = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
       body: JSON.stringify({ query: collectionsQuery, variables: { after } }),
@@ -44,6 +52,9 @@ async function fetchCollections(store: Awaited<ReturnType<typeof storeFor>>, aft
 }
 
 async function fetchAllCollectionProductIds(store: Awaited<ReturnType<typeof storeFor>>, collectionId: string) {
+  // The bridge returns membership with each collection. Its page is capped at
+  // Shopify's connection limit; direct Admin API connections paginate every member.
+  if (store.shopifyConnectionMethod === 'CLI_APP') return [];
   const shop = store.shopDomain!.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const token = decryptToken(store.encryptedShopifyAccessToken!);
   const ids: string[] = [];
@@ -72,7 +83,9 @@ async function runSync(app: Parameters<FastifyPluginAsync>[0], store: Awaited<Re
           create: { organizationId: store.id, shopifyId: raw.id, title: raw.title, handle: raw.handle ?? null, descriptionHtml: raw.descriptionHtml ?? null, imageUrl: raw.image?.url ?? null, productCount: Number(raw.productsCount?.count ?? 0), payload: raw as Prisma.InputJsonValue },
           update: { title: raw.title, handle: raw.handle ?? null, descriptionHtml: raw.descriptionHtml ?? null, imageUrl: raw.image?.url ?? null, productCount: Number(raw.productsCount?.count ?? 0), payload: raw as Prisma.InputJsonValue },
         });
-        const shopifyIds = await fetchAllCollectionProductIds(store, raw.id);
+        const shopifyIds = store.shopifyConnectionMethod === 'CLI_APP'
+          ? (raw.products?.nodes ?? []).map((product: any) => product.shopifyGid ?? product.id).filter(Boolean)
+          : await fetchAllCollectionProductIds(store, raw.id);
         const products = shopifyIds.length ? await (app.prisma as any).shopifyProduct.findMany({ where: { organizationId: store.id, shopifyId: { in: shopifyIds } }, select: { id: true, shopifyId: true } }) : [];
         const productByShopifyId = new Map(products.map((product: any) => [product.shopifyId, product.id]));
         await (app.prisma as any).shopifyCollectionProduct.deleteMany({ where: { collectionId: collection.id } });
