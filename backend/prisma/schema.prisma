@@ -775,6 +775,13 @@ enum ReferralRewardMode {
   HYBRID // Both points and cash withdrawal
 }
 
+enum MultiProductCommissionMode {
+  STORE_WIDE // Commission earned on whole order subtotal regardless of items
+  ASSIGNED_PRODUCTS_ONLY // Commission calculated strictly on line items matching assigned products
+  GATE_REQUIRED // Earn commission on whole cart subtotal ONLY if at least one assigned product is present
+  HYBRID_FALLBACK // Full rate on assigned items + fallback rate on unassigned items in cart
+}
+
 model StoreReferralConfig {
   id             String       @id @default(cuid())
   organizationId String       @unique
@@ -783,6 +790,10 @@ model StoreReferralConfig {
   // Program Engine Master Switch
   isEnabled  Boolean            @default(true)
   rewardMode ReferralRewardMode @default(POINTS)
+
+  // Multi-Product Commission Calculation Policy
+  multiProductCommissionMode MultiProductCommissionMode @default(STORE_WIDE)
+  fallbackCommissionRate     Decimal                    @default(0) @db.Decimal(5, 2)
 
   // Rule 1: Percentage of Order Rule (Inactivable)
   percentageEnabled Boolean @default(true)

@@ -641,8 +641,76 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     if (link && creator && !isSampleOrder && !isBarterOrFixedOnly && Number(link.commissionRate ?? 0) > 0) {
       const orderAmount = subtotal > 0 ? subtotal : Number(total || 0);
       const rate = Number(link.commissionRate ?? 10);
-      const amount = (orderAmount * rate) / 100;
       const matchedUserId = link.creatorId ?? creator?.id;
+
+      // Fetch Store Referral Config for multi-product commission calculation policy
+      const storeConfig = await prisma.storeReferralConfig.findUnique({
+        where: { organizationId: organization.id },
+        select: { multiProductCommissionMode: true, fallbackCommissionRate: true },
+      });
+      const mode = storeConfig?.multiProductCommissionMode ?? 'STORE_WIDE';
+      const fallbackRate = Number(storeConfig?.fallbackCommissionRate ?? 0);
+
+      // Helper to extract canonical Shopify product ID
+      const canonicalId = (val: unknown) => String(val ?? '').split('/').pop();
+
+      // Gather assigned product IDs for this creator in this store
+      const assignedProductRows = await prisma.productInfluencerAssignment.findMany({
+        where: { organizationId: organization.id, influencerId: matchedUserId },
+        select: { product: { select: { shopifyId: true } } },
+      });
+      const assignedProductSet = new Set<string>();
+      for (const p of assignedProductRows) {
+        const cid = canonicalId(p.product?.shopifyId);
+        if (cid) assignedProductSet.add(cid);
+      }
+      if (link?.productId) {
+        const cid = canonicalId(link.productId);
+        if (cid) assignedProductSet.add(cid);
+      }
+      if (Array.isArray(link?.products)) {
+        for (const lp of link.products) {
+          const cid = canonicalId(lp.product?.shopifyId);
+          if (cid) assignedProductSet.add(cid);
+        }
+      }
+
+      // Calculate line item totals
+      let assignedItemsTotal = 0;
+      let unassignedItemsTotal = 0;
+      let hasAssignedProductInCart = false;
+
+      // If no specific products assigned to creator, treat all store products as assigned
+      const hasSpecificAssignments = assignedProductSet.size > 0;
+
+      for (const item of lineItems) {
+        const itemProdId = canonicalId(item.product_id ?? item.productId ?? item.product?.id);
+        const price = Number(item.price ?? 0);
+        const quantity = Number(item.quantity ?? 1);
+        const itemTotal = price * quantity;
+
+        if (!hasSpecificAssignments || (itemProdId && assignedProductSet.has(itemProdId))) {
+          assignedItemsTotal += itemTotal;
+          hasAssignedProductInCart = true;
+        } else {
+          unassignedItemsTotal += itemTotal;
+        }
+      }
+
+      // Calculate final commission based on policy
+      let amount = 0;
+      if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
+        amount = (assignedItemsTotal * rate) / 100;
+      } else if (mode === 'GATE_REQUIRED') {
+        amount = hasAssignedProductInCart ? (orderAmount * rate) / 100 : 0;
+      } else if (mode === 'HYBRID_FALLBACK') {
+        const assignedComm = (assignedItemsTotal * rate) / 100;
+        const unassignedComm = (unassignedItemsTotal * fallbackRate) / 100;
+        amount = assignedComm + unassignedComm;
+      } else {
+        // STORE_WIDE (Default)
+        amount = (orderAmount * rate) / 100;
+      }
 
       await prisma.affiliateCommission.upsert({
         where: { shopifyOrderId: order.id },

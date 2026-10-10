@@ -419,27 +419,88 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           }
 
           if (link && creator && (compensationMode === 'BARTER' || Number(link.commissionRate ?? 0) > 0)) {
-            const amount = Number(d.total ?? 0);
+            const orderAmount = Number(d.total ?? 0);
             const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
             const status = isRefunded ? 'REVERSED' : 'PENDING';
             const commissionRate = compensationMode === 'BARTER' ? 0 : Number(link.commissionRate ?? 10);
+            const matchedUserId = link.creatorId ?? creator.id;
+
+            let commAmount = (orderAmount * commissionRate) / 100;
+
+            if (compensationMode !== 'BARTER' && commissionRate > 0) {
+              const storeConfig = await prisma.storeReferralConfig.findUnique({
+                where: { organizationId: s.id },
+                select: { multiProductCommissionMode: true, fallbackCommissionRate: true },
+              });
+              const mode = storeConfig?.multiProductCommissionMode ?? 'STORE_WIDE';
+              const fallbackRate = Number(storeConfig?.fallbackCommissionRate ?? 0);
+              const canonicalId = (val: unknown) => String(val ?? '').split('/').pop();
+
+              const assignedProductRows = await prisma.productInfluencerAssignment.findMany({
+                where: { organizationId: s.id, influencerId: matchedUserId },
+                select: { product: { select: { shopifyId: true } } },
+              });
+              const assignedProductSet = new Set<string>();
+              for (const p of assignedProductRows) {
+                const cid = canonicalId(p.product?.shopifyId);
+                if (cid) assignedProductSet.add(cid);
+              }
+
+              const rawOrder = (d as any).raw ?? (d as any).payload ?? d;
+              const lineItems = Array.isArray(rawOrder.line_items)
+                ? rawOrder.line_items
+                : Array.isArray(rawOrder.lineItems)
+                ? rawOrder.lineItems
+                : [];
+
+              let assignedItemsTotal = 0;
+              let unassignedItemsTotal = 0;
+              let hasAssignedProductInCart = false;
+              const hasSpecificAssignments = assignedProductSet.size > 0;
+
+              for (const item of lineItems) {
+                const itemProdId = canonicalId(item.product_id ?? item.productId ?? item.product?.id);
+                const price = Number(item.price ?? 0);
+                const quantity = Number(item.quantity ?? 1);
+                const itemTotal = price * quantity;
+
+                if (!hasSpecificAssignments || (itemProdId && assignedProductSet.has(itemProdId))) {
+                  assignedItemsTotal += itemTotal;
+                  hasAssignedProductInCart = true;
+                } else {
+                  unassignedItemsTotal += itemTotal;
+                }
+              }
+
+              if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
+                commAmount = (assignedItemsTotal * commissionRate) / 100;
+              } else if (mode === 'GATE_REQUIRED') {
+                commAmount = hasAssignedProductInCart ? (orderAmount * commissionRate) / 100 : 0;
+              } else if (mode === 'HYBRID_FALLBACK') {
+                const assignedComm = (assignedItemsTotal * commissionRate) / 100;
+                const unassignedComm = (unassignedItemsTotal * fallbackRate) / 100;
+                commAmount = assignedComm + unassignedComm;
+              } else {
+                commAmount = (orderAmount * commissionRate) / 100;
+              }
+            }
 
             await prisma.affiliateCommission.upsert({
               where: { shopifyOrderId: order.id },
               create: {
                 organizationId: s.id,
                 linkId: link.id,
-                creatorId: link.creatorId ?? creator.id,
+                creatorId: matchedUserId,
                 shopifyOrderId: order.id,
-                orderAmount: amount,
+                orderAmount,
                 commissionRate,
-                amount: (amount * commissionRate) / 100,
+                amount: commAmount,
                 status,
               },
               update: {
-                orderAmount: amount,
+                orderAmount,
                 commissionRate,
-                amount: (amount * commissionRate) / 100,
+                amount: commAmount,
                 status: isRefunded ? 'REVERSED' : undefined,
               },
             });

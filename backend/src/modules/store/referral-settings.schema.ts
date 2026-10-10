@@ -4,6 +4,10 @@ export const updateReferralSettingsSchema = z.object({
   isEnabled: z.boolean().optional(),
   rewardMode: z.enum(['POINTS', 'CASHBACK_COMMISSION', 'DISCOUNT_ONLY', 'HYBRID']).optional(),
   
+  // Multi-Product Commission Calculation Policy
+  multiProductCommissionMode: z.enum(['STORE_WIDE', 'ASSIGNED_PRODUCTS_ONLY', 'GATE_REQUIRED', 'HYBRID_FALLBACK']).optional(),
+  fallbackCommissionRate: z.number().min(0).max(100).optional(),
+
   // Rule 1: Percentage of Order Rule (Inactivable)
   percentageEnabled: z.boolean().optional(),
   commissionRate: z.number().min(0).max(100).optional(),

@@ -1,12 +1,15 @@
 import { apiClient } from "@/lib/api/client";
 
 export type ReferralRewardMode = "POINTS" | "CASHBACK_COMMISSION" | "DISCOUNT_ONLY" | "HYBRID";
+export type MultiProductCommissionMode = "STORE_WIDE" | "ASSIGNED_PRODUCTS_ONLY" | "GATE_REQUIRED" | "HYBRID_FALLBACK";
 
 export type StoreReferralConfig = {
   id: string;
   organizationId: string;
   isEnabled: boolean;
   rewardMode: ReferralRewardMode;
+  multiProductCommissionMode?: MultiProductCommissionMode;
+  fallbackCommissionRate?: number;
   
   // Rule 1: Percentage
   percentageEnabled: boolean;
