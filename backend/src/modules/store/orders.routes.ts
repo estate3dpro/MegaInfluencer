@@ -427,61 +427,80 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
 
             let commAmount = (orderAmount * commissionRate) / 100;
 
-            if (compensationMode !== 'BARTER' && commissionRate > 0) {
+            if (compensationMode !== 'BARTER') {
               const storeConfig = await prisma.storeReferralConfig.findUnique({
                 where: { organizationId: s.id },
-                select: { multiProductCommissionMode: true, fallbackCommissionRate: true },
+                select: {
+                  multiProductCommissionMode: true,
+                  fallbackCommissionRate: true,
+                  percentageEnabled: true,
+                  fixedTokensEnabled: true,
+                  fixedTokensPerOrder: true,
+                },
               });
-              const mode = storeConfig?.multiProductCommissionMode ?? 'STORE_WIDE';
-              const fallbackRate = Number(storeConfig?.fallbackCommissionRate ?? 0);
-              const canonicalId = (val: unknown) => String(val ?? '').split('/').pop();
 
-              const assignedProductRows = await prisma.productInfluencerAssignment.findMany({
-                where: { organizationId: s.id, influencerId: matchedUserId },
-                select: { product: { select: { shopifyId: true } } },
-              });
-              const assignedProductSet = new Set<string>();
-              for (const p of assignedProductRows) {
-                const cid = canonicalId(p.product?.shopifyId);
-                if (cid) assignedProductSet.add(cid);
-              }
+              const isFlatRupees = Boolean(storeConfig?.fixedTokensEnabled && !storeConfig?.percentageEnabled);
+              const isBoth = Boolean(storeConfig?.fixedTokensEnabled && storeConfig?.percentageEnabled);
+              const flatRateAmount = Number(storeConfig?.fixedTokensPerOrder ?? 50);
 
-              const rawOrder = (d as any).raw ?? (d as any).payload ?? d;
-              const lineItems = Array.isArray(rawOrder.line_items)
-                ? rawOrder.line_items
-                : Array.isArray(rawOrder.lineItems)
-                ? rawOrder.lineItems
-                : [];
+              if (isFlatRupees) {
+                // Flat rate commission in Rupees per order
+                commAmount = flatRateAmount;
+              } else if (isBoth) {
+                // Combined flat rupee commission + percentage
+                commAmount = flatRateAmount + ((orderAmount * commissionRate) / 100);
+              } else if (commissionRate > 0) {
+                const mode = storeConfig?.multiProductCommissionMode ?? 'STORE_WIDE';
+                const fallbackRate = Number(storeConfig?.fallbackCommissionRate ?? 0);
+                const canonicalId = (val: unknown) => String(val ?? '').split('/').pop();
 
-              let assignedItemsTotal = 0;
-              let unassignedItemsTotal = 0;
-              let hasAssignedProductInCart = false;
-              const hasSpecificAssignments = assignedProductSet.size > 0;
-
-              for (const item of lineItems) {
-                const itemProdId = canonicalId(item.product_id ?? item.productId ?? item.product?.id);
-                const price = Number(item.price ?? 0);
-                const quantity = Number(item.quantity ?? 1);
-                const itemTotal = price * quantity;
-
-                if (!hasSpecificAssignments || (itemProdId && assignedProductSet.has(itemProdId))) {
-                  assignedItemsTotal += itemTotal;
-                  hasAssignedProductInCart = true;
-                } else {
-                  unassignedItemsTotal += itemTotal;
+                const assignedProductRows = await prisma.productInfluencerAssignment.findMany({
+                  where: { organizationId: s.id, influencerId: matchedUserId },
+                  select: { product: { select: { shopifyId: true } } },
+                });
+                const assignedProductSet = new Set<string>();
+                for (const p of assignedProductRows) {
+                  const cid = canonicalId(p.product?.shopifyId);
+                  if (cid) assignedProductSet.add(cid);
                 }
-              }
 
-              if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
-                commAmount = (assignedItemsTotal * commissionRate) / 100;
-              } else if (mode === 'GATE_REQUIRED') {
-                commAmount = hasAssignedProductInCart ? (orderAmount * commissionRate) / 100 : 0;
-              } else if (mode === 'HYBRID_FALLBACK') {
-                const assignedComm = (assignedItemsTotal * commissionRate) / 100;
-                const unassignedComm = (unassignedItemsTotal * fallbackRate) / 100;
-                commAmount = assignedComm + unassignedComm;
-              } else {
-                commAmount = (orderAmount * commissionRate) / 100;
+                const rawOrder = (d as any).raw ?? (d as any).payload ?? d;
+                const lineItems = Array.isArray(rawOrder.line_items)
+                  ? rawOrder.line_items
+                  : Array.isArray(rawOrder.lineItems)
+                  ? rawOrder.lineItems
+                  : [];
+
+                let assignedItemsTotal = 0;
+                let unassignedItemsTotal = 0;
+                let hasAssignedProductInCart = false;
+                const hasSpecificAssignments = assignedProductSet.size > 0;
+
+                for (const item of lineItems) {
+                  const itemProdId = canonicalId(item.product_id ?? item.productId ?? item.product?.id);
+                  const price = Number(item.price ?? 0);
+                  const quantity = Number(item.quantity ?? 1);
+                  const itemTotal = price * quantity;
+
+                  if (!hasSpecificAssignments || (itemProdId && assignedProductSet.has(itemProdId))) {
+                    assignedItemsTotal += itemTotal;
+                    hasAssignedProductInCart = true;
+                  } else {
+                    unassignedItemsTotal += itemTotal;
+                  }
+                }
+
+                if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
+                  commAmount = (assignedItemsTotal * commissionRate) / 100;
+                } else if (mode === 'GATE_REQUIRED') {
+                  commAmount = hasAssignedProductInCart ? (orderAmount * commissionRate) / 100 : 0;
+                } else if (mode === 'HYBRID_FALLBACK') {
+                  const assignedComm = (assignedItemsTotal * commissionRate) / 100;
+                  const unassignedComm = (unassignedItemsTotal * fallbackRate) / 100;
+                  commAmount = assignedComm + unassignedComm;
+                } else {
+                  commAmount = (orderAmount * commissionRate) / 100;
+                }
               }
             }
 
@@ -694,7 +713,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
   // POST /store/orders/:orderId/attribute - Manually attribute or re-assign order to a creator
   const attributeOrderSchema = z.object({
     creatorId: z.string().nullable().optional(),
-    commissionRate: z.number().min(0).max(100).optional(),
+    commissionRate: z.number().min(0).max(999.99).optional(),
   });
 
   app.post('/store/orders/:orderId/attribute', async (req) => {
@@ -759,7 +778,15 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
 
     const amount = Number(order.total || 0);
     const isRefunded = /refund/i.test(order.financialStatus || '');
-    const commissionAmount = (amount * rate) / 100;
+
+    const storeConfig = await prisma.storeReferralConfig.findUnique({
+      where: { organizationId: s.id },
+      select: { fixedTokensEnabled: true, percentageEnabled: true, fixedTokensPerOrder: true },
+    });
+    const isFlatRupees = Boolean(storeConfig?.fixedTokensEnabled && !storeConfig?.percentageEnabled);
+    const flatAmount = Number(storeConfig?.fixedTokensPerOrder ?? 50);
+
+    const commissionAmount = isBarter ? 0 : (isFlatRupees ? flatAmount : (amount * rate) / 100);
 
     await prisma.shopifyOrder.update({
       where: { id: order.id },

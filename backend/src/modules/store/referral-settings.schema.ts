@@ -8,6 +8,10 @@ export const updateReferralSettingsSchema = z.object({
   multiProductCommissionMode: z.enum(['STORE_WIDE', 'ASSIGNED_PRODUCTS_ONLY', 'GATE_REQUIRED', 'HYBRID_FALLBACK']).optional(),
   fallbackCommissionRate: z.number().min(0).max(100).optional(),
 
+  // Commission Type & Earning Model: Flat Rate in Rupees vs Percentage
+  commissionType: z.enum(['PERCENTAGE', 'FLAT_RUPEES', 'BOTH']).optional(),
+  flatCommissionAmount: z.number().min(0).optional(),
+
   // Rule 1: Percentage of Order Rule (Inactivable)
   percentageEnabled: z.boolean().optional(),
   commissionRate: z.number().min(0).max(100).optional(),
@@ -18,7 +22,7 @@ export const updateReferralSettingsSchema = z.object({
   spendTokensRate: z.number().min(0).optional(),
   spendTokensAmount: z.number().min(1).optional(),
 
-  // Rule 3: Fixed Flat Tokens Per Order Rule (Inactivable)
+  // Rule 3: Fixed Flat Tokens / Rupees Per Order Rule (Inactivable)
   fixedTokensEnabled: z.boolean().optional(),
   fixedTokensPerOrder: z.number().min(0).optional(),
 

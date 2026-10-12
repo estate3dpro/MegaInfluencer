@@ -12,7 +12,7 @@ const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
   productIds: z.array(z.string().min(1)).min(2).max(50).optional(),
   collectionId: z.string().min(1).optional().nullable(),
-  commissionRate: z.coerce.number().min(0).max(100).default(10), expiresAt: z.coerce.date().optional().nullable(),
+  commissionRate: z.coerce.number().min(0).max(999.99).default(10), expiresAt: z.coerce.date().optional().nullable(),
 });
 const updateLinkSchema = z.object({ status: z.enum(['ACTIVE', 'PAUSED']).optional(), expiresAt: z.coerce.date().optional().nullable() });
 
@@ -185,14 +185,47 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 
     const organization = await prisma.organization.findUnique({
       where: { id: input.organizationId },
-      select: { id: true, shopDomain: true, name: true, slug: true },
+      select: { id: true, shopDomain: true, name: true, slug: true, category: true },
     });
     if (!organization) throw new AppError('STORE_NOT_FOUND', 'Store not found.', 404);
 
-    const assigned = await prisma.storeInfluencerAssignment.findUnique({
+    let assigned = await prisma.storeInfluencerAssignment.findUnique({
       where: { organizationId_influencerId: { organizationId: organization.id, influencerId: actor.userId } },
     });
-    if (!assigned) throw new AppError('NOT_ASSIGNED_TO_STORE', 'You are not assigned to this store.', 403);
+    if (!assigned) {
+      let autoApprove = true;
+      if (organization.category) {
+        try {
+          const parsed = JSON.parse(organization.category);
+          if (typeof parsed.autoApprove === 'boolean') {
+            autoApprove = parsed.autoApprove;
+          }
+        } catch {
+          if (organization.category.includes('MANUAL_APPROVE')) autoApprove = false;
+        }
+      }
+
+      if (autoApprove) {
+        assigned = await prisma.storeInfluencerAssignment.create({
+          data: {
+            organizationId: organization.id,
+            influencerId: actor.userId,
+            compensationMode: 'COMMISSION',
+          },
+        });
+      } else {
+        await prisma.storeInfluencerAssignment.create({
+          data: {
+            organizationId: organization.id,
+            influencerId: actor.userId,
+            compensationMode: 'PENDING',
+          },
+        });
+        throw new AppError('APPROVAL_PENDING', 'This store requires manual creator approval. Your application has been submitted to the store owner for review.', 403);
+      }
+    } else if (assigned.compensationMode === 'PENDING') {
+      throw new AppError('APPROVAL_PENDING', 'Your application to partner with this store is pending manual review by the store owner.', 403);
+    }
 
     let product = null;
     if (input.productId) {

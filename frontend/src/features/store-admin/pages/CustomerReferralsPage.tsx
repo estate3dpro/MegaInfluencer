@@ -788,7 +788,12 @@ export function CustomerReferralsPage() {
                     </span>{" "}
                     and earn{" "}
                     <span className="font-semibold text-primary">
-                      {overviewData?.config?.commissionRate || 10}% {overviewData?.config?.rewardMode === "CASHBACK_COMMISSION" ? "cash commissions" : "rewards"}
+                      {overviewData?.config?.commissionType === "FLAT_RUPEES"
+                        ? `₹${overviewData?.config?.flatCommissionAmount ?? overviewData?.config?.fixedTokensPerOrder ?? 100} flat`
+                        : overviewData?.config?.commissionType === "BOTH"
+                        ? `₹${overviewData?.config?.flatCommissionAmount ?? overviewData?.config?.fixedTokensPerOrder ?? 100} + ${overviewData?.config?.commissionRate || 10}%`
+                        : `${overviewData?.config?.commissionRate || 10}%`}{" "}
+                      {overviewData?.config?.rewardMode === "CASHBACK_COMMISSION" ? "cash commissions" : "rewards"}
                     </span>{" "}
                     on every approved purchase.
                   </p>
@@ -1343,7 +1348,11 @@ export function CustomerReferralsPage() {
                           </td>
                           <td className="py-3.5 px-4">
                             <div className="font-semibold text-primary">+{money.format(order.rewardAmount)}</div>
-                            <div className="text-[10px] text-muted-foreground">{order.commissionRate}% reward</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {overviewData?.config?.commissionType === "FLAT_RUPEES"
+                                ? `₹${order.commissionRate} flat`
+                                : `${order.commissionRate}% reward`}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4">
                             <Badge

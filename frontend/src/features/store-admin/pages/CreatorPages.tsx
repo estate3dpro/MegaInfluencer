@@ -18,9 +18,11 @@ import {
   RefreshCw,
   Search,
   Share2,
+  ShieldAlert,
   Sliders,
   Sparkles,
   Truck,
+  UserCheck,
   UserPlus,
   UsersRound,
   XCircle,
@@ -47,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { PlatformLinkGeneratorModal, type PlatformLinkItem } from "@/components/app/PlatformLinkGeneratorModal";
 import { createAffiliateLink, getAffiliateLinks, updateAffiliateLink } from "../api/affiliate-links.api";
@@ -57,6 +60,10 @@ import {
   getAvailableCreators,
   getStoreCommissions,
   getStoreCreators,
+  getCreatorSettings,
+  updateCreatorSettings,
+  approveCreator,
+  rejectCreator,
   sendBarterSample,
   updateCreatorCompensationMode,
   updateCommissionStatus,
@@ -135,6 +142,7 @@ export function CreatorsPage() {
   const [partnerModalOpen, setPartnerModalOpen] = useState(false);
   const [selectedInfluencerId, setSelectedInfluencerId] = useState("");
   const [assignDealMode, setAssignDealMode] = useState<CompensationMode>("COMMISSION");
+  const [tabFilter, setTabFilter] = useState<"ALL" | "APPROVED" | "PENDING" | "AVAILABLE">("ALL");
 
   // Sample Dispatch Modal State
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
@@ -148,10 +156,51 @@ export function CreatorsPage() {
   const query = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators });
   const creators = query.data ?? [];
 
+  const settingsQuery = useQuery({
+    queryKey: ["store", "creators", "settings"],
+    queryFn: getCreatorSettings,
+  });
+  const autoApprove = settingsQuery.data?.autoApproveCreators ?? true;
+
+  const toggleAutoApproveMutation = useMutation({
+    mutationFn: (newValue: boolean) => updateCreatorSettings(newValue),
+    onSuccess: (data) => {
+      client.invalidateQueries({ queryKey: ["store", "creators", "settings"] });
+      client.invalidateQueries({ queryKey: ["store", "creators"] });
+      if (data.autoApproveCreators) {
+        toast.success("⚡ Automatic Approval Active: Any registered influencer can partner and promote immediately.");
+      } else {
+        toast.info("🔒 Manual Approval Required: You now manually review and approve influencers in this roster.");
+      }
+    },
+    onError: () => toast.error("Could not update approval workflow setting"),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: ({ creatorId, compensationMode = "COMMISSION" }: { creatorId: string; compensationMode?: CompensationMode }) =>
+      approveCreator(creatorId, compensationMode),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["store", "creators"] });
+      client.invalidateQueries({ queryKey: ["store", "creators", "available"] });
+      toast.success("Influencer partner approved!");
+    },
+    onError: () => toast.error("Could not approve influencer"),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (creatorId: string) => rejectCreator(creatorId),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["store", "creators"] });
+      client.invalidateQueries({ queryKey: ["store", "creators", "available"] });
+      toast.success("Influencer removed from roster.");
+    },
+    onError: () => toast.error("Could not remove influencer"),
+  });
+
   const availableQuery = useQuery({
     queryKey: ["store", "creators", "available"],
     queryFn: getAvailableCreators,
-    enabled: partnerModalOpen,
+    enabled: partnerModalOpen || tabFilter === "AVAILABLE",
   });
 
   const assignMutation = useMutation({
@@ -206,7 +255,24 @@ export function CreatorsPage() {
     setSampleModalOpen(true);
   };
 
-  const filteredCreators = creators.filter((c: StoreCreator) =>
+  const approvedCreators = creators.filter((c) => c.approvalStatus !== "PENDING");
+  const pendingCreators = creators.filter((c) => c.approvalStatus === "PENDING");
+  const availableCreators = availableQuery.data ?? [];
+
+  const displayList =
+    tabFilter === "PENDING"
+      ? pendingCreators
+      : tabFilter === "APPROVED"
+      ? approvedCreators
+      : creators;
+
+  const filteredCreators = displayList.filter((c: StoreCreator) =>
+    `${c.displayName} ${c.email || ""} ${c.creatorCode || ""}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase())
+  );
+
+  const filteredAvailable = availableCreators.filter((c) =>
     `${c.displayName} ${c.email || ""} ${c.creatorCode || ""}`
       .toLowerCase()
       .includes(search.trim().toLowerCase())
@@ -241,28 +307,69 @@ export function CreatorsPage() {
         }
       />
 
-      {/* Guide Banner for Non-Technical Users */}
-      <div className="rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 via-background to-teal/5 p-4 text-xs text-foreground flex flex-col md:flex-row md:items-center md:justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-bold shrink-0">
-            <Sparkles className="h-5 w-5" />
+      {/* Influencer Approval Workflow Switcher Card */}
+      <div className="rounded-2xl border bg-card p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start md:items-center gap-3">
+          <div
+            className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 font-bold transition-colors ${
+              autoApprove
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            {autoApprove ? <UserCheck className="h-6 w-6" /> : <ShieldAlert className="h-6 w-6" />}
           </div>
           <div>
-            <p className="font-bold text-sm">Managing Creator Deals Made Simple</p>
-            <p className="text-muted-foreground mt-0.5">
-              • <strong>💵 Commission</strong>: Creator earns 15% on sales &nbsp;|&nbsp; • <strong>🎁 Barter</strong>: Free gifted product samples (no sales commission) &nbsp;|&nbsp; • <strong>⚡ Hybrid</strong>: Free gifted sample + 15% sales commission.
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-bold text-sm text-foreground">Influencer Approval Workflow</h3>
+              <Badge
+                variant={autoApprove ? "default" : "outline"}
+                className={`text-[11px] font-bold ${
+                  autoApprove
+                    ? "bg-emerald-600 hover:bg-emerald-600 text-white"
+                    : "text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30"
+                }`}
+              >
+                {autoApprove ? "⚡ Automatic Approval (Instant)" : "🔒 Manual Review Required"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+              {autoApprove
+                ? "Automatic: When an influencer joins or wants to promote your store, they are approved automatically and can generate links immediately."
+                : "Manual: Influencers remain in 'Pending Review' until you manually review and click 'Approve' in this roster."}
             </p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3.5 self-start md:self-center bg-muted/40 p-2.5 px-4 rounded-xl border border-border/60 shrink-0">
+          <div className="text-right">
+            <span className="text-xs font-bold text-foreground block">Auto-Approve Influencers</span>
+            <span className="text-[10px] text-muted-foreground block">
+              {autoApprove ? "Instant Partnering" : "Manual Approval"}
+            </span>
+          </div>
+          <Switch
+            checked={autoApprove}
+            disabled={toggleAutoApproveMutation.isPending}
+            onCheckedChange={(checked) => toggleAutoApproveMutation.mutate(checked)}
+          />
         </div>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-4">
         <SummaryCard
           label="Active Partners"
-          value={query.isLoading ? "..." : String(creators.length)}
-          hint="Connected influencers"
+          value={query.isLoading ? "..." : String(approvedCreators.length)}
+          hint="Approved influencers"
           icon={UsersRound}
           iconClass="bg-primary/10 text-primary"
+        />
+        <SummaryCard
+          label="Pending Review"
+          value={String(pendingCreators.length)}
+          hint={pendingCreators.length > 0 ? "Requires manual approval" : "All creators reviewed"}
+          icon={ShieldAlert}
+          iconClass={pendingCreators.length > 0 ? "bg-amber-500/15 text-amber-600 font-bold" : "bg-muted text-muted-foreground"}
         />
         <SummaryCard
           label="Instagram Verified"
@@ -270,13 +377,6 @@ export function CreatorsPage() {
           hint="With connected handle"
           icon={Instagram}
           iconClass="bg-coral/10 text-coral"
-        />
-        <SummaryCard
-          label="Creator GMV Sales"
-          value={formatCurrency(totalSalesAll)}
-          hint="Total customer sales driven"
-          icon={BadgeIndianRupee}
-          iconClass="bg-teal/10 text-teal"
         />
         <SummaryCard
           label="Total Commissions"
@@ -287,12 +387,59 @@ export function CreatorsPage() {
         />
       </section>
 
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-1.5 border-b pb-2 overflow-x-auto">
+        <Button
+          type="button"
+          size="sm"
+          variant={tabFilter === "ALL" ? "default" : "ghost"}
+          onClick={() => setTabFilter("ALL")}
+          className="h-8 rounded-lg text-xs font-bold"
+        >
+          All Partners ({creators.length})
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={tabFilter === "APPROVED" ? "default" : "ghost"}
+          onClick={() => setTabFilter("APPROVED")}
+          className="h-8 rounded-lg text-xs font-bold"
+        >
+          Approved ({approvedCreators.length})
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={tabFilter === "PENDING" ? "default" : "ghost"}
+          onClick={() => setTabFilter("PENDING")}
+          className={`h-8 rounded-lg text-xs font-bold relative ${
+            pendingCreators.length > 0 && tabFilter !== "PENDING" ? "text-amber-600 font-bold" : ""
+          }`}
+        >
+          Pending Review ({pendingCreators.length})
+          {pendingCreators.length > 0 && (
+            <span className="ml-1.5 px-1.5 py-0.2 text-[10px] font-extrabold rounded-full bg-amber-500 text-white">
+              {pendingCreators.length}
+            </span>
+          )}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={tabFilter === "AVAILABLE" ? "default" : "ghost"}
+          onClick={() => setTabFilter("AVAILABLE")}
+          className="h-8 rounded-lg text-xs font-bold"
+        >
+          Available in Directory ({availableCreators.length})
+        </Button>
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-64 flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9 h-9 text-xs rounded-xl"
-            placeholder="Search creator by name, Instagram, or code..."
+            placeholder={tabFilter === "AVAILABLE" ? "Search directory influencers..." : "Search creator by name, Instagram, or code..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -314,35 +461,108 @@ export function CreatorsPage() {
       <PageTable>
         <table className="w-full min-w-[980px] text-left text-xs">
           <thead className="border-y bg-muted/40 text-muted-foreground font-semibold">
-            <tr>
-              <th className="px-5 py-3.5">Influencer Profile</th>
-              <th className="px-5 py-3.5">Instagram</th>
-              <th className="px-5 py-3.5">Creator Code</th>
-              <th className="px-5 py-3.5 text-center">Deal Model</th>
-              <th className="px-5 py-3.5 text-right">Attributed GMV</th>
-              <th className="px-5 py-3.5 text-center">Orders</th>
-              <th className="px-5 py-3.5 text-right">Commissions</th>
-              <th className="px-5 py-3.5 text-right pr-6">Quick Actions</th>
-            </tr>
+            {tabFilter === "AVAILABLE" ? (
+              <tr>
+                <th className="px-5 py-3.5">Influencer Profile</th>
+                <th className="px-5 py-3.5">Instagram</th>
+                <th className="px-5 py-3.5">Bio / Location</th>
+                <th className="px-5 py-3.5 text-right pr-6">Quick Action</th>
+              </tr>
+            ) : (
+              <tr>
+                <th className="px-5 py-3.5">Influencer Profile</th>
+                <th className="px-5 py-3.5">Instagram</th>
+                <th className="px-5 py-3.5">Creator Code</th>
+                <th className="px-5 py-3.5 text-center">Approval Status</th>
+                <th className="px-5 py-3.5 text-center">Deal Model</th>
+                <th className="px-5 py-3.5 text-right">Attributed GMV</th>
+                <th className="px-5 py-3.5 text-center">Orders</th>
+                <th className="px-5 py-3.5 text-right">Commissions</th>
+                <th className="px-5 py-3.5 text-right pr-6">Quick Actions</th>
+              </tr>
+            )}
           </thead>
           <tbody className="divide-y divide-border/60">
-            {query.isLoading ? (
+            {tabFilter === "AVAILABLE" ? (
+              availableQuery.isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td colSpan={4} className="px-5 py-4">
+                      <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
+                    </td>
+                  </tr>
+                ))
+              ) : filteredAvailable.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-5 py-12 text-center text-muted-foreground">
+                    No available influencers found matching your search.
+                  </td>
+                </tr>
+              ) : (
+                filteredAvailable.map((creator, index) => (
+                  <tr key={creator.id} className="hover:bg-muted/15 transition-colors">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <CreatorAvatar name={creator.displayName} tone={tones[index % tones.length]} />
+                        <div>
+                          <p className="font-bold text-foreground text-xs">{creator.displayName}</p>
+                          <p className="text-[11px] text-muted-foreground">{creator.email || "No email"}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {creator.instagramUsername ? (
+                        <span className="inline-flex items-center gap-1 font-semibold text-xs text-pink-600 dark:text-pink-400">
+                          <Instagram className="h-3.5 w-3.5" />
+                          @{creator.instagramUsername}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">Not connected</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-muted-foreground text-xs">
+                      {creator.influencerProfile?.city ? `📍 ${creator.influencerProfile.city} · ` : ""}
+                      {creator.influencerProfile?.bio?.slice(0, 50) || "MegaInfluencer Verified Creator"}
+                    </td>
+                    <td className="px-5 py-3.5 text-right pr-6">
+                      <Button
+                        size="sm"
+                        disabled={assignMutation.isPending}
+                        onClick={() =>
+                          assignMutation.mutate({
+                            influencerId: creator.id,
+                            compensationMode: "COMMISSION",
+                          })
+                        }
+                        className="h-7 px-3 text-xs font-bold rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground gap-1"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" /> Approve & Partner
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )
+            ) : query.isLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <tr key={i} className="border-b last:border-0">
-                  <td colSpan={8} className="px-5 py-4">
+                  <td colSpan={9} className="px-5 py-4">
                     <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
                   </td>
                 </tr>
               ))
             ) : filteredCreators.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
-                  No creators found. Click &ldquo;Add Creator Partner&rdquo; to add influencers to your store.
+                <td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">
+                  {tabFilter === "PENDING"
+                    ? "No influencers currently waiting for approval."
+                    : "No creators found. Click \"Add Creator Partner\" to add influencers to your store."}
                 </td>
               </tr>
             ) : (
               filteredCreators.map((creator, index) => {
                 const mode = creator.compensationMode || "COMMISSION";
+                const isPending = creator.approvalStatus === "PENDING";
+
                 return (
                   <tr key={creator.id} className="hover:bg-muted/15 transition-colors">
                     <td className="px-5 py-3.5">
@@ -370,12 +590,25 @@ export function CreatorsPage() {
                       {creator.creatorCode ? `@${creator.creatorCode}` : "—"}
                     </td>
 
+                    {/* Approval Status Badge */}
+                    <td className="px-5 py-3.5 text-center">
+                      {isPending ? (
+                        <Badge variant="outline" className="text-[10px] font-bold bg-amber-500/10 text-amber-700 border-amber-300">
+                          ⏳ Pending Review
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/10 text-emerald-700 border-emerald-300">
+                          ✓ Approved
+                        </Badge>
+                      )}
+                    </td>
+
                     {/* 3-Way Deal Mode Selector */}
                     <td className="px-5 py-3.5 text-center">
                       <div className="inline-flex items-center">
                         <Select
                           value={mode}
-                          disabled={compensationMutation.isPending}
+                          disabled={compensationMutation.isPending || isPending}
                           onValueChange={(val: CompensationMode) =>
                             compensationMutation.mutate({
                               creatorId: creator.id,
@@ -422,27 +655,54 @@ export function CreatorsPage() {
                     </td>
 
                     <td className="px-5 py-3.5 text-right pr-6">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* Sample Gift Button for Barter or Hybrid */}
-                        {(mode === "BARTER" || mode === "HYBRID") && (
+                      {isPending ? (
+                        <div className="flex items-center justify-end gap-1.5">
                           <Button
                             size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenSampleModal(creator)}
-                            className="h-7 px-2 text-[11px] font-semibold text-amber-700 border-amber-300 hover:bg-amber-50 rounded-lg"
-                            title="Gift Product Sample & Track Courier"
+                            disabled={approveMutation.isPending}
+                            onClick={() =>
+                              approveMutation.mutate({
+                                creatorId: creator.id,
+                                compensationMode: mode,
+                              })
+                            }
+                            className="h-7 px-2.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg gap-1 shadow-xs"
                           >
-                            <Gift className="h-3.5 w-3.5 mr-1 text-amber-600" />
-                            {creator.sampleCount ? "Sample Sent" : "Gift Sample"}
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Approve
                           </Button>
-                        )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={rejectMutation.isPending}
+                            onClick={() => rejectMutation.mutate(creator.id)}
+                            className="h-7 px-2 text-[11px] font-semibold text-destructive hover:bg-destructive/10 rounded-lg"
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-0.5" /> Decline
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Sample Gift Button for Barter or Hybrid */}
+                          {(mode === "BARTER" || mode === "HYBRID") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenSampleModal(creator)}
+                              className="h-7 px-2 text-[11px] font-semibold text-amber-700 border-amber-300 hover:bg-amber-50 rounded-lg"
+                              title="Gift Product Sample & Track Courier"
+                            >
+                              <Gift className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                              {creator.sampleCount ? "Sample Sent" : "Gift Sample"}
+                            </Button>
+                          )}
 
-                        <Button asChild variant="ghost" size="sm" className="h-7 text-xs text-primary font-semibold">
-                          <Link to="/store-admin/creators/$creatorId" params={{ creatorId: creator.id }}>
-                            Profile <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                          </Link>
-                        </Button>
-                      </div>
+                          <Button asChild variant="ghost" size="sm" className="h-7 text-xs text-primary font-semibold">
+                            <Link to="/store-admin/creators/$creatorId" params={{ creatorId: creator.id }}>
+                              Profile <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                            </Link>
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

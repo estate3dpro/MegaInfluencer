@@ -4,14 +4,41 @@ import { AppError } from '../../shared/errors/app-error.js';
 import { decryptToken } from '../instagram/instagram.crypto.js';
 import { getInstagramProfile } from '../instagram/instagram.client.js';
 import { getAssignedProductIds, setCreatorProductAssignments } from '../product-assignments/product-assignments.service.js';
+import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 
 export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
 
   async function organization(userId: string) {
-    const org = await prisma.organization.findFirst({ where: { ownerId: userId }, select: { id: true, name: true } });
+    const org = await prisma.organization.findFirst({ where: { ownerId: userId }, select: { id: true, name: true, category: true } });
     if (!org) throw new AppError('STORE_NOT_FOUND', 'Store not found.', 404);
     return org;
+  }
+
+  function getAutoApproveSetting(categoryStr: string | null): boolean {
+    if (!categoryStr) return true;
+    try {
+      const parsed = JSON.parse(categoryStr);
+      if (typeof parsed.autoApprove === 'boolean') {
+        return parsed.autoApprove;
+      }
+    } catch {
+      if (categoryStr.includes('MANUAL_APPROVE')) return false;
+    }
+    return true;
+  }
+
+  function encodeAutoApproveSetting(existingCategory: string | null, autoApprove: boolean): string {
+    let data: any = {};
+    if (existingCategory) {
+      try {
+        data = JSON.parse(existingCategory);
+      } catch {
+        data = { originalCategory: existingCategory };
+      }
+    }
+    data.autoApprove = autoApprove;
+    return JSON.stringify(data);
   }
 
   // GET /store/creators
@@ -66,7 +93,9 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           }
         }
 
-        const mode = row.compensationMode || 'COMMISSION'; // 'COMMISSION' | 'BARTER' | 'HYBRID'
+        const rawMode = row.compensationMode || 'COMMISSION';
+        const isPending = rawMode === 'PENDING';
+        const mode = isPending ? 'COMMISSION' : rawMode;
         const samples = inf.barterFulfillments ?? [];
 
         return {
@@ -84,6 +113,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           totalOrders,
           totalCommissions: mode === 'BARTER' ? 0 : totalCommissions,
           compensationMode: mode,
+          approvalStatus: isPending ? 'PENDING' : 'APPROVED',
           barterOrders: mode === 'BARTER' ? totalOrders : 0,
           barterGmv: mode === 'BARTER' ? totalSales : 0,
           activeLinks,
@@ -91,6 +121,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           recentSample: samples[0] || null,
         };
       })),
+      autoApproveCreators: getAutoApproveSetting(org.category),
     };
   });
 
@@ -189,6 +220,93 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return { ok: true, compensationMode };
+  });
+
+  // GET /store/creators/settings
+  app.get('/store/creators/settings', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    return {
+      autoApproveCreators: getAutoApproveSetting(org.category),
+    };
+  });
+
+  // PATCH /store/creators/settings
+  app.patch('/store/creators/settings', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const body = req.body as { autoApproveCreators: boolean };
+    const autoApprove = Boolean(body.autoApproveCreators);
+
+    const updatedCategory = encodeAutoApproveSetting(org.category, autoApprove);
+    await prisma.organization.update({
+      where: { id: org.id },
+      data: { category: updatedCategory },
+    });
+
+    return {
+      ok: true,
+      autoApproveCreators: autoApprove,
+    };
+  });
+
+  // POST /store/creators/:creatorId/approve
+  app.post('/store/creators/:creatorId/approve', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const { creatorId } = req.params as { creatorId: string };
+    const { compensationMode } = (req.body as any) || {};
+
+    const mode = ['COMMISSION', 'BARTER', 'HYBRID'].includes(compensationMode)
+      ? compensationMode
+      : 'COMMISSION';
+
+    await prisma.storeInfluencerAssignment.upsert({
+      where: {
+        organizationId_influencerId: {
+          organizationId: org.id,
+          influencerId: creatorId,
+        },
+      },
+      create: {
+        organizationId: org.id,
+        influencerId: creatorId,
+        compensationMode: mode,
+      },
+      update: {
+        compensationMode: mode,
+      },
+    });
+
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: creatorId,
+          title: 'Store Partnership Approved',
+          message: `Congratulations! ${org.name} has approved your partnership. You can now generate affiliate links!`,
+          kind: 'AFFILIATE',
+          link: '/influencer/affiliate',
+        },
+      });
+    } catch {}
+
+    return { ok: true, message: 'Creator approved successfully!' };
+  });
+
+  // DELETE /store/creators/:creatorId
+  app.delete('/store/creators/:creatorId', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const { creatorId } = req.params as { creatorId: string };
+
+    await prisma.storeInfluencerAssignment.deleteMany({
+      where: {
+        organizationId: org.id,
+        influencerId: creatorId,
+      },
+    });
+
+    return { ok: true, message: 'Creator partnership removed.' };
   });
 
   // POST /store/creators/:creatorId/barter-sample (Send or update product sample tracking)
@@ -423,7 +541,37 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     const { creatorId } = req.params as { creatorId: string };
     const assignment = await prisma.storeInfluencerAssignment.findFirst({
       where: { organizationId: org.id, influencerId: creatorId },
-      include: { influencer: { include: { instagramConnection: true } } },
+      include: {
+        influencer: {
+          include: {
+            instagramConnection: true,
+            influencerProfile: true,
+            affiliateLinks: {
+              where: { organizationId: org.id },
+              include: {
+                product: { select: { title: true, imageUrl: true } },
+                collection: { select: { title: true } },
+                _count: { select: { clicks: true } },
+                commissions: { select: { id: true, orderAmount: true, amount: true, status: true } },
+                trackedOrders: { select: { id: true, total: true, financialStatus: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+            affiliateCommissions: {
+              where: { organizationId: org.id },
+              include: {
+                shopifyOrder: { select: { id: true, name: true, total: true, financialStatus: true, processedAt: true } },
+                link: { select: { slug: true, commissionRate: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+            barterFulfillments: {
+              where: { organizationId: org.id },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+      },
     });
     if (!assignment) throw new AppError('CREATOR_NOT_FOUND', 'Creator is not assigned to this store.', 404);
     let instagramStatistics = null;
@@ -435,17 +583,92 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
     const assignedProductIds = await getAssignedProductIds(app, org.id, creatorId);
+
+    const inf = assignment.influencer;
+    const commissions = (inf.affiliateCommissions ?? []).filter((c: any) => c.status !== 'REVERSED');
+    const totalSales = commissions.reduce((sum: number, c: any) => sum + Number(c.orderAmount || 0), 0);
+    const totalCommissions = commissions.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
+    const totalOrders = commissions.length;
+
+    const baseUrl = getFrontendBaseUrl(req);
+    const rawLinks = inf.affiliateLinks ?? [];
+    const totalClicks = rawLinks.reduce((sum: number, l: any) => sum + Number(l._count?.clicks ?? 0), 0);
+    const conversionRate = totalClicks > 0 ? (totalOrders / totalClicks) * 100 : 0;
+
+    const links = rawLinks.map((l: any) => {
+      const linkComms = (l.commissions ?? []).filter((c: any) => c.status !== 'REVERSED');
+      const clicks = Number(l._count?.clicks ?? 0);
+      const orders = linkComms.length;
+      const rev = linkComms.reduce((sum: number, c: any) => sum + Number(c.orderAmount || 0), 0);
+      return {
+        id: l.id,
+        slug: l.slug,
+        url: `${baseUrl}/r/${l.slug}`,
+        targetType: l.targetType,
+        product: l.product?.title ?? null,
+        collection: l.collection?.title ?? null,
+        commissionRate: Number(l.commissionRate),
+        status: l.status,
+        clicks,
+        orders,
+        revenue: rev,
+        createdAt: l.createdAt,
+      };
+    });
+
+    const barterFulfillments = (inf.barterFulfillments ?? []).map((b: any) => ({
+      id: b.id,
+      productTitle: b.productTitle,
+      status: b.status,
+      trackingNumber: b.trackingNumber,
+      carrier: b.carrier,
+      shippedAt: b.shippedAt,
+      deliveredAt: b.deliveredAt,
+      createdAt: b.createdAt,
+    }));
+
+    const recentOrders = (inf.affiliateCommissions ?? []).slice(0, 10).map((c: any) => ({
+      id: c.id,
+      orderName: c.shopifyOrder?.name ?? 'Order',
+      orderAmount: Number(c.orderAmount),
+      commissionRate: Number(c.commissionRate),
+      amount: Number(c.amount),
+      status: c.status,
+      processedAt: c.shopifyOrder?.processedAt ?? c.createdAt,
+    }));
+
+    const mode = assignment.compensationMode ?? 'COMMISSION';
+
     return {
       creator: {
-        id: assignment.influencer.id,
-        displayName: assignment.influencer.displayName,
-        email: assignment.influencer.email,
-        creatorCode: assignment.influencer.creatorCode,
-        instagramUsername: assignment.influencer.instagramConnection?.username ?? null,
+        id: inf.id,
+        displayName: inf.displayName,
+        email: inf.email,
+        status: inf.status,
+        creatorCode: inf.creatorCode,
+        createdAt: inf.createdAt,
+        instagramUsername: inf.instagramConnection?.username ?? null,
         instagramFollowersCount: instagramStatistics?.followers_count ?? null,
+        instagramMediaCount: instagramStatistics?.media_count ?? null,
         assignedProductIds,
-        compensationMode: assignment.compensationMode ?? 'COMMISSION',
+        compensationMode: mode,
+        profile: inf.influencerProfile,
       },
+      assignedAt: assignment.createdAt,
+      compensationMode: mode,
+      instagramStatistics,
+      metrics: {
+        totalSales,
+        totalOrders,
+        totalCommissions: mode === 'BARTER' ? 0 : totalCommissions,
+        totalClicks,
+        conversionRate: Math.round(conversionRate * 10) / 10,
+        activeLinksCount: links.filter((l: any) => l.status === 'ACTIVE').length,
+        sampleCount: barterFulfillments.length,
+      },
+      links,
+      recentOrders,
+      barterFulfillments,
     };
   });
 

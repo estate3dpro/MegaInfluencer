@@ -70,6 +70,8 @@ export const storeReferralSettingsRoutes: FastifyPluginAsync = async (app) => {
         organizationId: config.organizationId,
         isEnabled: config.isEnabled,
         rewardMode: config.rewardMode,
+        commissionType: config.fixedTokensEnabled && !config.percentageEnabled ? 'FLAT_RUPEES' : (config.fixedTokensEnabled && config.percentageEnabled ? 'BOTH' : 'PERCENTAGE'),
+        flatCommissionAmount: Number(config.fixedTokensPerOrder ?? 50),
         multiProductCommissionMode: config.multiProductCommissionMode ?? 'STORE_WIDE',
         fallbackCommissionRate: Number(config.fallbackCommissionRate ?? 0),
         percentageEnabled: config.percentageEnabled ?? true,
@@ -104,6 +106,26 @@ export const storeReferralSettingsRoutes: FastifyPluginAsync = async (app) => {
     const store = await storeFor(app, actor.userId);
     const input = parseOrThrow(updateReferralSettingsSchema, request.body);
 
+    // Map simplified commissionType to database fields
+    let percentageEnabled = input.percentageEnabled;
+    let fixedTokensEnabled = input.fixedTokensEnabled;
+    let fixedTokensPerOrder = input.fixedTokensPerOrder;
+
+    if (input.commissionType === 'FLAT_RUPEES') {
+      fixedTokensEnabled = true;
+      percentageEnabled = false;
+    } else if (input.commissionType === 'PERCENTAGE') {
+      fixedTokensEnabled = false;
+      percentageEnabled = true;
+    } else if (input.commissionType === 'BOTH') {
+      fixedTokensEnabled = true;
+      percentageEnabled = true;
+    }
+
+    if (input.flatCommissionAmount !== undefined) {
+      fixedTokensPerOrder = Math.round(input.flatCommissionAmount);
+    }
+
     const updated = await prisma.storeReferralConfig.upsert({
       where: { organizationId: store.id },
       create: {
@@ -112,14 +134,14 @@ export const storeReferralSettingsRoutes: FastifyPluginAsync = async (app) => {
         rewardMode: input.rewardMode ?? 'POINTS',
         multiProductCommissionMode: input.multiProductCommissionMode ?? 'STORE_WIDE',
         fallbackCommissionRate: input.fallbackCommissionRate ?? 0,
-        percentageEnabled: input.percentageEnabled ?? true,
+        percentageEnabled: percentageEnabled ?? true,
         commissionRate: input.commissionRate ?? 10,
         pointsPerCurrency: input.pointsPerCurrency ?? 1,
         spendTokensEnabled: input.spendTokensEnabled ?? false,
         spendTokensRate: input.spendTokensRate ?? 10,
         spendTokensAmount: input.spendTokensAmount ?? 100,
-        fixedTokensEnabled: input.fixedTokensEnabled ?? false,
-        fixedTokensPerOrder: input.fixedTokensPerOrder ?? 50,
+        fixedTokensEnabled: fixedTokensEnabled ?? false,
+        fixedTokensPerOrder: fixedTokensPerOrder ?? 50,
         welcomeBonusEnabled: input.welcomeBonusEnabled ?? true,
         welcomeBonusPoints: input.welcomeBonusPoints ?? 100,
         minPayoutAmount: input.minPayoutAmount ?? 500,
@@ -139,14 +161,14 @@ export const storeReferralSettingsRoutes: FastifyPluginAsync = async (app) => {
         ...(input.rewardMode !== undefined ? { rewardMode: input.rewardMode } : {}),
         ...(input.multiProductCommissionMode !== undefined ? { multiProductCommissionMode: input.multiProductCommissionMode } : {}),
         ...(input.fallbackCommissionRate !== undefined ? { fallbackCommissionRate: input.fallbackCommissionRate } : {}),
-        ...(input.percentageEnabled !== undefined ? { percentageEnabled: input.percentageEnabled } : {}),
+        ...(percentageEnabled !== undefined ? { percentageEnabled } : {}),
         ...(input.commissionRate !== undefined ? { commissionRate: input.commissionRate } : {}),
         ...(input.pointsPerCurrency !== undefined ? { pointsPerCurrency: input.pointsPerCurrency } : {}),
         ...(input.spendTokensEnabled !== undefined ? { spendTokensEnabled: input.spendTokensEnabled } : {}),
         ...(input.spendTokensRate !== undefined ? { spendTokensRate: input.spendTokensRate } : {}),
         ...(input.spendTokensAmount !== undefined ? { spendTokensAmount: input.spendTokensAmount } : {}),
-        ...(input.fixedTokensEnabled !== undefined ? { fixedTokensEnabled: input.fixedTokensEnabled } : {}),
-        ...(input.fixedTokensPerOrder !== undefined ? { fixedTokensPerOrder: input.fixedTokensPerOrder } : {}),
+        ...(fixedTokensEnabled !== undefined ? { fixedTokensEnabled } : {}),
+        ...(fixedTokensPerOrder !== undefined ? { fixedTokensPerOrder } : {}),
         ...(input.welcomeBonusEnabled !== undefined ? { welcomeBonusEnabled: input.welcomeBonusEnabled } : {}),
         ...(input.welcomeBonusPoints !== undefined ? { welcomeBonusPoints: input.welcomeBonusPoints } : {}),
         ...(input.minPayoutAmount !== undefined ? { minPayoutAmount: input.minPayoutAmount } : {}),
@@ -163,6 +185,9 @@ export const storeReferralSettingsRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
+    const isUpdatedFlat = Boolean(updated.fixedTokensEnabled && !updated.percentageEnabled);
+    const isUpdatedBoth = Boolean(updated.fixedTokensEnabled && updated.percentageEnabled);
+
     return {
       ok: true,
       config: {
@@ -170,6 +195,8 @@ export const storeReferralSettingsRoutes: FastifyPluginAsync = async (app) => {
         organizationId: updated.organizationId,
         isEnabled: updated.isEnabled,
         rewardMode: updated.rewardMode,
+        commissionType: isUpdatedFlat ? 'FLAT_RUPEES' : isUpdatedBoth ? 'BOTH' : 'PERCENTAGE',
+        flatCommissionAmount: Number(updated.fixedTokensPerOrder ?? 50),
         multiProductCommissionMode: updated.multiProductCommissionMode ?? 'STORE_WIDE',
         fallbackCommissionRate: Number(updated.fallbackCommissionRate ?? 0),
         percentageEnabled: updated.percentageEnabled ?? true,
@@ -355,7 +382,12 @@ export const storeReferralSettingsRoutes: FastifyPluginAsync = async (app) => {
 
     return {
       store: { id: store.id, name: store.name, slug: store.slug },
-      config,
+      config: {
+        ...config,
+        commissionType: config.fixedTokensEnabled && !config.percentageEnabled ? 'FLAT_RUPEES' : (config.fixedTokensEnabled && config.percentageEnabled ? 'BOTH' : 'PERCENTAGE'),
+        flatCommissionAmount: Number(config.fixedTokensPerOrder ?? 50),
+        commissionRate: Number(config.commissionRate ?? 10),
+      },
       metrics: {
         totalAdvocates: advocatesList.length,
         totalSales,

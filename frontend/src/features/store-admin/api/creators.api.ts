@@ -21,6 +21,7 @@ export type StoreCreator = {
   barterOrders?: number;
   barterGmv?: number;
   sampleCount?: number;
+  approvalStatus?: "APPROVED" | "PENDING";
   recentSample?: {
     id: string;
     productTitle: string;
@@ -130,21 +131,109 @@ export async function sendBarterSample(
   return (await apiClient.post<{ ok: boolean; sample: any }>(`/store/creators/${creatorId}/barter-sample`, data)).data;
 }
 
-export async function getStoreCreatorDetails(creatorId: string) {
+export async function getCreatorSettings() {
+  return (await apiClient.get<{ autoApproveCreators: boolean }>("/store/creators/settings")).data;
+}
+
+export async function updateCreatorSettings(autoApproveCreators: boolean) {
   return (
-    await apiClient.get<{
-      creator: {
-        id: string;
-        displayName: string;
-        email: string | null;
-        creatorCode: string | null;
-        instagramUsername: string | null;
-        instagramFollowersCount?: number | null;
-        assignedProductIds: string[];
-        compensationMode: CompensationMode;
-      };
-    }>(`/store/creators/${creatorId}`)
-  ).data.creator;
+    await apiClient.patch<{ ok: boolean; autoApproveCreators: boolean }>(
+      "/store/creators/settings",
+      { autoApproveCreators },
+    )
+  ).data;
+}
+
+export async function approveCreator(creatorId: string, compensationMode: CompensationMode = "COMMISSION") {
+  return (
+    await apiClient.post<{ ok: boolean; message: string }>(
+      `/store/creators/${creatorId}/approve`,
+      { compensationMode },
+    )
+  ).data;
+}
+
+export async function rejectCreator(creatorId: string) {
+  return (
+    await apiClient.delete<{ ok: boolean; message: string }>(
+      `/store/creators/${creatorId}`,
+    )
+  ).data;
+}
+
+export type CreatorDetailsResponse = {
+  creator: {
+    id: string;
+    displayName: string;
+    email: string | null;
+    status: string;
+    creatorCode: string | null;
+    createdAt?: string;
+    instagramUsername: string | null;
+    instagramFollowersCount?: number | null;
+    instagramMediaCount?: number | null;
+    assignedProductIds: string[];
+    compensationMode: CompensationMode;
+    profile?: {
+      firstName?: string;
+      lastName?: string;
+      phone?: string | null;
+      bio?: string | null;
+      city?: string | null;
+      country?: string | null;
+      niches?: string[];
+      profileImageUrl?: string | null;
+    } | null;
+  };
+  assignedAt: string;
+  compensationMode: CompensationMode;
+  instagramStatistics?: any;
+  metrics: {
+    totalSales: number;
+    totalOrders: number;
+    totalCommissions: number;
+    totalClicks: number;
+    conversionRate: number;
+    activeLinksCount: number;
+    sampleCount: number;
+  };
+  links: Array<{
+    id: string;
+    slug: string;
+    url: string;
+    targetType: string;
+    product?: string | null;
+    collection?: string | null;
+    commissionRate: number;
+    status: string;
+    clicks: number;
+    orders: number;
+    revenue: number;
+    createdAt: string;
+  }>;
+  recentOrders: Array<{
+    id: string;
+    orderName: string;
+    orderAmount: number;
+    commissionRate: number;
+    amount: number;
+    status: string;
+    processedAt: string;
+  }>;
+  barterFulfillments: Array<{
+    id: string;
+    productTitle: string;
+    status: string;
+    trackingNumber?: string | null;
+    carrier?: string | null;
+    shippedAt?: string | null;
+    deliveredAt?: string | null;
+    createdAt: string;
+  }>;
+};
+
+export async function getStoreCreatorDetails(creatorId: string) {
+  return (await apiClient.get<CreatorDetailsResponse>(`/store/creators/${creatorId}`)).data;
 }
 
 export async function updateStoreCreatorProducts(creatorId: string, productIds: string[]) {

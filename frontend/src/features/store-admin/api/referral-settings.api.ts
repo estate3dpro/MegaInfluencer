@@ -11,6 +11,10 @@ export type StoreReferralConfig = {
   multiProductCommissionMode?: MultiProductCommissionMode;
   fallbackCommissionRate?: number;
   
+  // Commission Type: Flat Rate in Rupees vs Percentage
+  commissionType?: "PERCENTAGE" | "FLAT_RUPEES" | "BOTH";
+  flatCommissionAmount?: number;
+
   // Rule 1: Percentage
   percentageEnabled: boolean;
   commissionRate: number;
