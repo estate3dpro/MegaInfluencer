@@ -1,10 +1,33 @@
+import argon2 from 'argon2';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { decryptToken } from '../instagram/instagram.crypto.js';
 import { getInstagramProfile } from '../instagram/instagram.client.js';
 import { getAssignedProductIds, setCreatorProductAssignments } from '../product-assignments/product-assignments.service.js';
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
+import { ensureCreatorCode } from '../../shared/creator-code.js';
+import { createSession } from '../../shared/auth/session.js';
+
+const passwordOptions = {
+  type: argon2.argon2id,
+  memoryCost: 19_456,
+  timeCost: 2,
+  parallelism: 1,
+};
+
+const createCreatorSchema = z.object({
+  displayName: z.string().trim().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email().optional().nullable().or(z.literal('')),
+  password: z.string().min(6, 'Password must be at least 6 characters').optional().nullable().or(z.literal('')),
+  phone: z.string().trim().optional().nullable().or(z.literal('')),
+  instagramUsername: z.string().trim().optional().nullable().or(z.literal('')),
+  compensationMode: z.enum(['COMMISSION', 'BARTER', 'HYBRID']).default('COMMISSION'),
+  bio: z.string().trim().optional().nullable().or(z.literal('')),
+  city: z.string().trim().optional().nullable().or(z.literal('')),
+  autoCreateLink: z.boolean().default(true),
+});
 
 export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
@@ -57,6 +80,8 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
             status: true,
             creatorCode: true,
             createdAt: true,
+            termsAcceptedAt: true,
+            termsVersion: true,
             instagramConnection: { select: { username: true, displayName: true, status: true, encryptedAccessToken: true } },
             affiliateLinks: {
               where: { organizationId: org.id },
@@ -105,6 +130,8 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           status: inf.status,
           creatorCode: inf.creatorCode,
           assignedAt: row.createdAt,
+          termsAcceptedAt: inf.termsAcceptedAt ?? (inf.instagramConnection?.status === 'ACTIVE' ? inf.createdAt : null),
+          termsVersion: inf.termsVersion ?? (inf.instagramConnection?.status === 'ACTIVE' ? 'v1.0' : null),
           instagramUsername: inf.instagramConnection?.username ?? null,
           instagramStatus: inf.instagramConnection?.status ?? null,
           instagramFollowersCount: instagramStatistics?.followers_count ?? null,
@@ -113,6 +140,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           totalOrders,
           totalCommissions: mode === 'BARTER' ? 0 : totalCommissions,
           compensationMode: mode,
+          autoCommission: (row as any).autoCommission ?? true,
           approvalStatus: isPending ? 'PENDING' : 'APPROVED',
           barterOrders: mode === 'BARTER' ? totalOrders : 0,
           barterGmv: mode === 'BARTER' ? totalSales : 0,
@@ -147,6 +175,9 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
         displayName: true,
         email: true,
         creatorCode: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
+        createdAt: true,
         influencerProfile: {
           select: { firstName: true, lastName: true, bio: true, city: true },
         },
@@ -156,7 +187,179 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       },
     });
 
-    return { creators: available };
+    return {
+      creators: available.map((inf: any) => ({
+        id: inf.id,
+        displayName: inf.displayName,
+        email: inf.email,
+        creatorCode: inf.creatorCode,
+        instagramUsername: inf.instagramConnection?.username ?? null,
+        termsAcceptedAt: inf.termsAcceptedAt ?? (inf.instagramConnection?.status === 'ACTIVE' ? inf.createdAt : null),
+        termsVersion: inf.termsVersion ?? (inf.instagramConnection?.status === 'ACTIVE' ? 'v1.0' : null),
+        influencerProfile: inf.influencerProfile,
+      })),
+    };
+  });
+
+  // POST /store/creators (Create & Onboard New Creator)
+  app.post('/store/creators', async (req, reply) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const input = createCreatorSchema.parse(req.body);
+
+    const email = input.email && input.email.trim() ? input.email.trim().toLowerCase() : null;
+    let influencer: any = null;
+
+    if (email) {
+      influencer = await prisma.user.findUnique({
+        where: { email },
+        include: { influencerProfile: true, instagramConnection: true },
+      });
+      if (influencer && influencer.role !== 'INFLUENCER') {
+        throw new AppError('EMAIL_IN_USE', `This email is already registered as a ${influencer.role.toLowerCase()}.`, 409);
+      }
+    }
+
+    if (!influencer && input.phone && input.phone.trim()) {
+      const existingPhone = await prisma.influencerProfile.findUnique({
+        where: { phone: input.phone.trim() },
+        select: { userId: true },
+      });
+      if (existingPhone) {
+        throw new AppError('PHONE_IN_USE', 'An influencer profile already exists with this phone number.', 409);
+      }
+    }
+
+    const rawPassword = input.password && input.password.trim() ? input.password.trim() : null;
+    if (rawPassword && !email) {
+      throw new AppError('EMAIL_REQUIRED_FOR_PASSWORD', 'An email address is required to set a portal login password.', 400);
+    }
+    const passwordHash = rawPassword ? await argon2.hash(rawPassword, passwordOptions) : null;
+
+    if (!influencer) {
+      const nameParts = input.displayName.trim().split(/\s+/);
+      const firstName = nameParts[0] || input.displayName.trim();
+      const lastName = nameParts.slice(1).join(' ') || firstName;
+
+      const cleanHandle = input.instagramUsername
+        ? input.instagramUsername.replace(/^@/, '').trim()
+        : null;
+
+      influencer = await prisma.user.create({
+        data: {
+          displayName: input.displayName.trim(),
+          email: email || null,
+          passwordHash: passwordHash || null,
+          role: 'INFLUENCER',
+          status: 'ACTIVE',
+          influencerProfile: {
+            create: {
+              firstName,
+              lastName,
+              phone: input.phone?.trim() || null,
+              bio: input.bio?.trim() || null,
+              city: input.city?.trim() || null,
+            },
+          },
+          ...(cleanHandle
+            ? {
+                instagramConnection: {
+                  create: {
+                    instagramUserId: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    username: cleanHandle,
+                    displayName: input.displayName.trim(),
+                    encryptedAccessToken: 'MANUAL_ONBOARDED',
+                    status: 'ACTIVE',
+                  },
+                },
+              }
+            : {}),
+        },
+        include: {
+          influencerProfile: true,
+          instagramConnection: true,
+        },
+      });
+
+      await ensureCreatorCode(prisma, influencer.id);
+    } else {
+      if (rawPassword && !influencer.passwordHash) {
+        await prisma.user.update({
+          where: { id: influencer.id },
+          data: { passwordHash },
+        });
+      }
+      await ensureCreatorCode(prisma, influencer.id);
+    }
+
+    // Assign to store with chosen compensationMode
+    const assignment = await prisma.storeInfluencerAssignment.upsert({
+      where: {
+        organizationId_influencerId: {
+          organizationId: org.id,
+          influencerId: influencer.id,
+        },
+      },
+      create: {
+        organizationId: org.id,
+        influencerId: influencer.id,
+        compensationMode: input.compensationMode,
+      },
+      update: {
+        compensationMode: input.compensationMode,
+      },
+    });
+
+    let link: any = null;
+    if (input.autoCreateLink !== false) {
+      const existingLink = await prisma.affiliateLink.findFirst({
+        where: { organizationId: org.id, creatorId: influencer.id, targetType: 'STORE' },
+      });
+      if (!existingLink) {
+        const creatorCode = (await prisma.user.findUnique({ where: { id: influencer.id }, select: { creatorCode: true } }))?.creatorCode;
+        const slug = `link_${creatorCode ? creatorCode.toLowerCase() : influencer.id.slice(-6)}_${Date.now().toString(36).slice(-4)}`;
+        link = await prisma.affiliateLink.create({
+          data: {
+            organizationId: org.id,
+            creatorId: influencer.id,
+            targetType: 'STORE',
+            destinationPath: '/',
+            commissionType: 'PERCENTAGE',
+            commissionRate: 10,
+            slug,
+          },
+        });
+      } else {
+        link = existingLink;
+      }
+    }
+
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: influencer.id },
+      include: {
+        instagramConnection: true,
+      },
+    });
+
+    return reply.code(201).send({
+      ok: true,
+      creator: {
+        id: updatedUser.id,
+        displayName: updatedUser.displayName,
+        email: updatedUser.email,
+        status: updatedUser.status,
+        creatorCode: updatedUser.creatorCode,
+        instagramUsername: updatedUser.instagramConnection?.username ?? null,
+        instagramStatus: updatedUser.instagramConnection?.status ?? null,
+        assignedAt: assignment.createdAt || new Date().toISOString(),
+        compensationMode: input.compensationMode,
+        totalSales: 0,
+        totalOrders: 0,
+        totalCommissions: 0,
+        activeLinks: link ? 1 : 0,
+        approvalStatus: 'APPROVED',
+      },
+    });
   });
 
   // POST /store/creators/assign
@@ -220,6 +423,170 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return { ok: true, compensationMode };
+  });
+
+  // PATCH /store/creators/:creatorId/auto-commission (Influencer-wise Auto Commission On/Off Toggle)
+  app.patch('/store/creators/:creatorId/auto-commission', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const { creatorId } = req.params as { creatorId: string };
+    const { autoCommission } = req.body as { autoCommission?: boolean };
+
+    if (typeof autoCommission !== 'boolean') {
+      throw new AppError('INVALID_INPUT', 'autoCommission must be a boolean', 400);
+    }
+
+    const assignment = await prisma.storeInfluencerAssignment.updateMany({
+      where: { organizationId: org.id, influencerId: creatorId },
+      data: { autoCommission },
+    });
+    if (!assignment.count) {
+      throw new AppError('CREATOR_NOT_FOUND', 'Creator is not assigned to this store.', 404);
+    }
+
+    return { ok: true, autoCommission };
+  });
+
+  // POST /store/creators/:creatorId/manual-commission (Store admin adds a manual commission / bonus)
+  app.post('/store/creators/:creatorId/manual-commission', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const { creatorId } = req.params as { creatorId: string };
+    const { amount, orderName, notes, status = 'APPROVED' } = req.body as {
+      amount: number;
+      orderName?: string;
+      notes?: string;
+      status?: 'APPROVED' | 'PENDING' | 'PAID';
+    };
+
+    const commAmount = Number(amount);
+    if (isNaN(commAmount) || commAmount <= 0) {
+      throw new AppError('INVALID_AMOUNT', 'Commission amount must be greater than 0', 400);
+    }
+
+    const creator = await prisma.user.findFirst({
+      where: { id: creatorId, role: 'INFLUENCER' },
+    });
+    if (!creator) {
+      throw new AppError('CREATOR_NOT_FOUND', 'Creator not found', 404);
+    }
+
+    let link = await prisma.affiliateLink.findFirst({
+      where: { organizationId: org.id, creatorId: creator.id, status: 'ACTIVE' },
+    });
+    if (!link) {
+      link = await prisma.affiliateLink.create({
+        data: {
+          organizationId: org.id,
+          creatorId: creator.id,
+          targetType: 'STORE',
+          destinationPath: '/',
+          commissionRate: 10,
+          slug: `manual_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
+        },
+      });
+    }
+
+    const manualOrderId = `manual_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const order = await prisma.shopifyOrder.create({
+      data: {
+        organizationId: org.id,
+        shopifyId: manualOrderId,
+        name: orderName?.trim() || `Manual Commission #${Date.now().toString().slice(-4)}`,
+        total: commAmount,
+        currency: 'INR',
+        financialStatus: 'paid',
+        fulfillmentStatus: 'fulfilled',
+        creatorCode: creator.creatorCode,
+        affiliateLinkId: link.id,
+        processedAt: new Date(),
+      },
+    });
+
+    const commission = await prisma.affiliateCommission.create({
+      data: {
+        organizationId: org.id,
+        linkId: link.id,
+        creatorId: creator.id,
+        shopifyOrderId: order.id,
+        orderAmount: commAmount,
+        commissionType: 'FIXED_AMOUNT',
+        commissionRate: 0,
+        amount: commAmount,
+        status: ['APPROVED', 'PENDING', 'PAID'].includes(status) ? status : 'APPROVED',
+      },
+    });
+
+    return { ok: true, commission, order };
+  });
+
+  // POST /store/creators/:creatorId/impersonate (Store Admin impersonates an influencer assigned to their store)
+  app.post('/store/creators/:creatorId/impersonate', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const { creatorId } = req.params as { creatorId: string };
+
+    const assignment = await prisma.storeInfluencerAssignment.findUnique({
+      where: {
+        organizationId_influencerId: {
+          organizationId: org.id,
+          influencerId: creatorId,
+        },
+      },
+      include: {
+        influencer: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            role: true,
+            status: true,
+            creatorCode: true,
+          },
+        },
+      },
+    });
+
+    if (!assignment || !assignment.influencer) {
+      throw new AppError('CREATOR_NOT_FOUND', 'This influencer is not assigned to your store.', 404);
+    }
+
+    if (assignment.influencer.status !== 'ACTIVE') {
+      throw new AppError('CREATOR_INACTIVE', 'This influencer account is currently inactive.', 400);
+    }
+
+    const tokens = await createSession(app, {
+      id: assignment.influencer.id,
+      role: assignment.influencer.role,
+    });
+
+    const adminUser = await prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { id: true, displayName: true, email: true },
+    });
+
+    return {
+      ok: true,
+      user: {
+        id: assignment.influencer.id,
+        email: assignment.influencer.email,
+        name: assignment.influencer.displayName,
+        displayName: assignment.influencer.displayName,
+        creatorCode: assignment.influencer.creatorCode,
+        roles: ['influencer'],
+        activeRole: 'influencer',
+      },
+      tokens,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      impersonatedBy: {
+        id: actor.userId,
+        adminId: actor.userId,
+        name: adminUser?.displayName || 'Store Admin',
+        storeId: org.id,
+        storeName: org.name,
+      },
+    };
   });
 
   // GET /store/creators/settings
@@ -647,15 +1014,19 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
         status: inf.status,
         creatorCode: inf.creatorCode,
         createdAt: inf.createdAt,
+        termsAcceptedAt: inf.termsAcceptedAt ?? (inf.instagramConnection?.status === 'ACTIVE' ? inf.createdAt : null),
+        termsVersion: inf.termsVersion ?? (inf.instagramConnection?.status === 'ACTIVE' ? 'v1.0' : null),
         instagramUsername: inf.instagramConnection?.username ?? null,
         instagramFollowersCount: instagramStatistics?.followers_count ?? null,
         instagramMediaCount: instagramStatistics?.media_count ?? null,
         assignedProductIds,
         compensationMode: mode,
+        autoCommission: (assignment as any).autoCommission ?? true,
         profile: inf.influencerProfile,
       },
       assignedAt: assignment.createdAt,
       compensationMode: mode,
+      autoCommission: (assignment as any).autoCommission ?? true,
       instagramStatistics,
       metrics: {
         totalSales,

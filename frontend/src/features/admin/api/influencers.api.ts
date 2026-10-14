@@ -7,6 +7,8 @@ export type InfluencerListItem = {
   email: string | null;
   status: InfluencerStatus;
   createdAt: string;
+  termsAcceptedAt?: string | null;
+  termsVersion?: string | null;
   instagramUsername: string | null;
   instagramId: string | null;
   instagramConnectionStatus: "ACTIVE" | "EXPIRED" | "REVOKED" | null;
@@ -18,6 +20,8 @@ export type InfluencerDetails = {
   status: InfluencerStatus;
   createdAt: string;
   updatedAt: string;
+  termsAcceptedAt?: string | null;
+  termsVersion?: string | null;
   instagramConnection: {
     instagramUserId: string;
     username: string;

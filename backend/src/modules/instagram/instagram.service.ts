@@ -128,6 +128,10 @@ export async function completeInstagramOAuth(app: FastifyInstance, input: { code
       throw new ForbiddenError('This account cannot connect an Instagram profile.');
     }
     await saveConnection(app, state.influencerId, instagramUser, longLived.access_token, longLived.expires_in);
+    await (app.prisma as any).user.update({
+      where: { id: state.influencerId },
+      data: { termsAcceptedAt: new Date(), termsVersion: 'v1.0' },
+    });
     return { redirectUrl: frontendUrl('/influencer/instagram-automation', { instagram: 'connected' }) };
   }
 

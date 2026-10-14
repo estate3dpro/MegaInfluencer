@@ -12,9 +12,18 @@ const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
   productIds: z.array(z.string().min(1)).min(2).max(50).optional(),
   collectionId: z.string().min(1).optional().nullable(),
-  commissionRate: z.coerce.number().min(0).max(999.99).default(10), expiresAt: z.coerce.date().optional().nullable(),
+  commissionType: z.enum(['PERCENTAGE', 'FIXED_AMOUNT']).default('PERCENTAGE'),
+  commissionRate: z.coerce.number().min(0).max(999.99).default(10),
+  commissionAmount: z.coerce.number().min(0).optional().nullable(),
+  expiresAt: z.coerce.date().optional().nullable(),
 });
-const updateLinkSchema = z.object({ status: z.enum(['ACTIVE', 'PAUSED']).optional(), expiresAt: z.coerce.date().optional().nullable() });
+const updateLinkSchema = z.object({
+  status: z.enum(['ACTIVE', 'PAUSED']).optional(),
+  commissionType: z.enum(['PERCENTAGE', 'FIXED_AMOUNT']).optional(),
+  commissionRate: z.coerce.number().min(0).max(999.99).optional(),
+  commissionAmount: z.coerce.number().min(0).optional().nullable(),
+  expiresAt: z.coerce.date().optional().nullable(),
+});
 
 async function organizationFor(app: Parameters<FastifyPluginAsync>[0], userId: string) {
   const organization = await app.prisma.organization.findFirst({ where: { ownerId: userId }, select: { id: true, shopDomain: true } });
@@ -41,7 +50,7 @@ function asLink(row: any, baseUrl: string) {
     ? commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
     : trackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
   const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
-  return { id: row.id, creatorId: row.creatorId, creator: row.creator?.displayName ?? null, creatorCode: row.creator?.creatorCode ?? null, productId: row.productId, product: row.product?.title ?? null, collectionId: row.collectionId ?? null, collection: row.collection?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionRate: Number(row.commissionRate), status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, storeCredits, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
+  return { id: row.id, creatorId: row.creatorId, creator: row.creator?.displayName ?? null, creatorCode: row.creator?.creatorCode ?? null, productId: row.productId, product: row.product?.title ?? null, collectionId: row.collectionId ?? null, collection: row.collection?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionType: row.commissionType ?? 'PERCENTAGE', commissionRate: Number(row.commissionRate), commissionAmount: row.commissionAmount !== null && row.commissionAmount !== undefined ? Number(row.commissionAmount) : null, status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, storeCredits, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
 }
 
 export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
@@ -59,6 +68,9 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/store/affiliate-links', async (request, reply) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const input = createLinkSchema.parse(request.body);
+    if (input.commissionType === 'FIXED_AMOUNT' && (!input.commissionAmount || input.commissionAmount <= 0)) {
+      throw new AppError('INVALID_COMMISSION_AMOUNT', 'Flat commission amount must be greater than 0.', 422);
+    }
     if ([input.productId, input.collectionId, input.productIds?.length ? 'products' : null].filter(Boolean).length > 1) {
       throw new AppError('INVALID_LINK_TARGET', 'Choose one product, one Shopify collection, or a custom product collection.', 422);
     }
@@ -80,7 +92,30 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     if (input.productIds?.length && collectionProducts.length !== input.productIds.length) {
       throw new AppError('PRODUCT_NOT_FOUND', 'One or more selected products do not belong to this store.', 422);
     }
-    const link = await prisma.affiliateLink.create({ data: { organizationId: organization.id, creatorId: input.creatorId, productId: product?.id, collectionId: collection?.id, targetType: collection || collectionProducts.length ? 'COLLECTION' : product ? 'PRODUCT' : 'STORE', destinationPath: collection?.handle ? `/collections/${collection.handle}` : product?.handle ? `/products/${product.handle}` : '/', commissionRate: input.commissionRate, expiresAt: input.expiresAt, slug: slug(), products: collectionProducts.length ? { create: input.productIds!.map((productId, position) => ({ productId, position })) } : undefined }, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } } });
+    const link = await prisma.affiliateLink.create({
+      data: {
+        organizationId: organization.id,
+        creatorId: input.creatorId,
+        productId: product?.id,
+        collectionId: collection?.id,
+        targetType: collection || collectionProducts.length ? 'COLLECTION' : product ? 'PRODUCT' : 'STORE',
+        destinationPath: collection?.handle ? `/collections/${collection.handle}` : product?.handle ? `/products/${product.handle}` : '/',
+        commissionType: input.commissionType,
+        commissionRate: input.commissionType === 'PERCENTAGE' ? input.commissionRate : 0,
+        commissionAmount: input.commissionType === 'FIXED_AMOUNT' ? (input.commissionAmount ?? 0) : null,
+        expiresAt: input.expiresAt,
+        slug: slug(),
+        products: collectionProducts.length ? { create: input.productIds!.map((productId, position) => ({ productId, position })) } : undefined,
+      },
+      include: {
+        creator: { select: { displayName: true, creatorCode: true } },
+        product: { select: { title: true } },
+        collection: { select: { title: true } },
+        _count: { select: { clicks: true } },
+        commissions: { select: { orderAmount: true, status: true } },
+        trackedOrders: { select: { total: true, financialStatus: true } },
+      },
+    });
     const baseUrl = getFrontendBaseUrl(request);
     return reply.code(201).send({ link: asLink(link, baseUrl) });
   });
@@ -88,7 +123,20 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/store/affiliate-links/:linkId', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const { linkId } = request.params as { linkId: string }; const input = updateLinkSchema.parse(request.body);
     const existing = await prisma.affiliateLink.findFirst({ where: { id: linkId, organizationId: organization.id } }); if (!existing) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
-    const link = await prisma.affiliateLink.update({ where: { id: linkId }, data: input, include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } } });
+    if (input.commissionType === 'FIXED_AMOUNT' && input.commissionAmount !== undefined && (input.commissionAmount === null || input.commissionAmount <= 0)) {
+      throw new AppError('INVALID_COMMISSION_AMOUNT', 'Flat commission amount must be greater than 0.', 422);
+    }
+    const link = await prisma.affiliateLink.update({
+      where: { id: linkId },
+      data: {
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
+        ...(input.commissionType ? { commissionType: input.commissionType } : {}),
+        ...(input.commissionRate !== undefined ? { commissionRate: input.commissionRate } : {}),
+        ...(input.commissionAmount !== undefined ? { commissionAmount: input.commissionAmount } : {}),
+      },
+      include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }
+    });
     const baseUrl = getFrontendBaseUrl(request); return { link: asLink(link, baseUrl) };
   });
 
@@ -152,7 +200,9 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
           slug: row.slug,
           url: `${baseUrl}/r/${row.slug}`,
           targetType: row.targetType,
+          commissionType: row.commissionType ?? 'PERCENTAGE',
           commissionRate: isBarter ? 0 : Number(row.commissionRate),
+          commissionAmount: isBarter ? 0 : (row.commissionAmount !== null && row.commissionAmount !== undefined ? Number(row.commissionAmount) : null),
           isBarter,
           status: row.status,
           clicks,
@@ -526,7 +576,9 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         select: {
           id: true,
           creatorId: true,
+          commissionType: true,
           commissionRate: true,
+          commissionAmount: true,
           targetType: true,
           creator: { select: { id: true, creatorCode: true, role: true } },
           products: { select: { product: { select: { shopifyId: true } } } },
@@ -568,7 +620,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       if (creator) {
         link = await prisma.affiliateLink.findFirst({
           where: { creatorId: creator.id, organizationId: organization.id, status: 'ACTIVE' },
-          select: { id: true, creatorId: true, commissionRate: true },
+          select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
         });
       }
     }
@@ -587,7 +639,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           trackedCreatorCode = creator.creatorCode;
           link = await prisma.affiliateLink.findFirst({
             where: { creatorId: creator.id, organizationId: organization.id, status: 'ACTIVE' },
-            select: { id: true, creatorId: true, commissionRate: true },
+            select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
           });
           break;
         }
@@ -665,7 +717,12 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       String(financialStatus).toLowerCase() === 'refunded' ||
       String(financialStatus).toLowerCase() === 'voided'
     );
-    const commissionStatus = isCancelledOrRefunded ? 'REVERSED' : 'PENDING';
+    const assignment = creator ? await prisma.storeInfluencerAssignment.findUnique({
+      where: { organizationId_influencerId: { organizationId: organization.id, influencerId: creator.id } },
+      select: { compensationMode: true, autoCommission: true },
+    }) : null;
+    const isAutoCommission = (assignment as any)?.autoCommission ?? true;
+    const commissionStatus = isCancelledOrRefunded ? 'REVERSED' : (isAutoCommission ? 'APPROVED' : 'PENDING');
 
     // Auto-create affiliate link if creator is matched but has no link yet and NOT on Barter/Fixed deal
     if (creator && !link && !isSampleOrder && !isBarterOrFixedOnly) {
@@ -687,7 +744,11 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     }
 
     // If attributed and not an internal sample or Barter/Fixed deal, upsert commission
-    if (link && creator && !isSampleOrder && !isBarterOrFixedOnly && Number(link.commissionRate ?? 0) > 0) {
+    const hasCommission = link?.commissionType === 'FIXED_AMOUNT'
+      ? Number(link?.commissionAmount ?? 0) > 0
+      : Number(link?.commissionRate ?? 0) > 0;
+
+    if (link && creator && !isSampleOrder && !isBarterOrFixedOnly && hasCommission) {
       const orderAmount = subtotal > 0 ? subtotal : Number(total || 0);
       const rate = Number(link.commissionRate ?? 10);
       const matchedUserId = link.creatorId ?? creator?.id;
@@ -746,9 +807,11 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         }
       }
 
-      // Calculate final commission based on policy
+      // Calculate final commission based on commissionType and policy
       let amount = 0;
-      if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
+      if (link.commissionType === 'FIXED_AMOUNT') {
+        amount = Number(link.commissionAmount ?? 0);
+      } else if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
         amount = (assignedItemsTotal * rate) / 100;
       } else if (mode === 'GATE_REQUIRED') {
         amount = hasAssignedProductInCart ? (orderAmount * rate) / 100 : 0;
@@ -769,7 +832,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           creatorId: matchedUserId ?? null,
           shopifyOrderId: order.id,
           orderAmount,
-          commissionRate: link.commissionRate ?? 10,
+          commissionType: link.commissionType ?? 'PERCENTAGE',
+          commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : (link.commissionRate ?? 10),
           amount,
           status: commissionStatus,
         },

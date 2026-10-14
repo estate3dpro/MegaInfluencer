@@ -1,5 +1,18 @@
 import type { LucideIcon } from "lucide-react";
-import { ArrowUpRight, BadgeIndianRupee, CheckCircle2, ChevronRight, Clock3, Eye, Heart, Images, Instagram, MousePointerClick, ShoppingBag, Users } from "lucide-react";
+import {
+  ArrowUpRight,
+  BadgeIndianRupee,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Eye,
+  Heart,
+  Images,
+  Instagram,
+  MousePointerClick,
+  ShoppingBag,
+  Users,
+} from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -32,9 +45,24 @@ export function DashboardPage() {
     { label: "Orders generated", value: number.format(dashboard?.metrics.orders ?? 0), detail: "This month", icon: CheckCircle2, tone: "bg-coral/10 text-coral" },
     { label: "Link clicks", value: number.format(dashboard?.metrics.clicks ?? 0), change: dashboard?.metrics.clicksChange, detail: "This month", icon: MousePointerClick, tone: "bg-indigo/10 text-indigo" },
   ];
-  return <div className="space-y-6">
-    <PageHeader title={`Good morning, ${creatorName.split(" ")[0]}`} description="A live view of your creator performance." actions={<Button asChild><Link to="/influencer/profile"><Instagram className="h-4 w-4" /> View profile</Link></Button>} />
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metrics.map((metric) => <MetricCard key={metric.label} metric={metric} loading={dashboardQuery.isLoading} />)}</section>
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={`Good morning, ${creatorName.split(" ")[0]}`}
+        description="A live view of your creator performance."
+        actions={
+          <Button asChild>
+            <Link to="/influencer/profile">
+              <Instagram className="h-4 w-4" /> View profile
+            </Link>
+          </Button>
+        }
+      />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <MetricCard key={metric.label} metric={metric} loading={dashboardQuery.isLoading} />
+        ))}
+      </section>
     <section className="grid gap-6 xl:grid-cols-3">
       {!isBarterOnly ? <Card className="shadow-card xl:col-span-2"><CardHeader className="flex-row items-start justify-between space-y-0 p-5 pb-2"><div><CardTitle>Earnings performance</CardTitle><p className="mt-1 text-sm text-muted-foreground">Commission recorded over the last 30 days</p></div><Badge variant="secondary">Last 30 days</Badge></CardHeader><CardContent className="h-[280px] p-3 pt-5 sm:p-5 sm:pt-5">{dashboardQuery.isLoading ? <div className="h-full animate-pulse rounded-xl bg-muted" /> : <ResponsiveContainer width="100%" height="100%"><AreaChart data={dashboard?.earnings ?? []} margin={{ top: 10, right: 8, left: -16, bottom: 0 }}><defs><linearGradient id="creatorEarnings" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity={0.28} /><stop offset="100%" stopColor="var(--primary)" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" /><XAxis dataKey="date" axisLine={false} tickLine={false} tickMargin={10} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} tickFormatter={(date) => new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })} /><YAxis axisLine={false} tickLine={false} tickMargin={8} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} tickFormatter={(value) => `₹${value}`} /><Tooltip contentStyle={{ borderColor: "var(--border)", borderRadius: 10, background: "var(--card)" }} formatter={(value) => [money.format(Number(value)), "Earnings"]} labelFormatter={(date) => new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { dateStyle: "medium" })} /><Area type="monotone" dataKey="amount" stroke="var(--primary)" strokeWidth={2.5} fill="url(#creatorEarnings)" /></AreaChart></ResponsiveContainer>}</CardContent></Card> : <Card className="shadow-card xl:col-span-2"><CardContent className="flex h-full min-h-40 items-center justify-center p-5 text-center text-sm text-muted-foreground">Your partner has set this store to barter mode. Orders are tracked, but no cash commission is earned.</CardContent></Card>}
       <InstagramCard creatorName={creatorName} instagramName={instagramName} creatorCode={dashboard?.creatorCode} instagram={instagram} loading={instagramQuery.isLoading} />
@@ -43,7 +71,8 @@ export function DashboardPage() {
       <Card className="shadow-card xl:col-span-2"><CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-3"><div><CardTitle>Active campaigns</CardTitle><p className="mt-1 text-sm text-muted-foreground">Campaigns currently assigned to you</p></div><Button asChild variant="ghost" size="sm"><Link to="/influencer/campaigns">View all <ChevronRight className="h-4 w-4" /></Link></Button></CardHeader><CardContent className="space-y-3 p-5 pt-1">{dashboardQuery.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-muted" /> : dashboard?.campaigns.length ? dashboard.campaigns.map((campaign) => <div key={campaign.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-medium">{campaign.title}</p><p className="mt-0.5 text-sm text-muted-foreground">{campaign.brand}</p></div><div className="text-right"><Badge variant="secondary">{campaign.status.replaceAll("_", " ")}</Badge><p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{campaign.deadline ? `Due ${new Date(campaign.deadline).toLocaleDateString("en-IN", { dateStyle: "medium" })}` : "No deadline set"}</p></div></div></div>) : <Empty text="No active campaigns assigned yet." />}</CardContent></Card>
       <Card className="shadow-card"><CardHeader className="p-5 pb-3"><CardTitle>Recent activity</CardTitle><p className="mt-1 text-sm text-muted-foreground">{isBarterOnly ? "Latest tracked barter orders" : "Latest attributed orders and commissions"}</p></CardHeader><CardContent className="space-y-4 p-5 pt-2">{dashboardQuery.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-muted" /> : dashboard?.activity.length ? dashboard.activity.map((item) => <div key={item.id} className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-success/10 text-success"><CheckCircle2 className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="text-sm font-medium">{item.title}</p><p className="mt-0.5 text-xs leading-5 text-muted-foreground">{item.detail}</p></div>{item.amount !== null ? <span className="shrink-0 text-xs font-medium text-primary">+{money.format(item.amount)}</span> : null}</div>) : <Empty text="Your attributed orders will appear here." />}</CardContent></Card>
     </section>
-  </div>;
+    </div>
+  );
 }
 
 function MetricCard({ metric, loading }: { metric: { label: string; value: string; change?: number; detail: string; icon: LucideIcon; tone: string }; loading: boolean }) { const Icon = metric.icon; return <Card className="shadow-card"><CardContent className="p-5"><div className="flex items-start justify-between gap-3"><p className="text-sm font-medium text-muted-foreground">{metric.label}</p><span className={`grid h-9 w-9 place-items-center rounded-lg ${metric.tone}`}><Icon className="h-4 w-4" /></span></div><p className="mt-3 font-display text-2xl font-semibold tracking-tight">{loading ? "…" : metric.value}</p><p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">{metric.change !== undefined ? <><ArrowUpRight className={`h-3.5 w-3.5 ${metric.change >= 0 ? "text-success" : "text-destructive"}`} /><span className={metric.change >= 0 ? "text-success" : "text-destructive"}>{metric.change >= 0 ? "+" : ""}{metric.change.toFixed(1)}%</span></> : null}{metric.detail}</p></CardContent></Card>; }

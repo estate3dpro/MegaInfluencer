@@ -8,6 +8,8 @@ import {
   Instagram,
   Power,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   UsersRound,
 } from "lucide-react";
@@ -188,6 +190,7 @@ export function InfluencersPage() {
               <tr>
                 <th className="px-5 py-3 font-medium">Influencer Profile</th>
                 <th className="px-4 py-3 font-medium">Instagram Handle</th>
+                <th className="px-4 py-3 font-medium">Legal & Terms</th>
                 <th className="px-4 py-3 font-medium">Account Status</th>
                 <th className="px-4 py-3 font-medium">Joined Date</th>
                 <th className="px-5 py-3 text-right font-medium">Actions</th>
@@ -197,14 +200,14 @@ export function InfluencersPage() {
               {query.isLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b last:border-0">
-                    <td colSpan={5} className="px-5 py-4">
+                    <td colSpan={6} className="px-5 py-4">
                       <div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
                     </td>
                   </tr>
                 ))
               ) : influencers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
                     No influencer accounts found.
                   </td>
                 </tr>
@@ -235,6 +238,34 @@ export function InfluencersPage() {
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">Not connected</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        {influencer.termsAcceptedAt ? (
+                          <div className="flex flex-col gap-0.5 items-start">
+                            <Badge
+                              variant="outline"
+                              className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 text-[11px] font-semibold gap-1 py-0.5 cursor-help"
+                              title={`Explicitly agreed to Platform Terms & Conditions (v${influencer.termsVersion || "1.0"}) on ${new Date(influencer.termsAcceptedAt).toLocaleString("en-IN")}`}
+                            >
+                              <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>Terms Agreed</span>
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(
+                                new Date(influencer.termsAcceptedAt)
+                              )}
+                            </span>
+                          </div>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 text-[11px] font-medium gap-1 py-0.5 cursor-help"
+                            title="Terms agreement pending"
+                          >
+                            <ShieldAlert className="h-3 w-3 text-amber-600 shrink-0" />
+                            <span>Pending</span>
+                          </Badge>
                         )}
                       </td>
                       <td className="px-4 py-3.5">

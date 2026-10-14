@@ -13,11 +13,14 @@ export type StoreCreator = {
   instagramFollowersCount?: number | null;
   instagramMediaCount?: number | null;
   assignedAt: string;
+  termsAcceptedAt?: string | null;
+  termsVersion?: string | null;
   totalSales?: number;
   totalOrders?: number;
   totalCommissions?: number;
   activeLinks?: number;
   compensationMode: CompensationMode;
+  autoCommission?: boolean;
   barterOrders?: number;
   barterGmv?: number;
   sampleCount?: number;
@@ -37,6 +40,8 @@ export type AvailableCreator = {
   email: string | null;
   creatorCode: string | null;
   instagramUsername: string | null;
+  termsAcceptedAt?: string | null;
+  termsVersion?: string | null;
   instagramFollowersCount?: number | null;
   instagramMediaCount?: number | null;
   influencerProfile?: {
@@ -105,6 +110,24 @@ export async function assignStoreCreator(influencerId: string, compensationMode:
   ).data;
 }
 
+export type CreateStoreCreatorInput = {
+  displayName: string;
+  email?: string | null;
+  password?: string | null;
+  phone?: string | null;
+  instagramUsername?: string | null;
+  compensationMode?: CompensationMode;
+  bio?: string | null;
+  city?: string | null;
+  autoCreateLink?: boolean;
+};
+
+export async function createStoreCreator(input: CreateStoreCreatorInput) {
+  return (
+    await apiClient.post<{ ok: boolean; creator: StoreCreator }>("/store/creators", input)
+  ).data;
+}
+
 export async function updateCreatorCompensationMode(
   creatorId: string,
   compensationMode: CompensationMode,
@@ -113,6 +136,35 @@ export async function updateCreatorCompensationMode(
     await apiClient.patch<{ ok: boolean; compensationMode: CompensationMode }>(
       `/store/creators/${creatorId}/compensation-mode`,
       { compensationMode },
+    )
+  ).data;
+}
+
+export async function updateCreatorAutoCommission(
+  creatorId: string,
+  autoCommission: boolean,
+) {
+  return (
+    await apiClient.patch<{ ok: boolean; autoCommission: boolean }>(
+      `/store/creators/${creatorId}/auto-commission`,
+      { autoCommission },
+    )
+  ).data;
+}
+
+export async function createManualCommission(
+  creatorId: string,
+  data: {
+    amount: number;
+    orderName?: string;
+    notes?: string;
+    status?: "APPROVED" | "PENDING" | "PAID";
+  },
+) {
+  return (
+    await apiClient.post<{ ok: boolean; commission: any; order: any }>(
+      `/store/creators/${creatorId}/manual-commission`,
+      data,
     )
   ).data;
 }
@@ -169,11 +221,14 @@ export type CreatorDetailsResponse = {
     status: string;
     creatorCode: string | null;
     createdAt?: string;
+    termsAcceptedAt?: string | null;
+    termsVersion?: string | null;
     instagramUsername: string | null;
     instagramFollowersCount?: number | null;
     instagramMediaCount?: number | null;
     assignedProductIds: string[];
     compensationMode: CompensationMode;
+    autoCommission?: boolean;
     profile?: {
       firstName?: string;
       lastName?: string;
@@ -187,6 +242,8 @@ export type CreatorDetailsResponse = {
   };
   assignedAt: string;
   compensationMode: CompensationMode;
+  autoCommission?: boolean;
+  assignedProductIds?: string[];
   instagramStatistics?: any;
   metrics: {
     totalSales: number;
@@ -290,5 +347,42 @@ export async function getCreatorAssignedProducts(creatorId: string) {
 export async function updateCreatorAssignedProducts(creatorId: string, productIds: string[]) {
   const res = await updateStoreCreatorProducts(creatorId, productIds);
   return { ok: true, assignedCount: res.assignedProductIds?.length ?? 0 };
+}
+
+export type ImpersonateResponse = {
+  ok: boolean;
+  accessToken?: string;
+  refreshToken?: string;
+  tokens?: {
+    accessToken: string;
+    refreshToken: string;
+  };
+  user: {
+    id: string;
+    email: string | null;
+    name?: string;
+    displayName?: string;
+    role?: string;
+    roles: string[];
+    activeRole: string;
+    creatorCode?: string | null;
+    storeId?: string;
+    storeName?: string;
+  };
+  impersonatedBy: {
+    id?: string;
+    name?: string;
+    adminId?: string;
+    storeId: string;
+    storeName: string;
+  };
+};
+
+export async function impersonateCreator(creatorId: string) {
+  return (
+    await apiClient.post<ImpersonateResponse>(
+      `/store/creators/${creatorId}/impersonate`,
+    )
+  ).data;
 }
 

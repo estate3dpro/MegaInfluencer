@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Check, GitMerge, Images, Instagram, Package, Plus, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { ArrowLeft, Check, GitMerge, Images, Instagram, Package, Plus, ShieldAlert, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -102,14 +102,77 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
           Unable to update account status.
         </p>
       ) : null}
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-4">
         <Metric
           label="Account status"
           value={influencer.status === "ACTIVE" ? "Active" : "Suspended"}
         />
         <Metric label="Instagram" value={connection ? "Connected" : "Not connected"} />
+        <Metric
+          label="Legal Consent"
+          value={influencer.termsAcceptedAt ? "Terms Agreed" : "Pending"}
+        />
         <Metric label="Joined" value={new Date(influencer.createdAt).toLocaleDateString()} />
       </section>
+
+      {/* Legal & Terms Compliance Audit Card */}
+      <Card className="shadow-none border-emerald-500/25 bg-emerald-500/5 dark:bg-emerald-950/20">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-base text-emerald-950 dark:text-emerald-100">
+              <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              Legal Terms & Policy Agreement Audit
+            </CardTitle>
+            {influencer.termsAcceptedAt ? (
+              <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 font-semibold text-xs gap-1">
+                ✓ Enforceable Agreement (v{influencer.termsVersion || "1.0"})
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-xs font-medium gap-1">
+                <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+                Agreement Pending
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Authoritative audit record of user consent protecting the platform under Meta Platform Terms and Commercial Partnership Guidelines.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-3 text-xs">
+            <div className="rounded-lg border bg-background/80 p-3 space-y-1">
+              <span className="text-muted-foreground font-medium">Consent Status</span>
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                {influencer.termsAcceptedAt ? (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    Agreed & Legally Binding
+                  </>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    Pending Agreement
+                  </>
+                )}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-background/80 p-3 space-y-1">
+              <span className="text-muted-foreground font-medium">Agreement Timestamp</span>
+              <p className="font-semibold text-foreground font-mono">
+                {influencer.termsAcceptedAt
+                  ? new Date(influencer.termsAcceptedAt).toLocaleString("en-IN")
+                  : "Not recorded"}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-background/80 p-3 space-y-1">
+              <span className="text-muted-foreground font-medium">Policy Version</span>
+              <p className="font-semibold text-foreground">
+                Version {influencer.termsVersion || "v1.0"} (Standard Terms of Service & Meta Data Policy)
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       <Card className="shadow-none">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

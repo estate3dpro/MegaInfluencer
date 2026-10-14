@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
   BadgeIndianRupee,
@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  Eye,
+  EyeOff,
   Gift,
   Instagram,
   Layers,
@@ -19,6 +21,7 @@ import {
   Search,
   Share2,
   ShieldAlert,
+  ShieldCheck,
   Sliders,
   Sparkles,
   Truck,
@@ -51,12 +54,14 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
 import { PlatformLinkGeneratorModal, type PlatformLinkItem } from "@/components/app/PlatformLinkGeneratorModal";
 import { createAffiliateLink, getAffiliateLinks, updateAffiliateLink } from "../api/affiliate-links.api";
 import { ReferralProgramSettingsModal } from "../components/ReferralProgramSettingsModal";
 import {
   assignStoreCreator,
   bulkApproveCommissions,
+  createStoreCreator,
   getAvailableCreators,
   getStoreCommissions,
   getStoreCreators,
@@ -66,8 +71,11 @@ import {
   rejectCreator,
   sendBarterSample,
   updateCreatorCompensationMode,
+  updateCreatorAutoCommission,
   updateCommissionStatus,
+  impersonateCreator,
   type CompensationMode,
+  type CreateStoreCreatorInput,
   type StoreCreator,
 } from "../api/creators.api";
 import { getStoreProducts } from "../api/products.api";
@@ -119,7 +127,7 @@ function PageTable({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CreatorAvatar({ name, tone = "bg-primary/10 text-primary" }: { name?: string | null; tone?: string }) {
+function CreatorAvatar({ name, tone = "bg-primary/10 text-primary" }: { name?: string | null; tone?: string | undefined }) {
   const initials = (name ?? "")
     .split(" ")
     .map((part) => part[0])
@@ -140,9 +148,22 @@ function CreatorAvatar({ name, tone = "bg-primary/10 text-primary" }: { name?: s
 export function CreatorsPage() {
   const [search, setSearch] = useState("");
   const [partnerModalOpen, setPartnerModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"CREATE" | "DIRECTORY">("CREATE");
   const [selectedInfluencerId, setSelectedInfluencerId] = useState("");
   const [assignDealMode, setAssignDealMode] = useState<CompensationMode>("COMMISSION");
   const [tabFilter, setTabFilter] = useState<"ALL" | "APPROVED" | "PENDING" | "AVAILABLE">("ALL");
+
+  // Create Creator Form State
+  const [newDisplayName, setNewDisplayName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [newPhone, setNewPhone] = useState("");
+  const [newInstagram, setNewInstagram] = useState("");
+  const [newCity, setNewCity] = useState("");
+  const [newBio, setNewBio] = useState("");
+  const [newDealMode, setNewDealMode] = useState<CompensationMode>("COMMISSION");
+  const [autoCreateLink, setAutoCreateLink] = useState(true);
 
   // Sample Dispatch Modal State
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
@@ -152,9 +173,44 @@ export function CreatorsPage() {
   const [sampleTrackingNumber, setSampleTrackingNumber] = useState("");
   const [sampleAddress, setSampleAddress] = useState("");
 
+  const navigate = useNavigate();
+  const startImpersonation = useAuthStore((state) => state.startImpersonation);
   const client = useQueryClient();
   const query = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators });
   const creators = query.data ?? [];
+
+  const impersonateMutation = useMutation({
+    mutationFn: (creatorId: string) => impersonateCreator(creatorId),
+    onSuccess: (data) => {
+      const accessToken = data.accessToken || data.tokens?.accessToken;
+      const refreshToken = data.refreshToken || data.tokens?.refreshToken;
+      if (!accessToken || !refreshToken) {
+        toast.error("Failed to acquire impersonation session tokens");
+        return;
+      }
+      const displayName = data.user.name || data.user.displayName || "Influencer";
+      startImpersonation({
+        influencerUser: {
+          id: data.user.id,
+          email: data.user.email || "",
+          name: displayName,
+          creatorCode: data.user.creatorCode,
+          roles: ["influencer"],
+          activeRole: "influencer",
+        },
+        accessToken,
+        refreshToken,
+        storeName: data.impersonatedBy?.storeName,
+        targetCreatorId: data.user.id,
+      });
+      client.clear();
+      toast.success(`Switched to impersonating ${displayName}`);
+      void navigate({ to: "/influencer/dashboard" });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err?.message || "Failed to impersonate creator");
+    },
+  });
 
   const settingsQuery = useQuery({
     queryKey: ["store", "creators", "settings"],
@@ -216,6 +272,32 @@ export function CreatorsPage() {
     onError: () => toast.error("Could not add creator to store"),
   });
 
+  const createCreatorMutation = useMutation({
+    mutationFn: (data: CreateStoreCreatorInput) => createStoreCreator(data),
+    onSuccess: (res) => {
+      client.invalidateQueries({ queryKey: ["store", "creators"] });
+      client.invalidateQueries({ queryKey: ["store", "creators", "available"] });
+      client.invalidateQueries({ queryKey: ["store", "affiliate-links"] });
+      setPartnerModalOpen(false);
+      setNewDisplayName("");
+      setNewEmail("");
+      setNewPassword("");
+      setShowPassword(false);
+      setNewPhone("");
+      setNewInstagram("");
+      setNewCity("");
+      setNewBio("");
+      setNewDealMode("COMMISSION");
+      setAutoCreateLink(true);
+      toast.success(
+        `🎉 Influencer ${res.creator.displayName} (${res.creator.creatorCode ? `@${res.creator.creatorCode}` : 'partner'}) created & added to your store!`
+      );
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err?.message || "Failed to create creator");
+    },
+  });
+
   const compensationMutation = useMutation({
     mutationFn: ({ creatorId, compensationMode }: { creatorId: string; compensationMode: CompensationMode }) =>
       updateCreatorCompensationMode(creatorId, compensationMode),
@@ -231,6 +313,20 @@ export function CreatorsPage() {
       toast.success(`Creator partnership updated to ${label}`);
     },
     onError: () => toast.error("Could not update creator compensation mode"),
+  });
+
+  const autoCommissionMutation = useMutation({
+    mutationFn: ({ creatorId, autoCommission }: { creatorId: string; autoCommission: boolean }) =>
+      updateCreatorAutoCommission(creatorId, autoCommission),
+    onSuccess: (data) => {
+      client.invalidateQueries({ queryKey: ["store", "creators"] });
+      if (data.autoCommission) {
+        toast.success("⚡ Auto Commission Enabled: Referral orders will be automatically approved.");
+      } else {
+        toast.info("🔒 Manual Commission Enabled: Referral orders will require manual Store Admin review & approval.");
+      }
+    },
+    onError: () => toast.error("Could not update commission mode"),
   });
 
   const sampleMutation = useMutation({
@@ -296,7 +392,7 @@ export function CreatorsPage() {
         actions={
           <div className="flex gap-2">
             <Button onClick={() => setPartnerModalOpen(true)} className="gap-1.5 font-bold rounded-xl" size="sm">
-              <UserPlus className="h-4 w-4" /> Add Creator Partner
+              <UserPlus className="h-4 w-4" /> Add / Create Creator
             </Button>
             <Button asChild variant="outline" size="sm" className="rounded-xl">
               <Link to="/store-admin/affiliate">
@@ -475,6 +571,7 @@ export function CreatorsPage() {
                 <th className="px-5 py-3.5">Creator Code</th>
                 <th className="px-5 py-3.5 text-center">Approval Status</th>
                 <th className="px-5 py-3.5 text-center">Deal Model</th>
+                <th className="px-5 py-3.5 text-center">Commission Mode</th>
                 <th className="px-5 py-3.5 text-right">Attributed GMV</th>
                 <th className="px-5 py-3.5 text-center">Orders</th>
                 <th className="px-5 py-3.5 text-right">Commissions</th>
@@ -512,10 +609,31 @@ export function CreatorsPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       {creator.instagramUsername ? (
-                        <span className="inline-flex items-center gap-1 font-semibold text-xs text-pink-600 dark:text-pink-400">
-                          <Instagram className="h-3.5 w-3.5" />
-                          @{creator.instagramUsername}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="inline-flex items-center gap-1 font-semibold text-xs text-pink-600 dark:text-pink-400">
+                            <Instagram className="h-3.5 w-3.5" />
+                            @{creator.instagramUsername}
+                          </span>
+                          {creator.termsAcceptedAt ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 gap-1 px-1.5 py-0 cursor-help"
+                              title={`Legally agreed to Terms & Conditions (v${creator.termsVersion || "1.0"}) on ${new Date(creator.termsAcceptedAt).toLocaleString("en-IN")}`}
+                            >
+                              <ShieldCheck className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              Terms Agreed
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 gap-1 px-1.5 py-0 cursor-help"
+                              title="Legal consent pending or not recorded"
+                            >
+                              <ShieldAlert className="h-2.5 w-2.5 text-amber-600 shrink-0" />
+                              Terms Pending
+                            </Badge>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-[11px] text-muted-foreground">Not connected</span>
                       )}
@@ -577,10 +695,31 @@ export function CreatorsPage() {
 
                     <td className="px-5 py-3.5">
                       {creator.instagramUsername ? (
-                        <span className="inline-flex items-center gap-1 font-semibold text-xs text-pink-600 dark:text-pink-400">
-                          <Instagram className="h-3.5 w-3.5" />
-                          @{creator.instagramUsername}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="inline-flex items-center gap-1 font-semibold text-xs text-pink-600 dark:text-pink-400">
+                            <Instagram className="h-3.5 w-3.5" />
+                            @{creator.instagramUsername}
+                          </span>
+                          {creator.termsAcceptedAt ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 gap-1 px-1.5 py-0 cursor-help"
+                              title={`Legally agreed to Terms & Conditions (v${creator.termsVersion || "1.0"}) on ${new Date(creator.termsAcceptedAt).toLocaleString("en-IN")}`}
+                            >
+                              <ShieldCheck className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              Terms Agreed
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 gap-1 px-1.5 py-0 cursor-help"
+                              title="Legal consent pending or not recorded"
+                            >
+                              <ShieldAlert className="h-2.5 w-2.5 text-amber-600 shrink-0" />
+                              Terms Pending
+                            </Badge>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-[11px] text-muted-foreground">Not connected</span>
                       )}
@@ -634,6 +773,43 @@ export function CreatorsPage() {
                           </SelectContent>
                         </Select>
                       </div>
+                    </td>
+
+                    {/* Influencer-wise Auto / Manual Commission On/Off Switch Button */}
+                    <td className="px-5 py-3.5 text-center">
+                      {mode === "BARTER" ? (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground bg-muted/40">
+                          N/A (Barter)
+                        </Badge>
+                      ) : (
+                        <div className="inline-flex flex-col items-center justify-center gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <Switch
+                              checked={creator.autoCommission ?? true}
+                              disabled={autoCommissionMutation.isPending || isPending}
+                              onCheckedChange={(checked) =>
+                                autoCommissionMutation.mutate({
+                                  creatorId: creator.id,
+                                  autoCommission: checked,
+                                })
+                              }
+                              className="data-[state=checked]:bg-emerald-600 scale-90"
+                            />
+                            <span
+                              className={`text-[11px] font-bold ${
+                                creator.autoCommission ?? true
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-amber-600 dark:text-amber-400"
+                              }`}
+                            >
+                              {creator.autoCommission ?? true ? "⚡ Auto" : "🔒 Manual"}
+                            </span>
+                          </div>
+                          <span className="text-[9px] text-muted-foreground whitespace-nowrap">
+                            {creator.autoCommission ?? true ? "Auto-approved" : "Admin review"}
+                          </span>
+                        </div>
+                      )}
                     </td>
 
                     <td className="px-5 py-3.5 text-right font-bold text-foreground font-mono">
@@ -696,6 +872,19 @@ export function CreatorsPage() {
                             </Button>
                           )}
 
+                          {/* Impersonate Button */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={impersonateMutation.isPending || creator.status !== "ACTIVE"}
+                            onClick={() => impersonateMutation.mutate(creator.id)}
+                            className="h-7 px-2 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg"
+                            title="Impersonate and view platform from this creator's perspective"
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1 text-indigo-600 dark:text-indigo-400" />
+                            Impersonate
+                          </Button>
+
                           <Button asChild variant="ghost" size="sm" className="h-7 text-xs text-primary font-semibold">
                             <Link to="/store-admin/creators/$creatorId" params={{ creatorId: creator.id }}>
                               Profile <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
@@ -712,65 +901,250 @@ export function CreatorsPage() {
         </table>
       </PageTable>
 
-      {/* Partner with Creator Dialog */}
+      {/* Partner or Create Creator Dialog */}
       <Dialog open={partnerModalOpen} onOpenChange={setPartnerModalOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Partner with a Creator</DialogTitle>
-            <DialogDescription>
-              Select an influencer from MegaInfluencer and choose their partnership model.
+            <DialogTitle>
+              {modalMode === "CREATE" ? "Create & Onboard Influencer" : "Partner with Existing Creator"}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {modalMode === "CREATE"
+                ? "Manually add an influencer to your roster with their handle, contact details, and partnership deal."
+                : "Select an influencer already registered in the platform directory."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-3">
-            <div className="grid gap-1.5">
-              <Label className="text-xs font-semibold">Select Influencer</Label>
-              {availableQuery.isLoading ? (
-                <p className="text-xs text-muted-foreground">Loading available creators...</p>
-              ) : (availableQuery.data?.length ?? 0) === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  All registered influencers are currently assigned to your store.
+
+          {/* Mode Switcher */}
+          <div className="grid grid-cols-2 gap-2 p-1 bg-muted/60 rounded-xl my-1 border">
+            <Button
+              type="button"
+              size="sm"
+              variant={modalMode === "CREATE" ? "default" : "ghost"}
+              onClick={() => setModalMode("CREATE")}
+              className="text-xs font-bold rounded-lg h-8"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Create New Creator
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={modalMode === "DIRECTORY" ? "default" : "ghost"}
+              onClick={() => setModalMode("DIRECTORY")}
+              className="text-xs font-bold rounded-lg h-8"
+            >
+              <Search className="h-3.5 w-3.5 mr-1" /> Select from Directory
+            </Button>
+          </div>
+
+          {modalMode === "CREATE" ? (
+            <div className="space-y-3 py-2 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Creator Full Name *</Label>
+                  <Input
+                    placeholder="e.g. Riya Sharma"
+                    value={newDisplayName}
+                    onChange={(e) => setNewDisplayName(e.target.value)}
+                    className="h-8.5 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Instagram Handle</Label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-bold">@</span>
+                    <Input
+                      placeholder="riyasharma_style"
+                      value={newInstagram}
+                      onChange={(e) => setNewInstagram(e.target.value.replace(/^@/, ""))}
+                      className="h-8.5 text-xs pl-7"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Email Address</Label>
+                  <Input
+                    type="email"
+                    placeholder="e.g. riya@example.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="h-8.5 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">Portal Password</Label>
+                    
+                  </div>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Min. 6 chars (for login)"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="h-8.5 text-xs pr-8"
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {newPassword.trim().length > 0 && newPassword.trim().length < 6 && (
+                <p className="-mt-1.5 text-[11px] text-destructive">
+                  Password must be at least 6 characters.
                 </p>
-              ) : (
-                <Select value={selectedInfluencerId} onValueChange={setSelectedInfluencerId}>
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Choose an influencer..." />
+              )}
+              {newPassword.trim().length >= 6 && !newEmail.trim() && (
+                <p className="-mt-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                  Please provide an email address so the creator can log into their portal with this password.
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Phone Number</Label>
+                  <Input
+                    placeholder="e.g. +91 98765 43210"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    className="h-8.5 text-xs font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">City / Location</Label>
+                  <Input
+                    placeholder="e.g. Mumbai, Maharashtra"
+                    value={newCity}
+                    onChange={(e) => setNewCity(e.target.value)}
+                    className="h-8.5 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Partnership Deal Type</Label>
+                <Select value={newDealMode} onValueChange={(val: CompensationMode) => setNewDealMode(val)}>
+                  <SelectTrigger className="h-8.5 text-xs">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(availableQuery.data ?? []).map((creator) => (
-                      <SelectItem key={creator.id} value={creator.id}>
-                        {creator.displayName} {creator.instagramUsername ? `(@${creator.instagramUsername})` : ""}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="COMMISSION">💵 15% Sales Commission Only</SelectItem>
+                    <SelectItem value="BARTER">🎁 Barter (Free Product Samples)</SelectItem>
+                    <SelectItem value="HYBRID">⚡ Hybrid (Free Sample + 15% Commission)</SelectItem>
                   </SelectContent>
                 </Select>
-              )}
-            </div>
+              </div>
 
-            <div className="grid gap-1.5">
-              <Label className="text-xs font-semibold">Partnership Deal Type</Label>
-              <Select value={assignDealMode} onValueChange={(val: CompensationMode) => setAssignDealMode(val)}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="COMMISSION">💵 15% Sales Commission Only</SelectItem>
-                  <SelectItem value="BARTER">🎁 Barter (Free Product Samples)</SelectItem>
-                  <SelectItem value="HYBRID">⚡ Hybrid (Free Sample + 15% Commission)</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Niche & Bio Notes (Optional)</Label>
+                <Input
+                  placeholder="e.g. Skincare & fashion creator (85k followers)"
+                  value={newBio}
+                  onChange={(e) => setNewBio(e.target.value)}
+                  className="h-8.5 text-xs"
+                />
+              </div>
+
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-2.5 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Auto-generate tracking link</p>
+                  <p className="text-[11px] text-muted-foreground">Creates an initial storewide tracking link (/r/...) ready for the creator immediately.</p>
+                </div>
+                <Switch checked={autoCreateLink} onCheckedChange={setAutoCreateLink} />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="grid gap-4 py-3">
+              <div className="grid gap-1.5">
+                <Label className="text-xs font-semibold">Select Influencer</Label>
+                {availableQuery.isLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading available creators...</p>
+                ) : (availableQuery.data?.length ?? 0) === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    All registered influencers are currently assigned to your store. Use the &ldquo;Create New Creator&rdquo; tab to onboard a new one!
+                  </p>
+                ) : (
+                  <Select value={selectedInfluencerId} onValueChange={setSelectedInfluencerId}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Choose an influencer..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(availableQuery.data ?? []).map((creator) => (
+                        <SelectItem key={creator.id} value={creator.id}>
+                          {creator.displayName} {creator.instagramUsername ? `(@${creator.instagramUsername})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label className="text-xs font-semibold">Partnership Deal Type</Label>
+                <Select value={assignDealMode} onValueChange={(val: CompensationMode) => setAssignDealMode(val)}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="COMMISSION">💵 15% Sales Commission Only</SelectItem>
+                    <SelectItem value="BARTER">🎁 Barter (Free Product Samples)</SelectItem>
+                    <SelectItem value="HYBRID">⚡ Hybrid (Free Sample + 15% Commission)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setPartnerModalOpen(false)}>
               Cancel
             </Button>
-            <Button
-              size="sm"
-              disabled={!selectedInfluencerId || assignMutation.isPending}
-              onClick={() => selectedInfluencerId && assignMutation.mutate({ influencerId: selectedInfluencerId, compensationMode: assignDealMode })}
-            >
-              {assignMutation.isPending ? "Adding..." : "Partner with Creator"}
-            </Button>
+            {modalMode === "CREATE" ? (
+              <Button
+                size="sm"
+                disabled={
+                  !newDisplayName.trim() ||
+                  (Boolean(newPassword.trim()) && newPassword.trim().length < 6) ||
+                  (Boolean(newPassword.trim()) && !newEmail.trim()) ||
+                  createCreatorMutation.isPending
+                }
+                onClick={() =>
+                  createCreatorMutation.mutate({
+                    displayName: newDisplayName.trim(),
+                    email: newEmail.trim() || null,
+                    password: newPassword.trim() || null,
+                    phone: newPhone.trim() || null,
+                    instagramUsername: newInstagram.trim() || null,
+                    city: newCity.trim() || null,
+                    bio: newBio.trim() || null,
+                    compensationMode: newDealMode,
+                    autoCreateLink,
+                  })
+                }
+                className="gap-1.5"
+              >
+                {createCreatorMutation.isPending ? "Creating..." : "Create & Add Partner"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={!selectedInfluencerId || assignMutation.isPending}
+                onClick={() => selectedInfluencerId && assignMutation.mutate({ influencerId: selectedInfluencerId, compensationMode: assignDealMode })}
+              >
+                {assignMutation.isPending ? "Adding..." : "Partner with Creator"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -884,7 +1258,9 @@ export function AffiliatePage() {
   // Kept while migrating old custom-product collection drafts; Shopify collections are now the active flow.
   const [collectionProductIds, setCollectionProductIds] = useState<string[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [commissionType, setCommissionType] = useState<"PERCENTAGE" | "FIXED_AMOUNT">("PERCENTAGE");
   const [commissionRate, setCommissionRate] = useState("10");
+  const [commissionAmount, setCommissionAmount] = useState("100");
 
   const client = useQueryClient();
   const linksQuery = useQuery({
@@ -919,6 +1295,9 @@ export function AffiliatePage() {
       setProductId("store");
       setDestinationType("STORE");
       setCollectionId("");
+      setCommissionType("PERCENTAGE");
+      setCommissionRate("10");
+      setCommissionAmount("100");
       toast.success("Affiliate link created successfully");
     },
     onError: () => toast.error("Could not create the tracking link"),
@@ -962,7 +1341,9 @@ export function AffiliatePage() {
       creatorName: link.creatorName,
       creatorCode: link.creatorCode,
       storeName: link.storeName,
+      commissionType: link.commissionType,
       commissionRate: link.commissionRate,
+      commissionAmount: link.commissionAmount,
       slug: link.slug,
     });
     setPlatformModalOpen(true);
@@ -1021,7 +1402,11 @@ export function AffiliatePage() {
                     <p className="text-[11px] text-muted-foreground truncate max-w-xs">{link.product || link.productTitle || link.collection || (link.targetType === "COLLECTION" ? "Custom product collection" : "Storewide Link")}</p>
                   </td>
                   <td className="px-5 py-3.5 font-medium">{link.creator || link.creatorName || "Storewide"}</td>
-                  <td className="px-5 py-3.5 font-semibold text-teal">{link.commissionRate}%</td>
+                  <td className="px-5 py-3.5 font-semibold text-teal">
+                    {link.commissionType === "FIXED_AMOUNT"
+                      ? `₹${Number(link.commissionAmount ?? 0).toLocaleString()} (flat)`
+                      : `${link.commissionRate}%`}
+                  </td>
                   <td className="px-5 py-3.5 text-center font-mono">{Number(link.clicks ?? 0).toLocaleString()}</td>
                   <td className="px-5 py-3.5 text-center font-mono font-bold">{Number(link.orders ?? 0)}</td>
                   <td className="px-5 py-3.5 text-right font-mono font-bold">{formatCurrency(Number(link.revenue ?? 0))}</td>
@@ -1186,17 +1571,63 @@ export function AffiliatePage() {
             )}
 
             <div className="space-y-1.5">
-              <Label>Commission Rate (%)</Label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                value={commissionRate}
-                onChange={(e) => setCommissionRate(e.target.value)}
-                className="text-xs font-mono"
-                placeholder="10"
-              />
+              <Label>Commission Reward Type *</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={commissionType === "PERCENTAGE" ? "default" : "outline"}
+                  onClick={() => setCommissionType("PERCENTAGE")}
+                  className="text-xs"
+                >
+                  % Percentage of Order
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={commissionType === "FIXED_AMOUNT" ? "default" : "outline"}
+                  onClick={() => setCommissionType("FIXED_AMOUNT")}
+                  className="text-xs"
+                >
+                  ₹ Flat Amount per Sale
+                </Button>
+              </div>
             </div>
+
+            {commissionType === "PERCENTAGE" ? (
+              <div className="space-y-1.5">
+                <Label>Commission Rate (%)</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={commissionRate}
+                    onChange={(e) => setCommissionRate(e.target.value)}
+                    className="text-xs font-mono pr-7"
+                    placeholder="10"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Creator earns {commissionRate || 0}% of qualifying order subtotal.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Flat Commission Amount (₹)</Label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold">₹</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={commissionAmount}
+                    onChange={(e) => setCommissionAmount(e.target.value)}
+                    className="text-xs font-mono pl-7"
+                    placeholder="100"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">Creator earns a fixed ₹{commissionAmount || 0} payout on each successful attributed sale.</p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -1211,7 +1642,9 @@ export function AffiliatePage() {
                   creatorId: linkType === "CREATOR" ? creatorId : null,
                   productId: destinationType === "PRODUCT" ? productId : null,
                   collectionId: destinationType === "COLLECTION" ? collectionId : null,
-                  commissionRate: Number(commissionRate) || 10,
+                  commissionType,
+                  commissionRate: commissionType === "PERCENTAGE" ? (Number(commissionRate) || 10) : 0,
+                  commissionAmount: commissionType === "FIXED_AMOUNT" ? (Number(commissionAmount) || 0) : null,
                 });
               }}
             >

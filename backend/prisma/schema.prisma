@@ -161,6 +161,8 @@ model User {
   notifications                 Notification[]
   campaignPayouts               CampaignPayout[]
   barterFulfillments            BarterSampleFulfillment[]
+  termsAcceptedAt               DateTime?
+  termsVersion                  String?
   createdAt                     DateTime                       @default(now())
   updatedAt                     DateTime                       @updatedAt
 }
@@ -581,7 +583,9 @@ model AffiliateLink {
   slug            String                  @unique
   targetType      AffiliateLinkTargetType @default(STORE)
   destinationPath String                  @default("/")
+  commissionType  String                  @default("PERCENTAGE")
   commissionRate  Decimal                 @default(10) @db.Decimal(5, 2)
+  commissionAmount Decimal?               @db.Decimal(10, 2)
   status          AffiliateLinkStatus     @default(ACTIVE)
   expiresAt       DateTime?
   createdAt       DateTime                @default(now())
@@ -639,6 +643,7 @@ model AffiliateCommission {
   creatorId      String?
   shopifyOrderId String
   orderAmount    Decimal                   @db.Decimal(12, 2)
+  commissionType String                    @default("PERCENTAGE")
   commissionRate Decimal                   @db.Decimal(5, 2)
   amount         Decimal                   @db.Decimal(12, 2)
   status         AffiliateCommissionStatus @default(PENDING)
@@ -658,6 +663,7 @@ model StoreInfluencerAssignment {
   organizationId   String
   influencerId     String
   compensationMode String       @default("COMMISSION")
+  autoCommission   Boolean      @default(true)
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   influencer       User         @relation("AssignedInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
   createdAt        DateTime     @default(now())

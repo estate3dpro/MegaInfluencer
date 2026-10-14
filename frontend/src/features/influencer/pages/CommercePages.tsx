@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Facebook,
   Filter,
+  Gift,
   Instagram,
   Layers,
   Link2,
@@ -25,6 +26,7 @@ import {
   TrendingUp,
   Truck,
   Users,
+  Zap,
 } from "lucide-react";
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, CartesianGrid } from "recharts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -920,6 +922,17 @@ export function LinksPage() {
                       <Badge variant="secondary" className="text-[10px] uppercase font-bold">
                         {link.targetType}
                       </Badge>
+                      {link.isBarter ? (
+                        <Badge variant="outline" className="text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800">
+                          🎁 Barter Deal
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px] font-bold bg-teal/10 text-teal">
+                          {link.commissionType === "FIXED_AMOUNT"
+                            ? `₹${Number(link.commissionAmount ?? 0).toLocaleString()} / sale`
+                            : `${link.commissionRate}%`}
+                        </Badge>
+                      )}
                     </div>
                     <p className="mt-0.5 font-mono text-xs text-primary truncate">
                       {link.url}
@@ -957,6 +970,9 @@ export function LinksPage() {
                         baseUrl: link.url,
                         productName: link.productTitle || (link.targetType === "COLLECTION" ? "Product Collection" : `${link.storeName} Store`),
                         storeName: link.storeName,
+                        commissionType: link.commissionType,
+                        commissionRate: link.commissionRate,
+                        commissionAmount: link.commissionAmount,
                         slug: (link as any).slug || "affiliate",
                       });
                       setPlatformModalOpen(true);
@@ -1214,18 +1230,67 @@ export function EarningsPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Barter Orders"
-          description="Your store partnerships are currently managed as barter. Orders are tracked, with no cash commission or payout."
+          title="Barter Orders & Gifting"
+          description="Your store partnerships are currently managed as barter. Sample products are gifted to you for content, and orders driven by your links are tracked without cash commissions."
           actions={<StoreSelector scope={scope} setScope={setScope} stores={storesQuery.data?.stores} />}
         />
-        <section className="grid gap-4 sm:grid-cols-1">
-          <Metric label="Barter orders generated" value={String(earningsData.barterOrders)} icon={ShoppingBag} detail="Tracked purchases" />
+
+        {/* Partnership Model Banner */}
+        <div className="rounded-xl p-3.5 bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 text-xs">
+          <Gift className="h-5 w-5 text-amber-600 shrink-0" />
+          <div>
+            <span className="font-semibold text-foreground">🎁 Barter Partnership Active</span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              You receive complimentary brand product samples to feature in your posts. Tracked customer purchases are recorded for engagement metrics, but no cash commissions are generated.
+            </p>
+          </div>
+        </div>
+
+        <section className="grid gap-4 sm:grid-cols-2">
+          <Metric label="Barter orders generated" value={String(earningsData.barterOrders || 0)} icon={ShoppingBag} detail="Tracked purchases" />
+          <Metric label="Product samples gifted" value={String(barterFulfillments.length)} icon={Gift} detail="Dispatched samples" />
         </section>
-        <Card className="shadow-card">
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            Orders from your shared links are counted here, but barter partnerships do not create commission earnings or payouts.
-          </CardContent>
-        </Card>
+
+        {/* Barter Product Sample Fulfillment Tracking Section */}
+        {barterFulfillments.length > 0 ? (
+          <Card className="shadow-card">
+            <CardHeader className="p-5 pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" /> Gifted Product Samples & Tracking
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">Track sample dispatches and delivery confirmations for your product exchange partnerships</p>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2 p-5 pt-1">
+              {barterFulfillments.map((item) => (
+                <div key={item.id} className="rounded-xl border p-4 space-y-3 bg-card">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-primary">{item.storeName}</span>
+                      <p className="font-semibold text-sm text-foreground mt-0.5">{item.campaignTitle}</p>
+                    </div>
+                    <Badge variant={item.status === "DELIVERED" || item.status === "COMPLETED" ? "outline" : "secondary"} className="flex items-center gap-1">
+                      <Truck className="h-3 w-3" /> {item.status}
+                    </Badge>
+                  </div>
+                  <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1">
+                    <p className="font-medium text-foreground">Product: {item.productTitle}</p>
+                    {item.trackingNumber && (
+                      <p className="text-muted-foreground font-mono">
+                        {item.carrier ?? "Courier"}: <span className="font-bold text-foreground">{item.trackingNumber}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="shadow-card">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              Orders from your shared links are tracked in real time. Once brand partners dispatch sample products to your address, shipment tracking details will appear here.
+            </CardContent>
+          </Card>
+        )}
       </div>
     );
   }
@@ -1234,9 +1299,48 @@ export function EarningsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Earnings & Payouts"
-        description="Track earnings across all 4 compensation models: Affiliate Commission, Fixed Pricing, Hybrid Base Fees, and Barter Samples."
+        description="Track earnings across all compensation models: Affiliate Commission, Hybrid Base Fees, and Barter Samples."
         actions={<StoreSelector scope={scope} setScope={setScope} stores={storesQuery.data?.stores} />}
       />
+
+      {/* Partnership Model Banner */}
+      {earningsData?.dealTitle && (
+        <div className="rounded-xl p-3.5 bg-muted/40 border flex flex-col gap-2 text-xs">
+          <div className="flex items-center gap-3">
+            {earningsData.dealMode === "BARTER" ? (
+              <Gift className="h-4 w-4 text-amber-600 shrink-0" />
+            ) : earningsData.dealMode === "HYBRID" ? (
+              <Zap className="h-4 w-4 text-indigo-500 shrink-0" />
+            ) : (
+              <BadgeIndianRupee className="h-4 w-4 text-emerald-600 shrink-0" />
+            )}
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-foreground">{earningsData.dealTitle}</span>
+                {earningsData.dealMode !== "BARTER" && (
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-bold ${
+                      earningsData.autoCommission ?? true
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
+                        : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800"
+                    }`}
+                  >
+                    {earningsData.autoCommission ?? true ? "⚡ Auto Commission Active" : "🔒 Manual Review Mode"}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {earningsData.dealMode === "BARTER"
+                  ? earningsData.dealDescription
+                  : earningsData.autoCommission ?? true
+                  ? "Referred customer orders are automatically approved for payout by your brand partner."
+                  : "Referred customer orders are held in Pending while your brand partner reviews and manually approves them."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="grid gap-4 sm:grid-cols-3">
         <Metric

@@ -395,12 +395,16 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           // The store roster switch is the temporary compensation source of truth.
           // It deliberately bypasses campaign compensation while that workflow is repaired.
           let compensationMode: 'COMMISSION' | 'BARTER' = 'COMMISSION';
+          let isAutoCommission = true;
           if (creator) {
             const assignment = await prisma.storeInfluencerAssignment.findUnique({
               where: { organizationId_influencerId: { organizationId: s.id, influencerId: creator.id } },
-              select: { compensationMode: true },
+              select: { compensationMode: true, autoCommission: true },
             });
             if (assignment?.compensationMode === 'BARTER') compensationMode = 'BARTER';
+            if (typeof (assignment as any)?.autoCommission === 'boolean') {
+              isAutoCommission = (assignment as any).autoCommission;
+            }
           }
 
           // A link is also required for barter orders so they can be attributed and counted.
@@ -421,7 +425,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           if (link && creator && (compensationMode === 'BARTER' || Number(link.commissionRate ?? 0) > 0)) {
             const orderAmount = Number(d.total ?? 0);
             const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
-            const status = isRefunded ? 'REVERSED' : 'PENDING';
+            const status = isRefunded ? 'REVERSED' : (isAutoCommission ? 'APPROVED' : 'PENDING');
             const commissionRate = compensationMode === 'BARTER' ? 0 : Number(link.commissionRate ?? 10);
             const matchedUserId = link.creatorId ?? creator.id;
 

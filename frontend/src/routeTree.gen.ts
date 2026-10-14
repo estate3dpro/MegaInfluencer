@@ -28,6 +28,7 @@ import { Route as AdminCampaignsRouteImport } from './routes/admin/campaigns'
 import { Route as AdminCommissionsRouteImport } from './routes/admin/commissions'
 import { Route as AdminCreatorsRouteImport } from './routes/admin/creators'
 import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
+import { Route as AdminDocsRouteImport } from './routes/admin/docs'
 import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
 import { Route as AdminHelpRouteImport } from './routes/admin/help'
 import { Route as AdminInfluencersRouteImport } from './routes/admin/influencers'
@@ -49,6 +50,7 @@ import { Route as InfluencerAnalyticsRouteImport } from './routes/influencer/ana
 import { Route as InfluencerCampaignsRouteImport } from './routes/influencer/campaigns'
 import { Route as InfluencerDashboardRouteImport } from './routes/influencer/dashboard'
 import { Route as InfluencerDiscoverRouteImport } from './routes/influencer/discover'
+import { Route as InfluencerDocsRouteImport } from './routes/influencer/docs'
 import { Route as InfluencerEarningsRouteImport } from './routes/influencer/earnings'
 import { Route as InfluencerHelpRouteImport } from './routes/influencer/help'
 import { Route as InfluencerInstagramAutomationRouteImport } from './routes/influencer/instagram-automation'
@@ -75,6 +77,7 @@ import { Route as StoreAdminCustomerReferralsRouteImport } from './routes/store-
 import { Route as StoreAdminCustomersRouteImport } from './routes/store-admin/customers'
 import { Route as StoreAdminDashboardRouteImport } from './routes/store-admin/dashboard'
 import { Route as StoreAdminDiscountsRouteImport } from './routes/store-admin/discounts'
+import { Route as StoreAdminDocsRouteImport } from './routes/store-admin/docs'
 import { Route as StoreAdminHelpRouteImport } from './routes/store-admin/help'
 import { Route as StoreAdminInstagramChatRouteImport } from './routes/store-admin/instagram-chat'
 import { Route as StoreAdminInstagramInboxRouteImport } from './routes/store-admin/instagram-inbox'
@@ -198,6 +201,11 @@ const AdminDashboardRoute = AdminDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminDocsRoute = AdminDocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminFinanceRoute = AdminFinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
@@ -301,6 +309,11 @@ const InfluencerDashboardRoute = InfluencerDashboardRouteImport.update({
 const InfluencerDiscoverRoute = InfluencerDiscoverRouteImport.update({
   id: '/discover',
   path: '/discover',
+  getParentRoute: () => InfluencerRoute,
+} as any)
+const InfluencerDocsRoute = InfluencerDocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => InfluencerRoute,
 } as any)
 const InfluencerEarningsRoute = InfluencerEarningsRouteImport.update({
@@ -435,6 +448,11 @@ const StoreAdminDashboardRoute = StoreAdminDashboardRouteImport.update({
 const StoreAdminDiscountsRoute = StoreAdminDiscountsRouteImport.update({
   id: '/discounts',
   path: '/discounts',
+  getParentRoute: () => StoreAdminRoute,
+} as any)
+const StoreAdminDocsRoute = StoreAdminDocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => StoreAdminRoute,
 } as any)
 const StoreAdminHelpRoute = StoreAdminHelpRouteImport.update({
@@ -603,6 +621,7 @@ export interface FileRoutesByFullPath {
   '/admin/commissions': typeof AdminCommissionsRoute
   '/admin/creators': typeof AdminCreatorsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/docs': typeof AdminDocsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/help': typeof AdminHelpRoute
   '/admin/influencers': typeof AdminInfluencersRouteWithChildren
@@ -623,6 +642,7 @@ export interface FileRoutesByFullPath {
   '/influencer/campaigns': typeof InfluencerCampaignsRouteWithChildren
   '/influencer/dashboard': typeof InfluencerDashboardRoute
   '/influencer/discover': typeof InfluencerDiscoverRoute
+  '/influencer/docs': typeof InfluencerDocsRoute
   '/influencer/earnings': typeof InfluencerEarningsRoute
   '/influencer/help': typeof InfluencerHelpRoute
   '/influencer/instagram-automation': typeof InfluencerInstagramAutomationRouteWithChildren
@@ -648,6 +668,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
+  '/store-admin/docs': typeof StoreAdminDocsRoute
   '/store-admin/help': typeof StoreAdminHelpRoute
   '/store-admin/instagram-chat': typeof StoreAdminInstagramChatRoute
   '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
@@ -695,6 +716,7 @@ export interface FileRoutesByTo {
   '/admin/commissions': typeof AdminCommissionsRoute
   '/admin/creators': typeof AdminCreatorsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/docs': typeof AdminDocsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/help': typeof AdminHelpRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
@@ -713,6 +735,7 @@ export interface FileRoutesByTo {
   '/influencer/analytics': typeof InfluencerAnalyticsRoute
   '/influencer/dashboard': typeof InfluencerDashboardRoute
   '/influencer/discover': typeof InfluencerDiscoverRoute
+  '/influencer/docs': typeof InfluencerDocsRoute
   '/influencer/earnings': typeof InfluencerEarningsRoute
   '/influencer/help': typeof InfluencerHelpRoute
   '/influencer/instagram-chat': typeof InfluencerInstagramChatRoute
@@ -735,6 +758,7 @@ export interface FileRoutesByTo {
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
+  '/store-admin/docs': typeof StoreAdminDocsRoute
   '/store-admin/help': typeof StoreAdminHelpRoute
   '/store-admin/instagram-chat': typeof StoreAdminInstagramChatRoute
   '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
@@ -784,6 +808,7 @@ export interface FileRoutesById {
   '/admin/commissions': typeof AdminCommissionsRoute
   '/admin/creators': typeof AdminCreatorsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/docs': typeof AdminDocsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/help': typeof AdminHelpRoute
   '/admin/influencers': typeof AdminInfluencersRouteWithChildren
@@ -804,6 +829,7 @@ export interface FileRoutesById {
   '/influencer/campaigns': typeof InfluencerCampaignsRouteWithChildren
   '/influencer/dashboard': typeof InfluencerDashboardRoute
   '/influencer/discover': typeof InfluencerDiscoverRoute
+  '/influencer/docs': typeof InfluencerDocsRoute
   '/influencer/earnings': typeof InfluencerEarningsRoute
   '/influencer/help': typeof InfluencerHelpRoute
   '/influencer/instagram-automation': typeof InfluencerInstagramAutomationRouteWithChildren
@@ -829,6 +855,7 @@ export interface FileRoutesById {
   '/store-admin/customers': typeof StoreAdminCustomersRoute
   '/store-admin/dashboard': typeof StoreAdminDashboardRoute
   '/store-admin/discounts': typeof StoreAdminDiscountsRoute
+  '/store-admin/docs': typeof StoreAdminDocsRoute
   '/store-admin/help': typeof StoreAdminHelpRoute
   '/store-admin/instagram-chat': typeof StoreAdminInstagramChatRoute
   '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
@@ -881,6 +908,7 @@ export interface FileRouteTypes {
     | '/admin/commissions'
     | '/admin/creators'
     | '/admin/dashboard'
+    | '/admin/docs'
     | '/admin/finance'
     | '/admin/help'
     | '/admin/influencers'
@@ -901,6 +929,7 @@ export interface FileRouteTypes {
     | '/influencer/campaigns'
     | '/influencer/dashboard'
     | '/influencer/discover'
+    | '/influencer/docs'
     | '/influencer/earnings'
     | '/influencer/help'
     | '/influencer/instagram-automation'
@@ -926,6 +955,7 @@ export interface FileRouteTypes {
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
+    | '/store-admin/docs'
     | '/store-admin/help'
     | '/store-admin/instagram-chat'
     | '/store-admin/instagram-inbox'
@@ -973,6 +1003,7 @@ export interface FileRouteTypes {
     | '/admin/commissions'
     | '/admin/creators'
     | '/admin/dashboard'
+    | '/admin/docs'
     | '/admin/finance'
     | '/admin/help'
     | '/admin/integrations'
@@ -991,6 +1022,7 @@ export interface FileRouteTypes {
     | '/influencer/analytics'
     | '/influencer/dashboard'
     | '/influencer/discover'
+    | '/influencer/docs'
     | '/influencer/earnings'
     | '/influencer/help'
     | '/influencer/instagram-chat'
@@ -1013,6 +1045,7 @@ export interface FileRouteTypes {
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
+    | '/store-admin/docs'
     | '/store-admin/help'
     | '/store-admin/instagram-chat'
     | '/store-admin/instagram-inbox'
@@ -1061,6 +1094,7 @@ export interface FileRouteTypes {
     | '/admin/commissions'
     | '/admin/creators'
     | '/admin/dashboard'
+    | '/admin/docs'
     | '/admin/finance'
     | '/admin/help'
     | '/admin/influencers'
@@ -1081,6 +1115,7 @@ export interface FileRouteTypes {
     | '/influencer/campaigns'
     | '/influencer/dashboard'
     | '/influencer/discover'
+    | '/influencer/docs'
     | '/influencer/earnings'
     | '/influencer/help'
     | '/influencer/instagram-automation'
@@ -1106,6 +1141,7 @@ export interface FileRouteTypes {
     | '/store-admin/customers'
     | '/store-admin/dashboard'
     | '/store-admin/discounts'
+    | '/store-admin/docs'
     | '/store-admin/help'
     | '/store-admin/instagram-chat'
     | '/store-admin/instagram-inbox'
@@ -1289,6 +1325,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDashboardRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/docs': {
+      id: '/admin/docs'
+      path: '/docs'
+      fullPath: '/admin/docs'
+      preLoaderRoute: typeof AdminDocsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/finance': {
       id: '/admin/finance'
       path: '/finance'
@@ -1434,6 +1477,13 @@ declare module '@tanstack/react-router' {
       path: '/discover'
       fullPath: '/influencer/discover'
       preLoaderRoute: typeof InfluencerDiscoverRouteImport
+      parentRoute: typeof InfluencerRoute
+    }
+    '/influencer/docs': {
+      id: '/influencer/docs'
+      path: '/docs'
+      fullPath: '/influencer/docs'
+      preLoaderRoute: typeof InfluencerDocsRouteImport
       parentRoute: typeof InfluencerRoute
     }
     '/influencer/earnings': {
@@ -1616,6 +1666,13 @@ declare module '@tanstack/react-router' {
       path: '/discounts'
       fullPath: '/store-admin/discounts'
       preLoaderRoute: typeof StoreAdminDiscountsRouteImport
+      parentRoute: typeof StoreAdminRoute
+    }
+    '/store-admin/docs': {
+      id: '/store-admin/docs'
+      path: '/docs'
+      fullPath: '/store-admin/docs'
+      preLoaderRoute: typeof StoreAdminDocsRouteImport
       parentRoute: typeof StoreAdminRoute
     }
     '/store-admin/help': {
@@ -1832,6 +1889,7 @@ interface AdminRouteChildren {
   AdminCommissionsRoute: typeof AdminCommissionsRoute
   AdminCreatorsRoute: typeof AdminCreatorsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminDocsRoute: typeof AdminDocsRoute
   AdminFinanceRoute: typeof AdminFinanceRoute
   AdminHelpRoute: typeof AdminHelpRoute
   AdminInfluencersRoute: typeof AdminInfluencersRouteWithChildren
@@ -1859,6 +1917,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCommissionsRoute: AdminCommissionsRoute,
   AdminCreatorsRoute: AdminCreatorsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
+  AdminDocsRoute: AdminDocsRoute,
   AdminFinanceRoute: AdminFinanceRoute,
   AdminHelpRoute: AdminHelpRoute,
   AdminInfluencersRoute: AdminInfluencersRouteWithChildren,
@@ -1919,6 +1978,7 @@ interface InfluencerRouteChildren {
   InfluencerCampaignsRoute: typeof InfluencerCampaignsRouteWithChildren
   InfluencerDashboardRoute: typeof InfluencerDashboardRoute
   InfluencerDiscoverRoute: typeof InfluencerDiscoverRoute
+  InfluencerDocsRoute: typeof InfluencerDocsRoute
   InfluencerEarningsRoute: typeof InfluencerEarningsRoute
   InfluencerHelpRoute: typeof InfluencerHelpRoute
   InfluencerInstagramAutomationRoute: typeof InfluencerInstagramAutomationRouteWithChildren
@@ -1940,6 +2000,7 @@ const InfluencerRouteChildren: InfluencerRouteChildren = {
   InfluencerCampaignsRoute: InfluencerCampaignsRouteWithChildren,
   InfluencerDashboardRoute: InfluencerDashboardRoute,
   InfluencerDiscoverRoute: InfluencerDiscoverRoute,
+  InfluencerDocsRoute: InfluencerDocsRoute,
   InfluencerEarningsRoute: InfluencerEarningsRoute,
   InfluencerHelpRoute: InfluencerHelpRoute,
   InfluencerInstagramAutomationRoute:
@@ -2028,6 +2089,7 @@ interface StoreAdminRouteChildren {
   StoreAdminCustomersRoute: typeof StoreAdminCustomersRoute
   StoreAdminDashboardRoute: typeof StoreAdminDashboardRoute
   StoreAdminDiscountsRoute: typeof StoreAdminDiscountsRoute
+  StoreAdminDocsRoute: typeof StoreAdminDocsRoute
   StoreAdminHelpRoute: typeof StoreAdminHelpRoute
   StoreAdminInstagramChatRoute: typeof StoreAdminInstagramChatRoute
   StoreAdminInstagramInboxRoute: typeof StoreAdminInstagramInboxRoute
@@ -2053,6 +2115,7 @@ const StoreAdminRouteChildren: StoreAdminRouteChildren = {
   StoreAdminCustomersRoute: StoreAdminCustomersRoute,
   StoreAdminDashboardRoute: StoreAdminDashboardRoute,
   StoreAdminDiscountsRoute: StoreAdminDiscountsRoute,
+  StoreAdminDocsRoute: StoreAdminDocsRoute,
   StoreAdminHelpRoute: StoreAdminHelpRoute,
   StoreAdminInstagramChatRoute: StoreAdminInstagramChatRoute,
   StoreAdminInstagramInboxRoute: StoreAdminInstagramInboxRoute,

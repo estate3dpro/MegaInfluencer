@@ -29,6 +29,7 @@ import {
   Store as StoreIcon,
   UserCog,
   UserRound,
+  Video,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -96,9 +97,9 @@ export const influencerNav: NavGroup[] = [
     ],
   },
   {
-    label: "Support",
+    label: "Docs & Support",
     items: [
-      { title: "Help & Guide", url: "/influencer/help", icon: HelpCircle },
+      { title: "Docs & Video Tutorials", url: "/influencer/help", icon: Video },
     ],
   },
 ];
@@ -134,12 +135,12 @@ export const storeAdminNav: NavGroup[] = [
     ],
   },
   {
-    label: "Setup & Help",
+    label: "Setup & Docs",
     items: [
       { title: "Store", url: "/store-admin/store", icon: StoreIcon },
       { title: "Integrations", url: "/store-admin/integrations", icon: Blocks },
       { title: "Settings", url: "/store-admin/settings", icon: Settings },
-      { title: "Help & Guide", url: "/store-admin/help", icon: HelpCircle },
+      { title: "Docs & Video Tutorials", url: "/store-admin/help", icon: Video },
     ],
   },
 ];
@@ -165,10 +166,10 @@ export const adminNav: NavGroup[] = [
     ],
   },
   {
-    label: "Settings",
+    label: "Settings & Docs",
     items: [
       { title: "Settings", url: "/admin/settings", icon: Settings },
-      { title: "Help & Guide", url: "/admin/help", icon: HelpCircle },
+      { title: "Docs & Video Tutorials", url: "/admin/help", icon: Video },
     ],
   },
 ];

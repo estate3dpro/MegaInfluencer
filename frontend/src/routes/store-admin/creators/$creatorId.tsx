@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -24,6 +24,9 @@ import {
   Layers,
   Send,
   Eye,
+  Zap,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -47,12 +50,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { useAuthStore } from "@/stores/auth-store";
 import {
   getStoreCreatorDetails,
   getCreatorAssignedProducts,
   updateCreatorAssignedProducts,
   updateCreatorCompensationMode,
+  updateCreatorAutoCommission,
+  createManualCommission,
   sendBarterSample,
+  impersonateCreator,
   type CompensationMode,
 } from "@/features/store-admin/api/creators.api";
 
@@ -69,6 +77,41 @@ export const Route = createFileRoute("/store-admin/creators/$creatorId")({ compo
 function CreatorDetailPage() {
   const { creatorId } = Route.useParams();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const startImpersonation = useAuthStore((state) => state.startImpersonation);
+
+  const impersonateMutation = useMutation({
+    mutationFn: (targetId: string) => impersonateCreator(targetId),
+    onSuccess: (data) => {
+      const accessToken = data.accessToken || data.tokens?.accessToken;
+      const refreshToken = data.refreshToken || data.tokens?.refreshToken;
+      if (!accessToken || !refreshToken) {
+        toast.error("Failed to acquire impersonation session tokens");
+        return;
+      }
+      const displayName = data.user.name || data.user.displayName || "Influencer";
+      startImpersonation({
+        influencerUser: {
+          id: data.user.id,
+          email: data.user.email || "",
+          name: displayName,
+          creatorCode: data.user.creatorCode,
+          roles: ["influencer"],
+          activeRole: "influencer",
+        },
+        accessToken,
+        refreshToken,
+        storeName: data.impersonatedBy?.storeName,
+        targetCreatorId: data.user.id,
+      });
+      queryClient.clear();
+      toast.success(`Switched to impersonating ${displayName}`);
+      void navigate({ to: "/influencer/dashboard" });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || err?.message || "Failed to impersonate creator");
+    },
+  });
 
   const [activeTab, setActiveTab] = useState("products");
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -84,6 +127,13 @@ function CreatorDetailPage() {
   const [sampleProductTitle, setSampleProductTitle] = useState("");
   const [sampleCarrier, setSampleCarrier] = useState("Delhivery");
   const [sampleTrackingNumber, setSampleTrackingNumber] = useState("");
+
+  // Manual Commission Modal State
+  const [manualCommDialogOpen, setManualCommDialogOpen] = useState(false);
+  const [manualCommAmount, setManualCommAmount] = useState("");
+  const [manualCommOrderName, setManualCommOrderName] = useState("");
+  const [manualCommNotes, setManualCommNotes] = useState("");
+  const [manualCommStatus, setManualCommStatus] = useState<"APPROVED" | "PENDING" | "PAID">("APPROVED");
 
   // 1. Fetch Creator Detailed Info & Metrics
   const creatorQuery = useQuery({
@@ -137,6 +187,42 @@ function CreatorDetailPage() {
     },
     onError: () => {
       toast.error("Failed to record sample fulfillment.");
+    },
+  });
+
+  // 6. Mutation to update Auto / Manual Commission Mode
+  const updateAutoCommissionMutation = useMutation({
+    mutationFn: (autoCommission: boolean) => updateCreatorAutoCommission(creatorId, autoCommission),
+    onSuccess: (_, auto) => {
+      queryClient.invalidateQueries({ queryKey: ["store", "creator", creatorId] });
+      queryClient.invalidateQueries({ queryKey: ["store", "creators"] });
+      if (auto) {
+        toast.success("⚡ Auto Commission Enabled: Qualifying orders will be approved automatically.");
+      } else {
+        toast.info("🔒 Manual Commission Enabled: Qualifying orders will require manual approval.");
+      }
+    },
+    onError: () => {
+      toast.error("Failed to update commission mode.");
+    },
+  });
+
+  // 7. Mutation to record Manual Commission payout / bonus
+  const createManualCommissionMutation = useMutation({
+    mutationFn: (data: { amount: number; orderName?: string; notes?: string; status?: "APPROVED" | "PENDING" | "PAID" }) =>
+      createManualCommission(creatorId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["store", "creator", creatorId] });
+      queryClient.invalidateQueries({ queryKey: ["store", "creators"] });
+      queryClient.invalidateQueries({ queryKey: ["store", "commissions"] });
+      setManualCommDialogOpen(false);
+      setManualCommAmount("");
+      setManualCommOrderName("");
+      setManualCommNotes("");
+      toast.success("Manual commission credited successfully!");
+    },
+    onError: () => {
+      toast.error("Failed to add manual commission.");
     },
   });
 
@@ -217,6 +303,7 @@ function CreatorDetailPage() {
     creator,
     assignedAt,
     compensationMode,
+    autoCommission: rawAutoComm,
     metrics = {
       totalSales: 0,
       totalOrders: 0,
@@ -230,6 +317,8 @@ function CreatorDetailPage() {
     recentOrders = [],
     barterFulfillments = [],
   } = creatorQuery.data;
+
+  const autoCommission = creator?.autoCommission ?? rawAutoComm ?? true;
 
   const allProducts = productsQuery.data?.products ?? [];
   const assignedProducts = allProducts.filter((p) => p.isAssigned);
@@ -296,6 +385,26 @@ function CreatorDetailPage() {
                 >
                   {creator.status === "ACTIVE" ? "● Active Partner" : "Suspended"}
                 </Badge>
+                {creator.termsAcceptedAt ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 text-xs font-semibold gap-1.5 py-0.5 px-2.5 shadow-sm cursor-help"
+                    title={`Legally binding agreement to Platform Terms & Conditions (Version ${creator.termsVersion || "v1.0"}) executed on ${new Date(creator.termsAcceptedAt).toLocaleString("en-IN")}`}
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Terms & Conditions Agreed</span>
+                    <span className="text-[10px] opacity-75 font-mono">({new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(creator.termsAcceptedAt))})</span>
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 text-xs font-medium gap-1.5 py-0.5 px-2.5 cursor-help"
+                    title="Legal agreement pending or not yet recorded"
+                  >
+                    <ShieldAlert className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Terms Pending</span>
+                  </Badge>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-muted-foreground">
@@ -363,6 +472,53 @@ function CreatorDetailPage() {
               </Select>
             </div>
 
+            {/* Influencer-wise Auto Commission On/Off Toggle Button */}
+            <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1 shadow-2xs">
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Commission Mode
+                </span>
+                <span
+                  className={`text-xs font-bold flex items-center gap-1 ${
+                    autoCommission
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {autoCommission ? "⚡ Auto Commission" : "🔒 Manual Review"}
+                </span>
+              </div>
+              <Switch
+                checked={autoCommission}
+                disabled={updateAutoCommissionMutation.isPending}
+                onCheckedChange={(val) => updateAutoCommissionMutation.mutate(val)}
+                className="data-[state=checked]:bg-emerald-600 ml-1"
+              />
+            </div>
+
+            {/* Impersonate Influencer Button */}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={impersonateMutation.isPending || creator.status !== "ACTIVE"}
+              onClick={() => impersonateMutation.mutate(creator.id)}
+              className="h-9 text-xs font-semibold gap-1.5 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 shadow-2xs"
+              title="Log in and view platform from this creator's perspective"
+            >
+              <Eye className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              {impersonateMutation.isPending ? "Impersonating..." : "Impersonate Influencer"}
+            </Button>
+
+            {/* Manually Add Commission Button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setManualCommDialogOpen(true)}
+              className="h-9 text-xs font-semibold gap-1.5 border-dashed hover:border-primary"
+            >
+              <Plus className="h-3.5 w-3.5" /> Manual Commission
+            </Button>
+
             <Button size="sm" onClick={openAssignModal}>
               <Package className="mr-1.5 h-4 w-4" /> Assign Products
             </Button>
@@ -370,42 +526,66 @@ function CreatorDetailPage() {
         </div>
 
         {/* Partnership Model Banner */}
-        <div className="rounded-xl p-3.5 bg-muted/40 border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            {compensationMode === "BARTER" ? (
-              <Gift className="h-4 w-4 text-coral shrink-0" />
-            ) : compensationMode === "HYBRID" ? (
-              <Zap className="h-4 w-4 text-indigo shrink-0" />
-            ) : (
-              <BadgeIndianRupee className="h-4 w-4 text-emerald-600 shrink-0" />
-            )}
-            <div>
-              <span className="font-semibold text-foreground">
-                {compensationMode === "BARTER"
-                  ? "Barter Partnership Active"
-                  : compensationMode === "HYBRID"
-                  ? "Hybrid Partnership Active"
-                  : "Commission Partnership Active"}
-              </span>
-              <p className="text-[11px] text-muted-foreground">
-                {compensationMode === "BARTER"
-                  ? "Purchases are tracked for performance insights, but no cash commission payout is generated."
-                  : compensationMode === "HYBRID"
-                  ? "Creator receives product samples and also earns cash commissions on referred sales."
-                  : "Creator earns commission on every approved customer order generated through their link."}
-              </p>
+        <div className="rounded-xl p-3.5 bg-muted/40 border flex flex-col gap-3 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              {compensationMode === "BARTER" ? (
+                <Gift className="h-4 w-4 text-coral shrink-0" />
+              ) : compensationMode === "HYBRID" ? (
+                <Zap className="h-4 w-4 text-indigo shrink-0" />
+              ) : (
+                <BadgeIndianRupee className="h-4 w-4 text-emerald-600 shrink-0" />
+              )}
+              <div>
+                <span className="font-semibold text-foreground">
+                  {compensationMode === "BARTER"
+                    ? "Barter Partnership Active"
+                    : compensationMode === "HYBRID"
+                    ? "Hybrid Partnership Active"
+                    : "Commission Partnership Active"}
+                </span>
+                <p className="text-[11px] text-muted-foreground">
+                  {compensationMode === "BARTER"
+                    ? "Purchases are tracked for performance insights, but no cash commission payout is generated."
+                    : compensationMode === "HYBRID"
+                    ? "Creator receives product samples and also earns cash commissions on referred sales."
+                    : "Creator earns commission on every approved customer order generated through their link."}
+                </p>
+              </div>
             </div>
+
+            {(compensationMode === "BARTER" || compensationMode === "HYBRID") && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs shrink-0 self-start sm:self-auto"
+                onClick={() => setSampleDialogOpen(true)}
+              >
+                <Truck className="h-3.5 w-3.5 mr-1 text-primary" /> Ship Product Sample
+              </Button>
+            )}
           </div>
 
-          {(compensationMode === "BARTER" || compensationMode === "HYBRID") && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs shrink-0 self-start sm:self-auto"
-              onClick={() => setSampleDialogOpen(true)}
-            >
-              <Truck className="h-3.5 w-3.5 mr-1 text-primary" /> Ship Product Sample
-            </Button>
+          {/* Auto vs Manual Commission Detailed Explainer */}
+          {compensationMode !== "BARTER" && (
+            <div className="pt-2.5 border-t border-border/40 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    autoCommission
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800"
+                      : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800"
+                  }`}
+                >
+                  {autoCommission ? "⚡ Auto Commission: ON" : "🔒 Manual Commission: ON (Auto OFF)"}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {autoCommission
+                    ? "Customer orders referred by this creator are automatically approved and made available for withdrawal."
+                    : "Customer orders referred by this creator remain Pending until manually reviewed and approved by Store Admin."}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -861,6 +1041,65 @@ function CreatorDetailPage() {
               </dl>
             </CardContent>
           </Card>
+
+          {/* Legal Compliance & Agreement Card */}
+          <Card className="shadow-card border-emerald-500/25 bg-emerald-500/5 dark:bg-emerald-950/20">
+            <CardHeader className="p-5 pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                  <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  Legal Terms & Condition Compliance
+                </CardTitle>
+                {creator.termsAcceptedAt ? (
+                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 text-xs font-semibold gap-1">
+                    ✓ Legally Enforceable Agreement (v{creator.termsVersion || "1.0"})
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-300 text-xs font-medium gap-1">
+                    <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+                    Agreement Pending
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Official audit log proving this influencer has explicitly agreed to the Platform Terms of Service, Instagram Data Handling Policies, and Commerce Affiliate Terms.
+              </p>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="grid gap-3 sm:grid-cols-3 text-xs">
+                <div className="p-3 rounded-lg border bg-background/80 space-y-1">
+                  <span className="text-muted-foreground font-medium">Agreement Status</span>
+                  <p className="font-semibold text-foreground flex items-center gap-1.5">
+                    {creator.termsAcceptedAt ? (
+                      <>
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        Agreed & Legally Binding
+                      </>
+                    ) : (
+                      <>
+                        <span className="h-2 w-2 rounded-full bg-amber-500" />
+                        Pending Consent
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg border bg-background/80 space-y-1">
+                  <span className="text-muted-foreground font-medium">Consent Timestamp</span>
+                  <p className="font-semibold text-foreground font-mono">
+                    {creator.termsAcceptedAt
+                      ? new Date(creator.termsAcceptedAt).toLocaleString("en-IN")
+                      : "No record yet"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg border bg-background/80 space-y-1">
+                  <span className="text-muted-foreground font-medium">Policy Document</span>
+                  <p className="font-semibold text-foreground">
+                    Version {creator.termsVersion || "v1.0"} (Standard Terms & Meta Data Policy)
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -1016,6 +1255,99 @@ function CreatorDetailPage() {
               }
             >
               {sendSampleMutation.isPending ? "Saving..." : "Record Sample Shipment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Commission Credit Dialog */}
+      <Dialog open={manualCommDialogOpen} onOpenChange={setManualCommDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BadgeIndianRupee className="h-5 w-5 text-emerald-600" />
+              Credit Manual Commission to {creator?.displayName}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Manually award a commission, promotional bonus, or custom sales attribution to this influencer.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Commission Payout Amount (₹)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold">₹</span>
+                <Input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  placeholder="e.g. 500"
+                  value={manualCommAmount}
+                  onChange={(e) => setManualCommAmount(e.target.value)}
+                  className="h-9 pl-7 text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Order / Campaign Description</Label>
+              <Input
+                placeholder="e.g. Festive Campaign Performance Bonus / Offline Referral"
+                value={manualCommOrderName}
+                onChange={(e) => setManualCommOrderName(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Initial Status</Label>
+                <Select
+                  value={manualCommStatus}
+                  onValueChange={(val: "APPROVED" | "PENDING" | "PAID") => setManualCommStatus(val)}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="APPROVED">✓ Approved (Ready for withdrawal)</SelectItem>
+                    <SelectItem value="PENDING">⏳ Pending (Review required)</SelectItem>
+                    <SelectItem value="PAID">💵 Paid (Already disbursed)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Internal Notes (Optional)</Label>
+                <Input
+                  placeholder="e.g. Approved by Store Admin"
+                  value={manualCommNotes}
+                  onChange={(e) => setManualCommNotes(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button variant="outline" size="sm" onClick={() => setManualCommDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!manualCommAmount || Number(manualCommAmount) <= 0 || createManualCommissionMutation.isPending}
+              onClick={() =>
+                createManualCommissionMutation.mutate({
+                  amount: Number(manualCommAmount),
+                  orderName: manualCommOrderName,
+                  notes: manualCommNotes,
+                  status: manualCommStatus,
+                })
+              }
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
+            >
+              {createManualCommissionMutation.isPending ? "Crediting..." : "Confirm Commission Payout"}
             </Button>
           </DialogFooter>
         </DialogContent>

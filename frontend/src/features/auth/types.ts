@@ -6,6 +6,7 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string;
+  creatorCode?: string | null;
   roles: Role[];
   activeRole: Role;
 };

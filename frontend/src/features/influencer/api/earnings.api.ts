@@ -32,6 +32,10 @@ export type BarterSampleFulfillmentItem = {
 };
 
 export type InfluencerEarningsResponse = {
+  dealMode?: "COMMISSION" | "BARTER" | "HYBRID";
+  autoCommission?: boolean;
+  dealTitle?: string;
+  dealDescription?: string;
   isBarterOnly: boolean;
   barterOrders: number;
   balances: {

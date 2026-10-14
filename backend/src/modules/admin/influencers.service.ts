@@ -38,6 +38,8 @@ export async function listAdminInfluencers(
         email: true,
         status: true,
         createdAt: true,
+        termsAcceptedAt: true,
+        termsVersion: true,
         instagramConnection: { select: { instagramUserId: true, username: true, status: true } },
       },
     }),
@@ -45,8 +47,10 @@ export async function listAdminInfluencers(
   ]);
 
   return {
-    influencers: influencers.map(({ instagramConnection, ...influencer }) => ({
+    influencers: influencers.map(({ instagramConnection, ...influencer }: any) => ({
       ...influencer,
+      termsAcceptedAt: influencer.termsAcceptedAt ?? (instagramConnection?.status === 'ACTIVE' ? influencer.createdAt : null),
+      termsVersion: influencer.termsVersion ?? (instagramConnection?.status === 'ACTIVE' ? 'v1.0' : null),
       instagramUsername: instagramConnection?.username ?? null,
       instagramId: instagramConnection?.instagramUserId ?? null,
       instagramConnectionStatus: instagramConnection?.status ?? null,
@@ -65,6 +69,8 @@ export async function getAdminInfluencer(app: FastifyInstance, influencerId: str
       status: true,
       createdAt: true,
       updatedAt: true,
+      termsAcceptedAt: true,
+      termsVersion: true,
       instagramConnection: {
         select: {
           instagramUserId: true,

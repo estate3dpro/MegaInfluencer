@@ -32,7 +32,9 @@ export interface PlatformLinkItem {
   creatorName?: string | null;
   creatorCode?: string | null;
   storeName?: string;
+  commissionType?: "PERCENTAGE" | "FIXED_AMOUNT";
   commissionRate?: number;
+  commissionAmount?: number | null;
   slug: string;
 }
 
@@ -135,9 +137,11 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
             <span className="font-bold text-foreground truncate min-w-0">
               {linkItem.productName ? `Product: ${linkItem.productName}` : "Entire Storefront Link"}
             </span>
-            {linkItem.commissionRate !== undefined && (
+            {(linkItem.commissionType === "FIXED_AMOUNT" || linkItem.commissionRate !== undefined) && (
               <Badge variant="secondary" className="bg-teal/10 text-teal text-[10px] font-bold shrink-0">
-                {linkItem.commissionRate}% Commission
+                {linkItem.commissionType === "FIXED_AMOUNT"
+                  ? `₹${Number(linkItem.commissionAmount ?? 0).toLocaleString()} Flat Commission`
+                  : `${linkItem.commissionRate}% Commission`}
               </Badge>
             )}
           </div>

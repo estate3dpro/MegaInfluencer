@@ -32,3 +32,9 @@ dist-ssr
 *.sw?
 
 .env
+.env.*
+
+# Large media & video files (streamed from Shopify CDN)
+public/docs/*.mp4
+public/docs/**/*.mp4
+

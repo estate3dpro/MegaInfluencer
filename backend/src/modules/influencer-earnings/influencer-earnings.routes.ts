@@ -57,7 +57,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
       }),
       prisma.storeInfluencerAssignment.findMany({
         where: { influencerId: actor.userId },
-        select: { organizationId: true, compensationMode: true, organization: { select: { name: true } } },
+        select: { organizationId: true, compensationMode: true, autoCommission: true, organization: { select: { name: true } } },
       }),
     ]);
 
@@ -156,6 +156,9 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
     // Detect overall partnership deal mode
     const primaryAssignment = storeAssignments[0];
     const dealMode = primaryAssignment?.compensationMode || 'COMMISSION'; // 'COMMISSION' | 'BARTER' | 'HYBRID'
+    const autoCommission = typeof (primaryAssignment as any)?.autoCommission === 'boolean'
+      ? (primaryAssignment as any).autoCommission
+      : true;
 
     // Formatted recent activity list
     const recentActivity = [
@@ -201,6 +204,7 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
 
     return {
       dealMode,
+      autoCommission,
       dealTitle:
         dealMode === 'HYBRID'
           ? '⚡ Hybrid Partnership (Free Product Sample + 15% Sales Commission)'

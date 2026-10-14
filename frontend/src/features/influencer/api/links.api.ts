@@ -14,7 +14,9 @@ export type InfluencerTrackedLink = {
   slug: string;
   url: string;
   targetType: "STORE" | "PRODUCT" | "COLLECTION";
+  commissionType?: "PERCENTAGE" | "FIXED_AMOUNT";
   commissionRate: number;
+  commissionAmount?: number | null;
   isBarter: boolean;
   status: "ACTIVE" | "PAUSED";
   clicks: number;

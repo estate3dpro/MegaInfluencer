@@ -30,6 +30,7 @@ import {
   getInstagramConnection,
   type InstagramConnection,
 } from "@/features/influencer/api/instagram-automations.api";
+import { InstagramTermsModal } from "../components/InstagramTermsModal";
 import { useAuthStore } from "@/stores/auth-store";
 
 const numberFormatter = new Intl.NumberFormat("en-IN", {
@@ -87,7 +88,13 @@ export function ProfilePage() {
       ? "Instagram could not be disconnected. Please try again."
       : null;
 
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
+
   function handleConnectInstagram() {
+    setTermsModalOpen(true);
+  }
+
+  function handleConfirmTermsAndConnect() {
     connectMutation.mutate();
   }
 
@@ -146,6 +153,13 @@ export function ProfilePage() {
         disconnecting={disconnectMutation.isPending}
         onDisconnect={() => disconnectMutation.mutateAsync()}
         disconnectError={disconnectError}
+      />
+
+      <InstagramTermsModal
+        open={termsModalOpen}
+        onOpenChange={setTermsModalOpen}
+        onConfirm={handleConfirmTermsAndConnect}
+        isLoading={connectMutation.isPending}
       />
 
       {profileQuery.isLoading ? <ProfileLoading /> : null}

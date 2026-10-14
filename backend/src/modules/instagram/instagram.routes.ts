@@ -27,6 +27,13 @@ export const instagramAuthRoutes: FastifyPluginAsync = async (app) => {
 export const influencerInstagramRoutes: FastifyPluginAsync = async (app) => {
   app.post('/influencer/instagram/connect', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
+    await (app.prisma as any).user.update({
+      where: { id: actor.userId },
+      data: {
+        termsAcceptedAt: new Date(),
+        termsVersion: 'v1.0',
+      },
+    });
     return { authorizationUrl: await beginInstagramOAuth(app, 'CONNECT', actor.userId) };
   });
 
