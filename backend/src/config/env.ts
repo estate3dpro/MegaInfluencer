@@ -21,9 +21,11 @@ function numberFromEnv(name: string, fallback: number): number {
 }
 
 function optionalUrl(name: string, fallback?: string): string | undefined {
-  const value = process.env[name]?.trim() || fallback;
-  if (!value) return undefined;
+  const raw = process.env[name]?.trim() || fallback;
+  if (!raw) return undefined;
 
+  // Handle accidental comma-separated values (e.g. copied from CLIENT_ORIGIN)
+  const value = raw.split(',')[0].trim();
   try {
     return new URL(value).origin;
   } catch {
