@@ -50,7 +50,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
           ],
         },
         include: {
-          organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
+          organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } },
           product: {
             include: {
               affiliateLinks: {
@@ -87,7 +87,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       const price = Number(product.price || 0);
       const campaignDirectUrl = userLink
         ? buildDirectStoreUrl({
-            shopDomain: campaign.organization.shopDomain,
+            shopDomain: campaign.organization.storefrontDomain ?? campaign.organization.shopDomain,
             destinationPath: product.handle ? `/products/${product.handle}` : '/',
             slug: userLink.slug,
             creatorCode: user?.creatorCode,
@@ -100,7 +100,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
           name: product.title,
           store: campaign.organization.name,
           storeSlug: campaign.organization.slug || campaign.organization.id,
-          shopDomain: campaign.organization.shopDomain ?? null,
+          shopDomain: campaign.organization.storefrontDomain ?? campaign.organization.shopDomain ?? null,
           price: price > 0 ? formatCurrency(price) : (product.price ? `₹${product.price}` : '₹0.00'),
           orders: userLink?._count?.commissions ?? 0,
           tone: 'bg-primary/10 text-primary',
@@ -174,7 +174,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
     const dbProducts = await prisma.shopifyProduct.findMany({
       where: whereClause,
       include: {
-        organization: { select: { name: true, slug: true, shopDomain: true } },
+        organization: { select: { name: true, slug: true, shopDomain: true, storefrontDomain: true } },
         affiliateLinks: {
           where: activeLinkWhere(actor.userId),
           include: {
@@ -201,7 +201,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       const numPrice = Number(p.price || 0);
       const productDirectUrl = userLink
         ? buildDirectStoreUrl({
-            shopDomain: p.organization?.shopDomain,
+            shopDomain: p.organization?.storefrontDomain ?? p.organization?.shopDomain,
             destinationPath: p.handle ? `/products/${p.handle}` : '/',
             slug: userLink.slug,
             creatorCode: user?.creatorCode,
@@ -213,7 +213,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
         name: p.title,
         store: p.organization?.name || 'Brand Store',
         storeSlug: p.organization?.slug || 'store',
-        shopDomain: p.organization?.shopDomain ?? null,
+        shopDomain: p.organization?.storefrontDomain ?? p.organization?.shopDomain ?? null,
         price: numPrice > 0 ? formatCurrency(numPrice) : (p.price ? `₹${p.price}` : '₹0.00'),
         orders: ordersCount,
         tone: tones[idx % tones.length],

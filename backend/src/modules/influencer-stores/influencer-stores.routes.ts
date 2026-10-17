@@ -28,7 +28,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       where: { influencerId: actor.userId },
       include: {
         organization: {
-          select: { id: true, name: true, slug: true, shopDomain: true, logoUrl: true },
+          select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true, logoUrl: true },
         },
       },
     });
@@ -43,7 +43,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       const creatorLinks = await prisma.affiliateLink.findMany({
         where: { creatorId: actor.userId },
         select: {
-          organization: { select: { id: true, name: true, slug: true, shopDomain: true, logoUrl: true } },
+          organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true, logoUrl: true } },
         },
         distinct: ['organizationId'],
       });
@@ -220,7 +220,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
             id: { in: assignedProductIds },
           },
           include: {
-            organization: { select: { name: true, slug: true, shopDomain: true } },
+            organization: { select: { name: true, slug: true, shopDomain: true, storefrontDomain: true } },
             affiliateLinks: {
               where: { creatorId: actor.userId },
               include: {
@@ -247,7 +247,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
         const numPrice = Number(p.price || 0);
         const productDirectUrl = userLink
           ? buildDirectStoreUrl({
-              shopDomain: p.organization?.shopDomain,
+              shopDomain: p.organization?.storefrontDomain ?? p.organization?.shopDomain,
               destinationPath: p.handle ? `/products/${p.handle}` : '/',
               slug: userLink.slug,
               creatorCode: user?.creatorCode,
@@ -259,7 +259,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
           name: p.title,
           store: p.organization?.name || 'Brand Store',
           storeSlug: p.organization?.slug || 'store',
-          shopDomain: p.organization?.shopDomain ?? null,
+          shopDomain: p.organization?.storefrontDomain ?? p.organization?.shopDomain ?? null,
           price: numPrice > 0 ? formatCurrency(numPrice) : (p.price ? `₹${p.price}` : '₹0.00'),
           clicks: pClicks,
           orders: pOrders,
@@ -273,7 +273,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       .sort((a: any, b: any) => (b.orders - a.orders) || (b.clicks - a.clicks));
 
     return {
-      stores: stores.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug || s.id, shopDomain: s.shopDomain ?? null })),
+      stores: stores.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug || s.id, shopDomain: s.storefrontDomain ?? s.shopDomain ?? null })),
       scopeData,
       storeMix,
       products,

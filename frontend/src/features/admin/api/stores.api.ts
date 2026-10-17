@@ -8,6 +8,7 @@ export type Store = {
   category: string | null;
   logoUrl: string | null;
   shopDomain: string | null;
+  storefrontDomain: string | null;
   appUrl: string | null;
   apiUrl: string | null;
   shopifyConnectionMethod?: "CLI_APP" | "ADMIN_API" | null;
@@ -26,6 +27,7 @@ export type StoreInput = {
   category?: string;
   logoUrl?: string;
   shopDomain?: string;
+  storefrontDomain?: string;
   appUrl?: string;
   apiUrl?: string;
   shopifyConnectionMethod?: "CLI_APP" | "ADMIN_API";

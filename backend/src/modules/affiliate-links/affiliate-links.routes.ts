@@ -52,7 +52,7 @@ function asLink(row: any, baseUrl: string) {
     : trackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
   const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
   const creatorCode = row.creator?.creatorCode ?? null;
-  const shopDomain = row.organization?.shopDomain ?? null;
+  const shopDomain = row.organization?.storefrontDomain ?? row.organization?.shopDomain ?? null;
   const directUrl = buildDirectStoreUrl({
     shopDomain,
     destinationPath: row.destinationPath,
@@ -99,7 +99,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
     const rows = await prisma.affiliateLink.findMany({
       where: { organizationId: organization.id, ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ slug: { contains: query.search, mode: 'insensitive' } }, { creator: { displayName: { contains: query.search, mode: 'insensitive' } } }, { creator: { creatorCode: { contains: query.search, mode: 'insensitive' } } }, { product: { title: { contains: query.search, mode: 'insensitive' } } }] } : {}) },
-      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
+      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
     });
     const baseUrl = getFrontendBaseUrl(request);
     return { links: rows.map((row: any) => asLink(row, baseUrl)) };
@@ -147,7 +147,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         products: collectionProducts.length ? { create: input.productIds!.map((productId, position) => ({ productId, position })) } : undefined,
       },
       include: {
-        organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
+        organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } },
         creator: { select: { displayName: true, creatorCode: true } },
         product: { select: { title: true } },
         collection: { select: { title: true } },
@@ -175,7 +175,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         ...(input.commissionRate !== undefined ? { commissionRate: input.commissionRate } : {}),
         ...(input.commissionAmount !== undefined ? { commissionAmount: input.commissionAmount } : {}),
       },
-      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }
+      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }
     });
     const baseUrl = getFrontendBaseUrl(request); return { link: asLink(link, baseUrl) };
   });
@@ -197,7 +197,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         } : {}),
       },
       include: {
-        organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
+        organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } },
         creator: { select: { creatorCode: true, displayName: true } },
         product: { select: { id: true, title: true, imageUrl: true, price: true } },
         products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
@@ -228,7 +228,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         const earnings = isBarter ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
 
         const creatorCode = row.creator?.creatorCode ?? null;
-        const shopDomain = row.organization?.shopDomain ?? null;
+        const shopDomain = row.organization?.storefrontDomain ?? row.organization?.shopDomain ?? null;
         const directUrl = buildDirectStoreUrl({
           shopDomain,
           destinationPath: row.destinationPath,
@@ -371,7 +371,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
           : undefined,
       },
       include: {
-        organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
+        organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } },
         creator: { select: { creatorCode: true, displayName: true } },
         product: { select: { id: true, title: true, imageUrl: true, price: true } },
         products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
@@ -382,7 +382,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
 
     const baseUrl = getFrontendBaseUrl(request);
     const creatorCode = link.creator?.creatorCode ?? null;
-    const shopDomain = link.organization?.shopDomain ?? null;
+    const shopDomain = link.organization?.storefrontDomain ?? link.organization?.shopDomain ?? null;
     const directUrl = buildDirectStoreUrl({
       shopDomain,
       destinationPath: link.destinationPath,

@@ -372,6 +372,7 @@ model Organization {
   category                    String?
   logoUrl                     String?
   shopDomain                  String?
+  storefrontDomain            String?
   appUrl                      String?
   apiUrl                      String?
   shopifyConnectionMethod     ShopifyConnectionMethod?

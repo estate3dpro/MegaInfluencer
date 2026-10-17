@@ -43,6 +43,7 @@ const blank: StoreInput = {
   category: "",
   logoUrl: "",
   shopDomain: "",
+  storefrontDomain: "",
   appUrl: "",
   apiUrl: "",
   shopifyConnectionMethod: "CLI_APP",
@@ -307,6 +308,7 @@ function StoreDialog({
           category: store.category ?? "",
           logoUrl: store.logoUrl ?? "",
           shopDomain: store.shopDomain ?? "",
+          storefrontDomain: store.storefrontDomain ?? "",
           appUrl: store.appUrl ?? "",
           apiUrl: store.apiUrl ?? "",
         }
@@ -467,6 +469,13 @@ function StoreDialog({
                       {...field("shopDomain")}
                     />
                   </Labeled>
+                  <Labeled label="Public storefront domain">
+                    <Input
+                      placeholder="bhagvatprasadam.com"
+                      {...field("storefrontDomain")}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">Used only for customer-facing affiliate links. Keep the myshopify.com domain above for Shopify API access.</p>
+                  </Labeled>
                   <div className="sm:col-span-2">
                     <Labeled label="Shopify CLI app URL">
                       <Input
@@ -500,6 +509,13 @@ function StoreDialog({
                       placeholder="your-store.myshopify.com"
                       {...field("shopDomain")}
                     />
+                  </Labeled>
+                  <Labeled label="Public storefront domain">
+                    <Input
+                      placeholder="bhagvatprasadam.com"
+                      {...field("storefrontDomain")}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">Used only for customer-facing affiliate links. Keep the myshopify.com domain above for Shopify API access.</p>
                   </Labeled>
                   <Labeled label="Admin API access token">
                     <Input
