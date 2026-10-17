@@ -1,8 +1,11 @@
 /**
  * Helper to construct a trustworthy, direct merchant store URL for an affiliate link.
- * Instead of routing followers through an unknown 3rd party redirect domain, this sends them
- * directly to the merchant's authentic domain (e.g. brandstore.com/products/xyz?ref=CODE&mi_link=slug)
- * while preserving full Shopify order attribution via landing_site query parameters.
+ * Instead of routing followers through an unknown third-party redirect domain, this sends them
+ * directly to the merchant's authenticated Shopify shop page while preserving order attribution.
+ *
+ * `code` contains the opaque, server-issued affiliate-link identifier. The Shopify app embed
+ * expands it into `mi_link` before persisting cart attribution. Keeping the short code as the
+ * only query parameter makes the direct merchant URL easy to share.
  */
 export function buildDirectStoreUrl(options: {
   shopDomain?: string | null;
@@ -15,16 +18,11 @@ export function buildDirectStoreUrl(options: {
     const rawDomain = options.shopDomain.replace(/^https?:\/\//i, '').replace(/\/+$/, '').trim();
     if (!rawDomain) return null;
 
-    const path = options.destinationPath && options.destinationPath.trim() ? options.destinationPath.trim() : '/';
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    const url = new URL(normalizedPath, `https://${rawDomain}`);
+    // Every direct share URL opens the merchant's Shopify shop page. Product and collection
+    // targets are still retained on the affiliate link and continue to be used by /r/:slug.
+    const url = new URL('/pages/shop', `https://${rawDomain}`);
 
-    url.searchParams.set('mi_link', options.slug);
-    if (options.creatorCode) {
-      url.searchParams.set('mi_creator_code', options.creatorCode);
-      url.searchParams.set('utm_creator_code', options.creatorCode);
-      url.searchParams.set('ref', options.creatorCode);
-    }
+    url.searchParams.set('code', options.slug);
 
     return url.toString();
   } catch {
