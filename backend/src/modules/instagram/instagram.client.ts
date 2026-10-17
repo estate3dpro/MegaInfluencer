@@ -52,7 +52,9 @@ export function createAuthorizationUrl(redirectUri: string, state: string) {
     state,
     scope: 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments',
   });
-  return `${oauthUrl}?${params}`;
+  // Append #weblink to prevent mobile operating systems (especially Android)
+  // from hijacking the authorization URL into the native Instagram app.
+  return `${oauthUrl}?${params}#weblink`;
 }
 
 export async function exchangeAuthorizationCode(code: string, redirectUri: string) {

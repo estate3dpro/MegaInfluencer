@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { getAssignedProductIds } from '../product-assignments/product-assignments.service.js';
+import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
+import { buildDirectStoreUrl } from '../../shared/helpers/affiliate-url.js';
 import { config } from '../../config/env.js';
 
 const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -28,7 +30,11 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/influencer/products', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
     const query = request.query as { search?: string; storeSlug?: string; campaignId?: string };
-    const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
+    const baseUrl = getFrontendBaseUrl(request);
+    const user = await prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { creatorCode: true },
+    });
 
     // Campaign links resolve their product from the campaign itself. This
     // also supports accepted campaigns created before product assignments.
@@ -44,7 +50,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
           ],
         },
         include: {
-          organization: { select: { id: true, name: true, slug: true } },
+          organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
           product: {
             include: {
               affiliateLinks: {
@@ -79,12 +85,22 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       const price = Number(product.price || 0);
+      const campaignDirectUrl = userLink
+        ? buildDirectStoreUrl({
+            shopDomain: campaign.organization.shopDomain,
+            destinationPath: product.handle ? `/products/${product.handle}` : '/',
+            slug: userLink.slug,
+            creatorCode: user?.creatorCode,
+          })
+        : null;
+
       return {
         products: [{
           id: product.id,
           name: product.title,
           store: campaign.organization.name,
           storeSlug: campaign.organization.slug || campaign.organization.id,
+          shopDomain: campaign.organization.shopDomain ?? null,
           price: price > 0 ? formatCurrency(price) : (product.price ? `₹${product.price}` : '₹0.00'),
           orders: userLink?._count?.commissions ?? 0,
           tone: 'bg-primary/10 text-primary',
@@ -92,6 +108,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
           handle: product.handle ?? null,
           affiliateSlug: userLink?.slug ?? null,
           affiliateUrl: userLink ? `${baseUrl}/r/${userLink.slug}` : null,
+          affiliateDirectUrl: campaignDirectUrl,
         }],
         stores: [{ id: campaign.organization.id, name: campaign.organization.name, slug: campaign.organization.slug || campaign.organization.id }],
       };
@@ -157,7 +174,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
     const dbProducts = await prisma.shopifyProduct.findMany({
       where: whereClause,
       include: {
-        organization: { select: { name: true, slug: true } },
+        organization: { select: { name: true, slug: true, shopDomain: true } },
         affiliateLinks: {
           where: activeLinkWhere(actor.userId),
           include: {
@@ -182,12 +199,21 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
       const userLink = p.affiliateLinks?.[0];
       const ordersCount = userLink?._count?.commissions ?? 0;
       const numPrice = Number(p.price || 0);
+      const productDirectUrl = userLink
+        ? buildDirectStoreUrl({
+            shopDomain: p.organization?.shopDomain,
+            destinationPath: p.handle ? `/products/${p.handle}` : '/',
+            slug: userLink.slug,
+            creatorCode: user?.creatorCode,
+          })
+        : null;
 
       return {
         id: p.id,
         name: p.title,
         store: p.organization?.name || 'Brand Store',
         storeSlug: p.organization?.slug || 'store',
+        shopDomain: p.organization?.shopDomain ?? null,
         price: numPrice > 0 ? formatCurrency(numPrice) : (p.price ? `₹${p.price}` : '₹0.00'),
         orders: ordersCount,
         tone: tones[idx % tones.length],
@@ -195,6 +221,7 @@ export const influencerProductsRoutes: FastifyPluginAsync = async (app) => {
         handle: p.handle ?? null,
         affiliateSlug: userLink?.slug ?? null,
         affiliateUrl: userLink ? `${baseUrl}/r/${userLink.slug}` : null,
+        affiliateDirectUrl: productDirectUrl,
       };
     });
 

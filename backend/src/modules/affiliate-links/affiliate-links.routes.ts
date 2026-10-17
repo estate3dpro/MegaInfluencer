@@ -7,6 +7,7 @@ import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { ensureCreatorCode } from '../../shared/creator-code.js';
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
+import { buildDirectStoreUrl } from '../../shared/helpers/affiliate-url.js';
 
 const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
@@ -50,7 +51,45 @@ function asLink(row: any, baseUrl: string) {
     ? commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
     : trackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
   const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
-  return { id: row.id, creatorId: row.creatorId, creator: row.creator?.displayName ?? null, creatorCode: row.creator?.creatorCode ?? null, productId: row.productId, product: row.product?.title ?? null, collectionId: row.collectionId ?? null, collection: row.collection?.title ?? null, slug: row.slug, url: `${baseUrl}/r/${row.slug}`, targetType: row.targetType, commissionType: row.commissionType ?? 'PERCENTAGE', commissionRate: Number(row.commissionRate), commissionAmount: row.commissionAmount !== null && row.commissionAmount !== undefined ? Number(row.commissionAmount) : null, status: row.status, expiresAt: row.expiresAt, clicks, orders, revenue, storeCredits, conversion: clicks ? orders / clicks : 0, createdAt: row.createdAt };
+  const creatorCode = row.creator?.creatorCode ?? null;
+  const shopDomain = row.organization?.shopDomain ?? null;
+  const directUrl = buildDirectStoreUrl({
+    shopDomain,
+    destinationPath: row.destinationPath,
+    slug: row.slug,
+    creatorCode,
+  });
+
+  return {
+    id: row.id,
+    storeId: row.organizationId,
+    storeName: row.organization?.name ?? 'Store',
+    storeSlug: row.organization?.slug ?? 'store',
+    shopDomain,
+    creatorId: row.creatorId,
+    creator: row.creator?.displayName ?? null,
+    creatorCode,
+    productId: row.productId,
+    product: row.product?.title ?? null,
+    collectionId: row.collectionId ?? null,
+    collection: row.collection?.title ?? null,
+    slug: row.slug,
+    url: `${baseUrl}/r/${row.slug}`,
+    directUrl,
+    destinationPath: row.destinationPath,
+    targetType: row.targetType,
+    commissionType: row.commissionType ?? 'PERCENTAGE',
+    commissionRate: Number(row.commissionRate),
+    commissionAmount: row.commissionAmount !== null && row.commissionAmount !== undefined ? Number(row.commissionAmount) : null,
+    status: row.status,
+    expiresAt: row.expiresAt,
+    clicks,
+    orders,
+    revenue,
+    storeCredits,
+    conversion: clicks ? orders / clicks : 0,
+    createdAt: row.createdAt,
+  };
 }
 
 export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
@@ -60,7 +99,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
     const rows = await prisma.affiliateLink.findMany({
       where: { organizationId: organization.id, ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ slug: { contains: query.search, mode: 'insensitive' } }, { creator: { displayName: { contains: query.search, mode: 'insensitive' } } }, { creator: { creatorCode: { contains: query.search, mode: 'insensitive' } } }, { product: { title: { contains: query.search, mode: 'insensitive' } } }] } : {}) },
-      include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
+      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
     });
     const baseUrl = getFrontendBaseUrl(request);
     return { links: rows.map((row: any) => asLink(row, baseUrl)) };
@@ -108,6 +147,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         products: collectionProducts.length ? { create: input.productIds!.map((productId, position) => ({ productId, position })) } : undefined,
       },
       include: {
+        organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
         creator: { select: { displayName: true, creatorCode: true } },
         product: { select: { title: true } },
         collection: { select: { title: true } },
@@ -135,7 +175,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         ...(input.commissionRate !== undefined ? { commissionRate: input.commissionRate } : {}),
         ...(input.commissionAmount !== undefined ? { commissionAmount: input.commissionAmount } : {}),
       },
-      include: { creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }
+      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }
     });
     const baseUrl = getFrontendBaseUrl(request); return { link: asLink(link, baseUrl) };
   });
@@ -157,7 +197,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         } : {}),
       },
       include: {
-        organization: { select: { id: true, name: true, slug: true } },
+        organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
+        creator: { select: { creatorCode: true, displayName: true } },
         product: { select: { id: true, title: true, imageUrl: true, price: true } },
         products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
         _count: { select: { clicks: true } },
@@ -186,11 +227,22 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         const isBarter = barterOrganizationIds.has(row.organizationId);
         const earnings = isBarter ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
 
+        const creatorCode = row.creator?.creatorCode ?? null;
+        const shopDomain = row.organization?.shopDomain ?? null;
+        const directUrl = buildDirectStoreUrl({
+          shopDomain,
+          destinationPath: row.destinationPath,
+          slug: row.slug,
+          creatorCode,
+        });
+
         return {
           id: row.id,
           storeId: row.organizationId,
           storeName: row.organization?.name ?? 'Store',
           storeSlug: row.organization?.slug ?? 'store',
+          shopDomain,
+          creatorCode,
           productId: row.productId,
           productTitle: row.product?.title ?? null,
           productImage: row.product?.imageUrl ?? null,
@@ -199,6 +251,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
           productCount: row.products?.length ?? 0,
           slug: row.slug,
           url: `${baseUrl}/r/${row.slug}`,
+          directUrl,
+          destinationPath: row.destinationPath,
           targetType: row.targetType,
           commissionType: row.commissionType ?? 'PERCENTAGE',
           commissionRate: isBarter ? 0 : Number(row.commissionRate),
@@ -317,7 +371,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
           : undefined,
       },
       include: {
-        organization: { select: { id: true, name: true, slug: true } },
+        organization: { select: { id: true, name: true, slug: true, shopDomain: true } },
+        creator: { select: { creatorCode: true, displayName: true } },
         product: { select: { id: true, title: true, imageUrl: true, price: true } },
         products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
         _count: { select: { clicks: true } },
@@ -326,12 +381,23 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     });
 
     const baseUrl = getFrontendBaseUrl(request);
+    const creatorCode = link.creator?.creatorCode ?? null;
+    const shopDomain = link.organization?.shopDomain ?? null;
+    const directUrl = buildDirectStoreUrl({
+      shopDomain,
+      destinationPath: link.destinationPath,
+      slug: link.slug,
+      creatorCode,
+    });
+
     return reply.code(201).send({
       link: {
         id: link.id,
         storeId: link.organizationId,
         storeName: link.organization?.name ?? 'Store',
         storeSlug: link.organization?.slug ?? 'store',
+        shopDomain,
+        creatorCode,
         productId: link.productId,
         productTitle: link.product?.title ?? null,
         productImage: link.product?.imageUrl ?? null,
@@ -340,6 +406,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         productCount: link.products?.length ?? 0,
         slug: link.slug,
         url: `${baseUrl}/r/${link.slug}`,
+        directUrl,
+        destinationPath: link.destinationPath,
         targetType: link.targetType,
         commissionRate: Number(link.commissionRate),
         status: link.status,
@@ -532,7 +600,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       getAttr('_mi_creator_code') ??
       getAttr('utm_creator_code') ??
       getAttr('creator_code') ??
-      getAttr('creator');
+      getAttr('creator') ??
+      getAttr('ref');
 
     // 2. Landing site / Referral URL parameter parsing (Crucial for Buy It Now direct checkout)
     const landingUrl = String(payload.landing_site ?? payload.landing_site_ref ?? payload.referring_site ?? payload.source_url ?? '');
@@ -542,7 +611,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         if (linkMatch) linkSlug = linkMatch[1];
       }
       if (!trackedCreatorCode) {
-        const codeMatch = landingUrl.match(/[?&](?:mi_creator_code|_mi_creator_code|utm_creator_code|creator)=([a-zA-Z0-9_-]+)/i);
+        const codeMatch = landingUrl.match(/[?&](?:mi_creator_code|_mi_creator_code|utm_creator_code|creator|ref)=([a-zA-Z0-9_-]+)/i);
         if (codeMatch) trackedCreatorCode = codeMatch[1];
       }
     }

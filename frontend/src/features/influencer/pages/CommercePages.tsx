@@ -20,6 +20,7 @@ import {
   Plus,
   Search,
   Share2,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
   Store,
@@ -209,6 +210,8 @@ export function StorePage() {
     setSelectedLinkItem({
       id: product.id || product.name,
       baseUrl: product.affiliateUrl || `/r/${product.affiliateSlug || "promo"}`,
+      directUrl: (product as any).affiliateDirectUrl,
+      shopDomain: (product as any).shopDomain,
       productName: product.name,
       storeName: product.store,
       slug: product.affiliateSlug || "product",
@@ -338,8 +341,8 @@ export function StorePage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => copyShareLink(product.affiliateUrl)}
-                  title="Copy link"
+                  onClick={() => copyShareLink((product as any).affiliateDirectUrl || product.affiliateUrl)}
+                  title={(product as any).affiliateDirectUrl ? "Copy verified direct store link" : "Copy link"}
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </Button>
@@ -394,10 +397,29 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
   const productList = productsQuery.data?.products ?? [];
   const activeProduct = productList[selectedProductIndex] || productList[0] || null;
 
+  const appendParams = (targetUrl: string, params: Record<string, string>) => {
+    try {
+      const url = new URL(targetUrl);
+      for (const [k, v] of Object.entries(params)) {
+        if (v) url.searchParams.set(k, v);
+      }
+      return url.toString();
+    } catch {
+      const separator = targetUrl.includes("?") ? "&" : "?";
+      const qs = Object.entries(params)
+        .filter(([, v]) => !!v)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&");
+      return `${targetUrl}${separator}${qs}`;
+    }
+  };
+
   const openPlatformModal = (product: typeof productList[0]) => {
     setSelectedLinkItem({
       id: product.id || product.name,
       baseUrl: product.affiliateUrl || `/r/${product.affiliateSlug || "promo"}`,
+      directUrl: product.affiliateDirectUrl,
+      shopDomain: product.shopDomain,
       productName: product.name,
       storeName: product.store,
       slug: product.affiliateSlug || "product",
@@ -408,6 +430,7 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
   // Helper for inline platform links
   const getProductBaseUrl = (p: typeof productList[0] | null) => {
     if (!p) return window.location.origin;
+    if (p.affiliateDirectUrl) return p.affiliateDirectUrl;
     if (p.affiliateUrl) {
       return p.affiliateUrl.startsWith("http")
         ? p.affiliateUrl
@@ -422,9 +445,21 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
     : "product-deal";
 
   // Dedicated UTM Links for active product
-  const activeWhatsAppUrl = `${currentBaseUrl}?utm_source=whatsapp&utm_medium=social_chat&utm_campaign=${encodeURIComponent(currentProductSlug)}`;
-  const activeFacebookUrl = `${currentBaseUrl}?utm_source=facebook&utm_medium=social_post&utm_campaign=${encodeURIComponent(currentProductSlug)}`;
-  const activeInstagramUrl = `${currentBaseUrl}?utm_source=instagram&utm_medium=story_bio&utm_campaign=${encodeURIComponent(currentProductSlug)}`;
+  const activeWhatsAppUrl = appendParams(currentBaseUrl, {
+    utm_source: "whatsapp",
+    utm_medium: "social_chat",
+    utm_campaign: currentProductSlug,
+  });
+  const activeFacebookUrl = appendParams(currentBaseUrl, {
+    utm_source: "facebook",
+    utm_medium: "social_post",
+    utm_campaign: currentProductSlug,
+  });
+  const activeInstagramUrl = appendParams(currentBaseUrl, {
+    utm_source: "instagram",
+    utm_medium: "story_bio",
+    utm_campaign: currentProductSlug,
+  });
 
   const activeWhatsAppMsg = activeProduct
     ? `Hey! Check out *${activeProduct.name}* from *${activeProduct.store}* (${activeProduct.price})! 🛍️\n\n👉 Shop directly here: ${activeWhatsAppUrl}`
@@ -645,7 +680,7 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
                         className="h-8 text-xs text-emerald-600 hover:bg-emerald-500/10 border-emerald-500/30"
                         onClick={() => {
                           const base = getProductBaseUrl(product);
-                          const wa = `${base}?utm_source=whatsapp&utm_medium=social_chat`;
+                          const wa = appendParams(base, { utm_source: "whatsapp", utm_medium: "social_chat" });
                           navigator.clipboard?.writeText(wa);
                           toast.success("WhatsApp link copied!");
                         }}
@@ -658,7 +693,7 @@ export function ProductsPage({ campaignId, campaignTitle }: { campaignId?: strin
                         className="h-8 text-xs text-blue-600 hover:bg-blue-500/10 border-blue-500/30"
                         onClick={() => {
                           const base = getProductBaseUrl(product);
-                          const fb = `${base}?utm_source=facebook&utm_medium=social_post`;
+                          const fb = appendParams(base, { utm_source: "facebook", utm_medium: "social_post" });
                           navigator.clipboard?.writeText(fb);
                           toast.success("Facebook link copied!");
                         }}
@@ -865,6 +900,18 @@ export function LinksPage() {
                         />
                       </div>
                     </div>
+
+                    {selectedStoreId && (
+                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          <span>Brand Store Destination: {stores.find((st) => st.id === selectedStoreId)?.shopDomain || stores.find((st) => st.id === selectedStoreId)?.name}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-tight">
+                          Generates an authentic Direct Store Link on the brand&apos;s verified domain and an optional short link for bio tags.
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
@@ -934,9 +981,24 @@ export function LinksPage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="mt-0.5 font-mono text-xs text-primary truncate">
-                      {link.url}
-                    </p>
+                    {link.directUrl ? (
+                      <div className="mt-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">Store: {link.shopDomain || link.storeName || "Brand Store"}</span>
+                          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[9px] px-1.5 py-0 h-4 border-0 font-bold">
+                            Verified Store Link
+                          </Badge>
+                        </div>
+                        <p className="font-mono text-xs text-muted-foreground truncate select-all">
+                          {link.directUrl}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-0.5 font-mono text-xs text-primary truncate">
+                        {link.url}
+                      </p>
+                    )}
                     {link.targetType === "COLLECTION" ? <p className="mt-1 truncate text-xs text-muted-foreground">{link.products?.map((product) => product.title).join(" · ")}</p> : null}
                   </div>
                 </div>
@@ -968,6 +1030,10 @@ export function LinksPage() {
                       setSelectedLinkItem({
                         id: link.id,
                         baseUrl: link.url,
+                        directUrl: link.directUrl,
+                        shopDomain: link.shopDomain,
+                        destinationPath: link.destinationPath,
+                        creatorCode: link.creatorCode,
                         productName: link.productTitle || (link.targetType === "COLLECTION" ? "Product Collection" : `${link.storeName} Store`),
                         storeName: link.storeName,
                         commissionType: link.commissionType,
@@ -981,15 +1047,33 @@ export function LinksPage() {
                     <Share2 className="h-3.5 w-3.5" /> Platform UTMs
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="sm"
+                    className="gap-1 text-xs font-semibold"
                     onClick={() => {
-                      navigator.clipboard?.writeText(link.url);
-                      toast.success("Tracking link copied to clipboard!");
+                      const urlToCopy = link.directUrl || link.url;
+                      navigator.clipboard?.writeText(urlToCopy);
+                      toast.success(link.directUrl ? "Verified brand store link copied!" : "Tracking link copied!");
                     }}
+                    title={link.directUrl ? "Copy verified direct store link" : "Copy tracking link"}
                   >
-                    <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy
+                    <Copy className="h-3.5 w-3.5" />
+                    {link.directUrl ? "Copy Brand Link" : "Copy"}
                   </Button>
+                  {link.directUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs px-2 text-muted-foreground h-8"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(link.url);
+                        toast.success("Short redirect link copied (/r/slug)!");
+                      }}
+                      title="Copy short redirect link (/r/slug)"
+                    >
+                      /r/
+                    </Button>
+                  )}
                 </div>
               </div>
             ))

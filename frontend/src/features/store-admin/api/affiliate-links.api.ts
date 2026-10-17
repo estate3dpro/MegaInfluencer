@@ -2,7 +2,7 @@ import { apiClient } from "@/lib/api/client";
 
 export type AffiliateLink = {
   id: string; creatorId: string | null; creator: string | null; creatorCode: string | null; productId: string | null; product: string | null;
-  slug: string; url: string; targetType: "STORE" | "PRODUCT" | "COLLECTION";
+  slug: string; url: string; directUrl?: string | null; shopDomain?: string | null; destinationPath?: string | null; targetType: "STORE" | "PRODUCT" | "COLLECTION";
   commissionType?: "PERCENTAGE" | "FIXED_AMOUNT";
   commissionRate: number;
   commissionAmount?: number | null;

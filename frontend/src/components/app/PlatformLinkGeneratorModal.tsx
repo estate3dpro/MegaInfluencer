@@ -22,12 +22,17 @@ import {
   Globe,
   Sliders,
   Sparkles,
+  ShieldCheck,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export interface PlatformLinkItem {
   id: string;
   baseUrl: string; // e.g. "https://brand.com/r/slug" or "/r/slug"
+  directUrl?: string | null; // Direct brand store destination with referral params
+  shopDomain?: string | null;
+  destinationPath?: string | null;
   productName?: string | null;
   creatorName?: string | null;
   creatorCode?: string | null;
@@ -51,6 +56,7 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
 }) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("whatsapp");
+  const [linkMode, setLinkMode] = useState<"direct" | "short">("direct");
 
   // Custom UTM parameters
   const [customSource, setCustomSource] = useState<string>("whatsapp");
@@ -67,6 +73,11 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
         : "campaign";
       setCustomCampaign(cleanSlug);
       setCustomDiscountCode(linkItem.creatorCode || "");
+      if (linkItem.directUrl) {
+        setLinkMode("direct");
+      } else {
+        setLinkMode("short");
+      }
     }
   }, [linkItem]);
 
@@ -83,16 +94,40 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
 
   if (!linkItem) return null;
 
-  const rawBase = linkItem.baseUrl.startsWith("http")
+  const rawShortBase = linkItem.baseUrl.startsWith("http")
     ? linkItem.baseUrl
     : `${window.location.origin}${linkItem.baseUrl.startsWith("/") ? "" : "/"}${linkItem.baseUrl}`;
+
+  const hasDirectUrl = Boolean(linkItem.directUrl);
+  const activeBase = (linkMode === "direct" && linkItem.directUrl) ? linkItem.directUrl : rawShortBase;
+
+  const appendParams = (targetUrl: string, params: Record<string, string>) => {
+    try {
+      const url = new URL(targetUrl);
+      for (const [k, v] of Object.entries(params)) {
+        if (v) url.searchParams.set(k, v);
+      }
+      return url.toString();
+    } catch {
+      const separator = targetUrl.includes("?") ? "&" : "?";
+      const qs = Object.entries(params)
+        .filter(([, v]) => !!v)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&");
+      return `${targetUrl}${separator}${qs}`;
+    }
+  };
 
   const cleanCampaign =
     customCampaign.trim() ||
     (linkItem.creatorCode ? `${linkItem.creatorCode.toLowerCase()}-promo` : "referral");
 
   // 1. WhatsApp Dedicated Link & Share Copy
-  const whatsappUrl = `${rawBase}?utm_source=whatsapp&utm_medium=social_chat&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
+  const whatsappUrl = appendParams(activeBase, {
+    utm_source: "whatsapp",
+    utm_medium: "social_chat",
+    utm_campaign: cleanCampaign,
+  });
   const whatsappMessage = `Hey! Check out ${
     linkItem.productName ? `*${linkItem.productName}*` : `these exclusive picks`
   } from *${linkItem.storeName || "our brand"}*! 🎁\n\n👉 Shop directly here: ${whatsappUrl}${
@@ -100,17 +135,25 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
   }`;
 
   // 2. Facebook Dedicated Link
-  const facebookUrl = `${rawBase}?utm_source=facebook&utm_medium=social_post&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
+  const facebookUrl = appendParams(activeBase, {
+    utm_source: "facebook",
+    utm_medium: "social_post",
+    utm_campaign: cleanCampaign,
+  });
 
   // 3. Instagram / Story Dedicated Link
-  const instagramUrl = `${rawBase}?utm_source=instagram&utm_medium=story_bio&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
+  const instagramUrl = appendParams(activeBase, {
+    utm_source: "instagram",
+    utm_medium: "story_bio",
+    utm_campaign: cleanCampaign,
+  });
 
   // 4. Custom UTM Link
-  const customUrl = `${rawBase}?utm_source=${encodeURIComponent(
-    customSource || "direct",
-  )}&utm_medium=${encodeURIComponent(
-    customMedium || "referral",
-  )}&utm_campaign=${encodeURIComponent(cleanCampaign)}`;
+  const customUrl = appendParams(activeBase, {
+    utm_source: customSource || "direct",
+    utm_medium: customMedium || "referral",
+    utm_campaign: cleanCampaign,
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,6 +195,64 @@ export const PlatformLinkGeneratorModal: React.FC<PlatformLinkGeneratorModalProp
             )}
           </div>
         </div>
+
+        {/* Link Domain & Trust Selector */}
+        {hasDirectUrl && (
+          <div className="p-3 rounded-xl border bg-muted/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Link Domain & Trust Format
+              </Label>
+              <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[200px]">
+                {linkItem.shopDomain || "brand store"}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setLinkMode("direct")}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
+                  linkMode === "direct"
+                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-950 dark:text-emerald-200 shadow-sm"
+                    : "border-border bg-background hover:bg-muted text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Direct Brand Link</span>
+                  <Badge className="bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 text-[9px] px-1 py-0 h-4 uppercase font-bold">
+                    100% Trust
+                  </Badge>
+                </div>
+                <span className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                  Followers see {linkItem.shopDomain || "brand store"} directly. High buyer trust & zero suspicion.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLinkMode("short")}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
+                  linkMode === "short"
+                    ? "border-primary/50 bg-primary/10 text-primary shadow-sm"
+                    : "border-border bg-background hover:bg-muted text-muted-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
+                  <Link2 className="h-3.5 w-3.5 text-primary" />
+                  <span>Short Redirect Link</span>
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">
+                    /r/{linkItem.slug}
+                  </Badge>
+                </div>
+                <span className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                  Compact short URL for character-limited platforms like SMS or Twitter bios.
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Platform Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4 min-w-0">

@@ -16,6 +16,7 @@ export type InfluencerStoresOverview = {
     id: string;
     name: string;
     slug: string;
+    shopDomain?: string | null;
   }>;
   scopeData: Record<
     string,
@@ -38,6 +39,7 @@ export type InfluencerStoresOverview = {
     name: string;
     store: string;
     storeSlug: string;
+    shopDomain?: string | null;
     price: string;
     clicks: number;
     orders: number;
@@ -45,6 +47,7 @@ export type InfluencerStoresOverview = {
     imageUrl?: string | null;
     affiliateSlug?: string | null;
     affiliateUrl?: string | null;
+    affiliateDirectUrl?: string | null;
   }>;
   timelineBars: number[];
   timelineLabels?: string[];

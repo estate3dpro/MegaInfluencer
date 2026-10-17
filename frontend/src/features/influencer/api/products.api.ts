@@ -12,6 +12,8 @@ export type InfluencerProduct = {
   handle: string | null;
   affiliateSlug: string | null;
   affiliateUrl: string | null;
+  affiliateDirectUrl?: string | null;
+  shopDomain?: string | null;
 };
 
 export type InfluencerProductsResponse = {

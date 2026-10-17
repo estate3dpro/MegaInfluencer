@@ -1324,10 +1324,11 @@ export function AffiliatePage() {
   const links = getLinksFromResponse(linksQuery.data);
   const rawBase = typeof window !== "undefined" ? window.location.origin : "";
 
-  const handleCopyLink = async (slug: string) => {
+  const handleCopyLink = async (link: any) => {
     try {
-      await navigator.clipboard.writeText(`${rawBase}/r/${slug}`);
-      toast.success("Tracking link copied to clipboard!");
+      const urlToCopy = typeof link === "string" ? `${rawBase}/r/${link}` : (link.directUrl || `${rawBase}/r/${link.slug}`);
+      await navigator.clipboard.writeText(urlToCopy);
+      toast.success(typeof link !== "string" && link.directUrl ? "Verified brand store link copied!" : "Tracking link copied to clipboard!");
     } catch {
       toast.error("Could not copy link");
     }
@@ -1337,8 +1338,11 @@ export function AffiliatePage() {
     setSelectedPlatformLink({
       id: link.id,
       baseUrl: `${rawBase}/r/${link.slug}`,
-      productName: link.productTitle,
-      creatorName: link.creatorName,
+      directUrl: link.directUrl,
+      shopDomain: link.shopDomain,
+      destinationPath: link.destinationPath,
+      productName: link.productTitle || link.product,
+      creatorName: link.creatorName || link.creator,
       creatorCode: link.creatorCode,
       storeName: link.storeName,
       commissionType: link.commissionType,
@@ -1398,7 +1402,14 @@ export function AffiliatePage() {
               links.map((link) => (
                 <tr key={link.id} className="hover:bg-muted/15 transition-colors">
                   <td className="px-5 py-3.5">
-                    <span className="font-mono font-bold text-primary">/r/{link.slug}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono font-bold text-primary">/r/{link.slug}</span>
+                      {link.shopDomain && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                          🛡️ {link.shopDomain}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-muted-foreground truncate max-w-xs">{link.product || link.productTitle || link.collection || (link.targetType === "COLLECTION" ? "Custom product collection" : "Storewide Link")}</p>
                   </td>
                   <td className="px-5 py-3.5 font-medium">{link.creator || link.creatorName || "Storewide"}</td>
@@ -1412,7 +1423,7 @@ export function AffiliatePage() {
                   <td className="px-5 py-3.5 text-right font-mono font-bold">{formatCurrency(Number(link.revenue ?? 0))}</td>
                   <td className="px-5 py-3.5 text-right pr-6">
                     <div className="flex justify-end gap-1.5">
-                      <Button size="sm" variant="ghost" onClick={() => handleCopyLink(link.slug)} className="h-7 px-2 text-xs">
+                      <Button size="sm" variant="ghost" onClick={() => handleCopyLink(link)} className="h-7 px-2 text-xs">
                         <Copy className="h-3.5 w-3.5 mr-1" /> Copy
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => handleOpenPlatformHub(link)} className="h-7 px-2 text-xs font-bold text-primary border-primary/30">

@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { getAssignedProductIds } from '../product-assignments/product-assignments.service.js';
+import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
+import { buildDirectStoreUrl } from '../../shared/helpers/affiliate-url.js';
 import { config } from '../../config/env.js';
 
 const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -15,7 +17,11 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/influencer/stores/overview', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
-    const baseUrl = config.publicBaseUrl ?? `http://${request.headers.host}`;
+    const baseUrl = getFrontendBaseUrl(request);
+    const user = await prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { creatorCode: true },
+    });
 
     // 1. Fetch only assigned organizations for this influencer
     const assignments = await prisma.storeInfluencerAssignment.findMany({
@@ -214,7 +220,7 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
             id: { in: assignedProductIds },
           },
           include: {
-            organization: { select: { name: true, slug: true } },
+            organization: { select: { name: true, slug: true, shopDomain: true } },
             affiliateLinks: {
               where: { creatorId: actor.userId },
               include: {
@@ -239,11 +245,21 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
         const pClicks = userLink?._count?.clicks ?? 0;
         const pOrders = userLink?._count?.commissions ?? 0;
         const numPrice = Number(p.price || 0);
+        const productDirectUrl = userLink
+          ? buildDirectStoreUrl({
+              shopDomain: p.organization?.shopDomain,
+              destinationPath: p.handle ? `/products/${p.handle}` : '/',
+              slug: userLink.slug,
+              creatorCode: user?.creatorCode,
+            })
+          : null;
+
         return {
           id: p.id,
           name: p.title,
           store: p.organization?.name || 'Brand Store',
           storeSlug: p.organization?.slug || 'store',
+          shopDomain: p.organization?.shopDomain ?? null,
           price: numPrice > 0 ? formatCurrency(numPrice) : (p.price ? `₹${p.price}` : '₹0.00'),
           clicks: pClicks,
           orders: pOrders,
@@ -251,12 +267,13 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
           imageUrl: p.imageUrl ?? null,
           affiliateSlug: userLink?.slug ?? null,
           affiliateUrl: userLink ? `${baseUrl}/r/${userLink.slug}` : null,
+          affiliateDirectUrl: productDirectUrl,
         };
       })
       .sort((a: any, b: any) => (b.orders - a.orders) || (b.clicks - a.clicks));
 
     return {
-      stores: stores.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug || s.id })),
+      stores: stores.map((s: any) => ({ id: s.id, name: s.name, slug: s.slug || s.id, shopDomain: s.shopDomain ?? null })),
       scopeData,
       storeMix,
       products,

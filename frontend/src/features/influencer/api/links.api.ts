@@ -13,6 +13,10 @@ export type InfluencerTrackedLink = {
   productCount?: number;
   slug: string;
   url: string;
+  directUrl?: string | null;
+  shopDomain?: string | null;
+  destinationPath?: string | null;
+  creatorCode?: string | null;
   targetType: "STORE" | "PRODUCT" | "COLLECTION";
   commissionType?: "PERCENTAGE" | "FIXED_AMOUNT";
   commissionRate: number;
