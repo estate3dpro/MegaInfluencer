@@ -17,8 +17,10 @@ import {
   PlatformLinkGeneratorModal,
   type PlatformLinkItem,
 } from "@/components/app/PlatformLinkGeneratorModal";
+import { useAuthStore } from "@/stores/auth-store";
 import { getInfluencerAnalytics } from "../api/analytics.api";
 import { getInfluencerStoresOverview } from "../api/stores.api";
+import { getInfluencerLinks } from "../api/links.api";
 
 export function AnalyticsPage() {
   const [range, setRange] = useState<string>("30d");
@@ -26,6 +28,8 @@ export function AnalyticsPage() {
   const [selectedStore, setSelectedStore] = useState<string>("all");
   const [isLinkHubOpen, setIsLinkHubOpen] = useState(false);
   const [activeLinkItem, setActiveLinkItem] = useState<PlatformLinkItem | null>(null);
+
+  const user = useAuthStore((state) => state.user);
 
   // 1. Fetch influencer platform analytics
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -39,6 +43,12 @@ export function AnalyticsPage() {
     queryFn: getInfluencerStoresOverview,
   });
 
+  // 3. Fetch creator's real affiliate links
+  const linksQuery = useQuery({
+    queryKey: ["influencer", "links", selectedStore],
+    queryFn: () => getInfluencerLinks(selectedStore === "all" ? undefined : selectedStore),
+  });
+
   const storesList = storesQuery.data?.stores?.map((s: any) => ({
     id: s.id,
     name: s.name,
@@ -49,17 +59,55 @@ export function AnalyticsPage() {
   const timeline = data?.platformTimeline ?? [];
 
   const handleOpenLinkHub = (platformName?: string) => {
-    const firstStore = storesQuery.data?.stores?.[0];
-    const defaultLink: PlatformLinkItem = {
-      id: "creator_storewide",
-      baseUrl: firstStore?.slug ? `/r/${firstStore.slug}` : "/r/store",
-      storeName: firstStore?.name || "Featured Store",
-      creatorName: "Sarah Jenkins",
-      creatorCode: "SARAH88_PRO",
-      commissionRate: 15,
-      slug: firstStore?.slug || "store-promo",
-    };
-    setActiveLinkItem(defaultLink);
+    const links = linksQuery.data?.links ?? [];
+    const matchedLink =
+      (selectedStore !== "all" ? links.find((l) => l.storeId === selectedStore) : null) ||
+      links[0] ||
+      null;
+
+    const firstStore =
+      storesQuery.data?.stores?.find((s: any) => selectedStore === "all" || s.id === selectedStore) ||
+      storesQuery.data?.stores?.[0];
+
+    const creatorName = user?.displayName || user?.name || "Creator";
+    const creatorCode = user?.creatorCode || matchedLink?.creatorCode || null;
+
+    if (matchedLink) {
+      const defaultLink: PlatformLinkItem = {
+        id: matchedLink.id,
+        baseUrl: matchedLink.url || `/r/${matchedLink.slug}`,
+        directUrl: matchedLink.directUrl,
+        shopDomain: matchedLink.shopDomain,
+        destinationPath: matchedLink.destinationPath,
+        productName: matchedLink.productTitle,
+        storeName: matchedLink.storeName || firstStore?.name || "Store",
+        creatorName,
+        creatorCode: matchedLink.creatorCode || creatorCode,
+        commissionType: matchedLink.commissionType,
+        commissionRate: matchedLink.commissionRate,
+        commissionAmount: matchedLink.commissionAmount,
+        slug: matchedLink.slug,
+      };
+      setActiveLinkItem(defaultLink);
+    } else {
+      const code = creatorCode || "CREATOR";
+      const fallbackSlug = `promo-${code.toLowerCase()}`;
+      const defaultLink: PlatformLinkItem = {
+        id: "creator_storewide",
+        baseUrl: `/r/${fallbackSlug}`,
+        directUrl: firstStore?.shopDomain
+          ? `https://${firstStore.shopDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/?mi_creator_code=${code}&utm_creator_code=${code}&ref=${code}`
+          : null,
+        shopDomain: firstStore?.shopDomain || null,
+        destinationPath: "/",
+        storeName: firstStore?.name || "Featured Store",
+        creatorName,
+        creatorCode: code,
+        commissionRate: 10,
+        slug: fallbackSlug,
+      };
+      setActiveLinkItem(defaultLink);
+    }
     setIsLinkHubOpen(true);
   };
 

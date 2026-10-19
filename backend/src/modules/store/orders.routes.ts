@@ -9,7 +9,9 @@ import { resolveOrderPlatform } from '../../shared/order-platform.js';
 type Node = Record<string, any>;
 type Page = { items?: Node[]; pageInfo?: { hasNextPage: boolean; endCursor: string | null }; error?: string };
 
-const query = `query Orders($after:String){orders(first:100,after:$after,sortKey:PROCESSED_AT,reverse:true){nodes{id name email phone note tags customAttributes{key value} displayFinancialStatus displayFulfillmentStatus processedAt createdAt totalPriceSet{shopMoney{amount currencyCode}} totalShippingPriceSet{shopMoney{amount currencyCode}} totalTaxSet{shopMoney{amount currencyCode}} lineItems(first:250){nodes{title quantity sku customAttributes{key value} originalUnitPriceSet{shopMoney{amount currencyCode}} variant{title image{url}} image{url}}} shippingAddress{firstName lastName name address1 address2 city province zip country phone} customer{firstName lastName email phone} } pageInfo{hasNextPage endCursor}}}`;
+const queryWithJourney = `query Orders($after:String){orders(first:100,after:$after,sortKey:PROCESSED_AT,reverse:true){nodes{id name email phone note tags customAttributes{key value} displayFinancialStatus displayFulfillmentStatus processedAt createdAt totalPriceSet{shopMoney{amount currencyCode}} totalShippingPriceSet{shopMoney{amount currencyCode}} totalTaxSet{shopMoney{amount currencyCode}} discountApplications(first:10){nodes{... on DiscountCodeApplication{code}}} customerJourneySummary{firstVisit{landingPage referrerUrl utmParameters{source medium campaign}} lastVisit{landingPage referrerUrl utmParameters{source medium campaign}}} lineItems(first:250){nodes{title quantity sku customAttributes{key value} originalUnitPriceSet{shopMoney{amount currencyCode}} variant{title image{url}} image{url}}} shippingAddress{firstName lastName name address1 address2 city province zip country phone} customer{firstName lastName email phone} } pageInfo{hasNextPage endCursor}}}`;
+
+const queryStandard = `query Orders($after:String){orders(first:100,after:$after,sortKey:PROCESSED_AT,reverse:true){nodes{id name email phone note tags customAttributes{key value} displayFinancialStatus displayFulfillmentStatus processedAt createdAt totalPriceSet{shopMoney{amount currencyCode}} totalShippingPriceSet{shopMoney{amount currencyCode}} totalTaxSet{shopMoney{amount currencyCode}} discountApplications(first:10){nodes{... on DiscountCodeApplication{code}}} lineItems(first:250){nodes{title quantity sku customAttributes{key value} originalUnitPriceSet{shopMoney{amount currencyCode}} variant{title image{url}} image{url}}} shippingAddress{firstName lastName name address1 address2 city province zip country phone} customer{firstName lastName email phone} } pageInfo{hasNextPage endCursor}}}`;
 
 async function storeFor(app: Parameters<FastifyPluginAsync>[0], userId: string) {
   const s = await app.prisma.organization.findFirst({
@@ -55,12 +57,23 @@ async function fetchOrderPage(store: Awaited<ReturnType<typeof storeFor>>, after
       }
       return b as Required<Page>;
     }
-    const r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+
+    let r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
-      body: JSON.stringify({ query, variables: { after } }),
+      body: JSON.stringify({ query: queryWithJourney, variables: { after } }),
     });
-    const b = (await r.json().catch(() => null)) as any;
+    let b = (await r.json().catch(() => null)) as any;
+
+    if (b?.errors?.some((err: any) => err.message?.includes('customerJourneySummary') || err.message?.includes('access'))) {
+      r = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
+        body: JSON.stringify({ query: queryStandard, variables: { after } }),
+      });
+      b = (await r.json().catch(() => null)) as any;
+    }
+
     const o = b?.data?.orders;
     if (!r.ok || b?.errors?.length || !o?.nodes) {
       throw new AppError('SHOPIFY_ORDERS_UNAVAILABLE', b?.errors?.[0]?.message ?? 'Shopify could not return orders.', 502);
@@ -95,7 +108,11 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
 
     const where: Prisma.ShopifyOrderWhereInput = {
       organizationId: s.id,
-      creatorCode: { not: null },
+      OR: [
+        { creatorCode: { not: null } },
+        { affiliateLinkId: { not: null } },
+        { affiliateCommissions: { some: {} } },
+      ],
       ...(search
         ? {
             OR: [
@@ -277,23 +294,32 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           };
 
           // 1. Direct Attributes
-          let linkSlug = getAttr('mi_link') ?? getAttr('_mi_link');
+          let linkSlug = getAttr('mi_link') ?? getAttr('_mi_link') ?? getAttr('code') ?? getAttr('link');
           let trackedCreatorCode =
             getAttr('mi_creator_code') ??
             getAttr('_mi_creator_code') ??
             getAttr('utm_creator_code') ??
             getAttr('creator_code') ??
-            getAttr('creator');
+            getAttr('creator') ??
+            getAttr('ref');
 
-          // 2. Landing site / Referral URL parameter parsing (Crucial for Buy It Now direct checkout)
-          const landingUrl = String(raw.landing_site ?? raw.landingSite ?? raw.referring_site ?? raw.source_url ?? '');
+          // 2. Landing site / Customer journey URL parameter parsing
+          const landingUrl = String(
+            raw.customerJourneySummary?.firstVisit?.landingPage ??
+            raw.customerJourneySummary?.lastVisit?.landingPage ??
+            raw.landing_site ??
+            raw.landingSite ??
+            raw.referring_site ??
+            raw.source_url ??
+            ''
+          );
           if (landingUrl) {
             if (!linkSlug) {
-              const linkMatch = landingUrl.match(/[?&](?:mi_link|_mi_link)=([a-zA-Z0-9_-]+)/i);
+              const linkMatch = landingUrl.match(/[?&](?:mi_link|_mi_link|code|link|aff|via)=([a-zA-Z0-9_-]+)/i);
               if (linkMatch) linkSlug = linkMatch[1];
             }
             if (!trackedCreatorCode) {
-              const codeMatch = landingUrl.match(/[?&](?:mi_creator_code|_mi_creator_code|utm_creator_code|creator)=([a-zA-Z0-9_-]+)/i);
+              const codeMatch = landingUrl.match(/[?&](?:mi_creator_code|_mi_creator_code|utm_creator_code|creator_code|creator|ref)=([a-zA-Z0-9_-]+)/i);
               if (codeMatch) trackedCreatorCode = codeMatch[1];
             }
           }
@@ -306,7 +332,20 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             ...(raw.discountCode ? [String(raw.discountCode).trim()] : []),
           ].filter(Boolean);
 
-          // 4. Tags parsing
+          // 4. Order Note check
+          const noteText = String(raw.note ?? item.note ?? '');
+          if (noteText) {
+            if (!linkSlug) {
+              const noteLinkMatch = noteText.match(/(?:mi_link|_mi_link|code|link)[:=\s]+([a-zA-Z0-9_-]+)/i);
+              if (noteLinkMatch) linkSlug = noteLinkMatch[1];
+            }
+            if (!trackedCreatorCode) {
+              const noteCreatorMatch = noteText.match(/(?:mi_creator_code|_mi_creator_code|creator_code|creator|ref)[:=\s]+([a-zA-Z0-9_-]+)/i);
+              if (noteCreatorMatch) trackedCreatorCode = noteCreatorMatch[1];
+            }
+          }
+
+          // 5. Tags parsing
           const tags = raw.tags ?? item.tags ?? [];
           const tagList: string[] = Array.isArray(tags)
             ? tags.map((t: any) => String(t).trim())
@@ -330,36 +369,55 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 id: true,
                 creatorId: true,
                 commissionRate: true,
-                creator: { select: { id: true, creatorCode: true } },
+                creator: { select: { id: true, creatorCode: true, role: true } },
               },
             });
             if (link?.creator) {
               creator = link.creator;
               trackedCreatorCode = creator.creatorCode ?? trackedCreatorCode;
+            } else if (!link && !trackedCreatorCode) {
+              // If linkSlug not found as slug, check if it's a creatorCode
+              trackedCreatorCode = String(linkSlug);
             }
           }
 
           if (!link && trackedCreatorCode) {
-            creator = await prisma.user.findFirst({
-              where: {
-                creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' },
-                role: 'INFLUENCER',
+            // First check if trackedCreatorCode is an affiliate link slug
+            const slugLink = await prisma.affiliateLink.findFirst({
+              where: { organizationId: s.id, slug: String(trackedCreatorCode) },
+              select: {
+                id: true,
+                creatorId: true,
+                commissionRate: true,
+                creator: { select: { id: true, creatorCode: true, role: true } },
               },
-              select: { id: true, creatorCode: true },
             });
-            if (creator) {
-              link = await prisma.affiliateLink.findFirst({
-                where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
-                select: { id: true, creatorId: true, commissionRate: true },
+            if (slugLink) {
+              link = slugLink;
+              creator = slugLink.creator;
+              trackedCreatorCode = creator?.creatorCode ?? trackedCreatorCode;
+            } else {
+              creator = await prisma.user.findFirst({
+                where: {
+                  creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' },
+                  role: { in: ['INFLUENCER', 'CUSTOMER'] },
+                },
+                select: { id: true, creatorCode: true, role: true },
               });
+              if (creator) {
+                link = await prisma.affiliateLink.findFirst({
+                  where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
+                  select: { id: true, creatorId: true, commissionRate: true },
+                });
+              }
             }
           }
 
           if (!link && rawDiscountCodes.length > 0) {
             for (const code of rawDiscountCodes) {
               const matchedCreator = await prisma.user.findFirst({
-                where: { creatorCode: { equals: code, mode: 'insensitive' }, role: 'INFLUENCER' },
-                select: { id: true, creatorCode: true },
+                where: { creatorCode: { equals: code, mode: 'insensitive' }, role: { in: ['INFLUENCER', 'CUSTOMER'] } },
+                select: { id: true, creatorCode: true, role: true },
               });
               if (matchedCreator) {
                 creator = matchedCreator;
@@ -373,6 +431,9 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             }
           }
 
+          const finalCreatorCode = trackedCreatorCode ?? link?.creator?.creatorCode ?? creator?.creatorCode ?? null;
+          const finalLinkId = link?.id ?? null;
+
           const d = {
             shopifyId: item.shopifyGid ?? raw.id,
             name: item.name ?? raw.name,
@@ -382,7 +443,8 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             financialStatus: item.financialStatus ?? raw.displayFinancialStatus ?? null,
             fulfillmentStatus: raw.displayFulfillmentStatus ?? null,
             processedAt: item.shopifyCreatedAt ?? raw.processedAt ? new Date(item.shopifyCreatedAt ?? raw.processedAt) : null,
-            creatorCode: trackedCreatorCode ?? null,
+            creatorCode: finalCreatorCode,
+            affiliateLinkId: finalLinkId,
             payload: raw as Prisma.InputJsonValue,
           };
 
@@ -419,6 +481,17 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 slug: `link_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
               },
               select: { id: true, creatorId: true, commissionRate: true },
+            });
+          }
+
+          // Ensure order retains attributed affiliateLinkId and creatorCode
+          if (link?.id || finalCreatorCode) {
+            await prisma.shopifyOrder.update({
+              where: { id: order.id },
+              data: {
+                affiliateLinkId: link?.id ?? finalLinkId,
+                creatorCode: finalCreatorCode ?? creator?.creatorCode ?? undefined,
+              },
             });
           }
 

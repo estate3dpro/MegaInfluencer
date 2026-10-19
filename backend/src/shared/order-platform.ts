@@ -41,8 +41,15 @@ export function resolveOrderPlatform(
       }
     }
 
-    // 2. Landing site / source url
-    const landing = String(payload.landing_site ?? payload.landing_site_ref ?? payload.source_url ?? '');
+    // 2. Landing site / customer journey / source url
+    const landing = String(
+      payload.customerJourneySummary?.firstVisit?.landingPage ??
+      payload.customerJourneySummary?.lastVisit?.landingPage ??
+      payload.landing_site ??
+      payload.landing_site_ref ??
+      payload.source_url ??
+      ''
+    );
     if (landing) {
       try {
         const urlMatch = landing.match(/[?&]utm_source=([^&]+)/i);
@@ -54,8 +61,22 @@ export function resolveOrderPlatform(
       } catch {}
     }
 
+    // Direct journey UTM parameters
+    const journeyUtm = payload.customerJourneySummary?.firstVisit?.utmParameters ?? payload.customerJourneySummary?.lastVisit?.utmParameters;
+    if (journeyUtm) {
+      if (!utmSource && journeyUtm.source) utmSource = journeyUtm.source;
+      if (!utmMedium && journeyUtm.medium) utmMedium = journeyUtm.medium;
+      if (!utmCampaign && journeyUtm.campaign) utmCampaign = journeyUtm.campaign;
+    }
+
     // 3. Referring site
-    const ref = String(payload.referring_site ?? payload.referrer ?? '');
+    const ref = String(
+      payload.customerJourneySummary?.firstVisit?.referrerUrl ??
+      payload.customerJourneySummary?.lastVisit?.referrerUrl ??
+      payload.referring_site ??
+      payload.referrer ??
+      ''
+    );
     if (ref) {
       referrer = ref;
       const lowerRef = ref.toLowerCase();

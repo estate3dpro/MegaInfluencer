@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { getInstagramProfile, listInstagramMedia } from '../instagram/instagram.service.js';
+import { resolveOrderPlatform } from '../../shared/order-platform.js';
 
 const numberCompact = new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 });
 const numberStandard = new Intl.NumberFormat('en-IN');
@@ -178,14 +179,13 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     for (const comm of currentCommissions) {
       let matchedPlatform = 'custom';
       const orderPayload = (comm.shopifyOrder?.payload as any) || {};
-      if (orderPayload.platform) {
-        matchedPlatform = normalizePlatform(orderPayload.platform);
-      } else {
-        const matchingClick = allClicksInRange.find((c: any) => c.linkId === comm.linkId);
-        if (matchingClick) {
-          matchedPlatform = normalizePlatform(matchingClick.utmSource, matchingClick.referrer);
-        }
-      }
+      const matchingClick = allClicksInRange.find((c: any) => c.linkId === comm.linkId);
+      const sourceInfo = resolveOrderPlatform(orderPayload, matchingClick);
+
+      if (sourceInfo.platform === 'WHATSAPP') matchedPlatform = 'whatsapp';
+      else if (sourceInfo.platform === 'FACEBOOK') matchedPlatform = 'facebook';
+      else if (sourceInfo.platform === 'INSTAGRAM') matchedPlatform = 'instagram';
+      else if (sourceInfo.utmSource) matchedPlatform = normalizePlatform(sourceInfo.utmSource, sourceInfo.referrer);
 
       const entry = platformMap.get(matchedPlatform) || platformMap.get('custom')!;
       entry.orders += 1;
