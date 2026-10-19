@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -23,7 +23,6 @@ import {
   Calendar,
   Layers,
   Send,
-  Eye,
   Zap,
   ShieldCheck,
   ShieldAlert,
@@ -51,7 +50,6 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { useAuthStore } from "@/stores/auth-store";
 import {
   getStoreCreatorDetails,
   getCreatorAssignedProducts,
@@ -60,7 +58,6 @@ import {
   updateCreatorAutoCommission,
   createManualCommission,
   sendBarterSample,
-  impersonateCreator,
   type CompensationMode,
 } from "@/features/store-admin/api/creators.api";
 
@@ -77,42 +74,6 @@ export const Route = createFileRoute("/store-admin/creators/$creatorId")({ compo
 function CreatorDetailPage() {
   const { creatorId } = Route.useParams();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const startImpersonation = useAuthStore((state) => state.startImpersonation);
-
-  const impersonateMutation = useMutation({
-    mutationFn: (targetId: string) => impersonateCreator(targetId),
-    onSuccess: (data) => {
-      const accessToken = data.accessToken || data.tokens?.accessToken;
-      const refreshToken = data.refreshToken || data.tokens?.refreshToken;
-      if (!accessToken || !refreshToken) {
-        toast.error("Failed to acquire impersonation session tokens");
-        return;
-      }
-      const displayName = data.user.name || data.user.displayName || "Influencer";
-      startImpersonation({
-        influencerUser: {
-          id: data.user.id,
-          email: data.user.email || "",
-          name: displayName,
-          creatorCode: data.user.creatorCode,
-          roles: ["influencer"],
-          activeRole: "influencer",
-        },
-        accessToken,
-        refreshToken,
-        storeName: data.impersonatedBy?.storeName,
-        targetCreatorId: data.user.id,
-      });
-      queryClient.clear();
-      toast.success(`Switched to impersonating ${displayName}`);
-      void navigate({ to: "/influencer/dashboard" });
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message || err?.message || "Failed to impersonate creator");
-    },
-  });
-
   const [activeTab, setActiveTab] = useState("products");
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [sampleDialogOpen, setSampleDialogOpen] = useState(false);
@@ -495,19 +456,6 @@ function CreatorDetailPage() {
                 className="data-[state=checked]:bg-emerald-600 ml-1"
               />
             </div>
-
-            {/* Impersonate Influencer Button */}
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={impersonateMutation.isPending || creator.status !== "ACTIVE"}
-              onClick={() => impersonateMutation.mutate(creator.id)}
-              className="h-9 text-xs font-semibold gap-1.5 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 shadow-2xs"
-              title="Log in and view platform from this creator's perspective"
-            >
-              <Eye className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-              {impersonateMutation.isPending ? "Impersonating..." : "Impersonate Influencer"}
-            </Button>
 
             {/* Manually Add Commission Button */}
             <Button

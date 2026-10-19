@@ -8,7 +8,6 @@ import { getInstagramProfile } from '../instagram/instagram.client.js';
 import { getAssignedProductIds, setCreatorProductAssignments } from '../product-assignments/product-assignments.service.js';
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 import { ensureCreatorCode } from '../../shared/creator-code.js';
-import { createSession } from '../../shared/auth/session.js';
 
 const passwordOptions = {
   type: argon2.argon2id,
@@ -518,75 +517,6 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { ok: true, commission, order };
-  });
-
-  // POST /store/creators/:creatorId/impersonate (Store Admin impersonates an influencer assigned to their store)
-  app.post('/store/creators/:creatorId/impersonate', async (req) => {
-    const actor = requireRole(req, ['STORE_OWNER']);
-    const org = await organization(actor.userId);
-    const { creatorId } = req.params as { creatorId: string };
-
-    const assignment = await prisma.storeInfluencerAssignment.findUnique({
-      where: {
-        organizationId_influencerId: {
-          organizationId: org.id,
-          influencerId: creatorId,
-        },
-      },
-      include: {
-        influencer: {
-          select: {
-            id: true,
-            displayName: true,
-            email: true,
-            role: true,
-            status: true,
-            creatorCode: true,
-          },
-        },
-      },
-    });
-
-    if (!assignment || !assignment.influencer) {
-      throw new AppError('CREATOR_NOT_FOUND', 'This influencer is not assigned to your store.', 404);
-    }
-
-    if (assignment.influencer.status !== 'ACTIVE') {
-      throw new AppError('CREATOR_INACTIVE', 'This influencer account is currently inactive.', 400);
-    }
-
-    const tokens = await createSession(app, {
-      id: assignment.influencer.id,
-      role: assignment.influencer.role,
-    });
-
-    const adminUser = await prisma.user.findUnique({
-      where: { id: actor.userId },
-      select: { id: true, displayName: true, email: true },
-    });
-
-    return {
-      ok: true,
-      user: {
-        id: assignment.influencer.id,
-        email: assignment.influencer.email,
-        name: assignment.influencer.displayName,
-        displayName: assignment.influencer.displayName,
-        creatorCode: assignment.influencer.creatorCode,
-        roles: ['influencer'],
-        activeRole: 'influencer',
-      },
-      tokens,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      impersonatedBy: {
-        id: actor.userId,
-        adminId: actor.userId,
-        name: adminUser?.displayName || 'Store Admin',
-        storeId: org.id,
-        storeName: org.name,
-      },
-    };
   });
 
   // GET /store/creators/settings

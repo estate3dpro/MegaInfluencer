@@ -113,8 +113,9 @@ export function AppShell({ role, children }: { role: Role; children?: ReactNode 
   function handleExitImpersonation() {
     const backup = exitImpersonation();
     queryClient.clear();
-    toast.success("Exited impersonation mode. Restored Store Admin session.");
-    void navigate({ to: "/store-admin/creators" });
+    const isPlatformAdmin = backup?.adminUser.activeRole === "admin" || backup?.adminUser.roles?.includes("admin");
+    toast.success(`Exited impersonation mode. Restored ${isPlatformAdmin ? "Platform Admin" : "Store Admin"} session.`);
+    void navigate({ to: isPlatformAdmin ? "/admin/influencers" : "/store-admin/creators" });
   }
 
   function handleSignOut() {

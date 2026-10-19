@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
   BadgeIndianRupee,
@@ -54,7 +54,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { useAuthStore } from "@/stores/auth-store";
 import { PlatformLinkGeneratorModal, type PlatformLinkItem } from "@/components/app/PlatformLinkGeneratorModal";
 import { createAffiliateLink, getAffiliateLinks, updateAffiliateLink } from "../api/affiliate-links.api";
 import { ReferralProgramSettingsModal } from "../components/ReferralProgramSettingsModal";
@@ -73,7 +72,6 @@ import {
   updateCreatorCompensationMode,
   updateCreatorAutoCommission,
   updateCommissionStatus,
-  impersonateCreator,
   type CompensationMode,
   type CreateStoreCreatorInput,
   type StoreCreator,
@@ -173,44 +171,9 @@ export function CreatorsPage() {
   const [sampleTrackingNumber, setSampleTrackingNumber] = useState("");
   const [sampleAddress, setSampleAddress] = useState("");
 
-  const navigate = useNavigate();
-  const startImpersonation = useAuthStore((state) => state.startImpersonation);
   const client = useQueryClient();
   const query = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators });
   const creators = query.data ?? [];
-
-  const impersonateMutation = useMutation({
-    mutationFn: (creatorId: string) => impersonateCreator(creatorId),
-    onSuccess: (data) => {
-      const accessToken = data.accessToken || data.tokens?.accessToken;
-      const refreshToken = data.refreshToken || data.tokens?.refreshToken;
-      if (!accessToken || !refreshToken) {
-        toast.error("Failed to acquire impersonation session tokens");
-        return;
-      }
-      const displayName = data.user.name || data.user.displayName || "Influencer";
-      startImpersonation({
-        influencerUser: {
-          id: data.user.id,
-          email: data.user.email || "",
-          name: displayName,
-          creatorCode: data.user.creatorCode,
-          roles: ["influencer"],
-          activeRole: "influencer",
-        },
-        accessToken,
-        refreshToken,
-        storeName: data.impersonatedBy?.storeName,
-        targetCreatorId: data.user.id,
-      });
-      client.clear();
-      toast.success(`Switched to impersonating ${displayName}`);
-      void navigate({ to: "/influencer/dashboard" });
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message || err?.message || "Failed to impersonate creator");
-    },
-  });
 
   const settingsQuery = useQuery({
     queryKey: ["store", "creators", "settings"],
@@ -871,19 +834,6 @@ export function CreatorsPage() {
                               {creator.sampleCount ? "Sample Sent" : "Gift Sample"}
                             </Button>
                           )}
-
-                          {/* Impersonate Button */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={impersonateMutation.isPending || creator.status !== "ACTIVE"}
-                            onClick={() => impersonateMutation.mutate(creator.id)}
-                            className="h-7 px-2 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg"
-                            title="Impersonate and view platform from this creator's perspective"
-                          >
-                            <Eye className="h-3.5 w-3.5 mr-1 text-indigo-600 dark:text-indigo-400" />
-                            Impersonate
-                          </Button>
 
                           <Button asChild variant="ghost" size="sm" className="h-7 text-xs text-primary font-semibold">
                             <Link to="/store-admin/creators/$creatorId" params={{ creatorId: creator.id }}>

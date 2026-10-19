@@ -56,6 +56,19 @@ export type AdminInstagramProfile = {
   unavailableReason: string | null;
 };
 
+export type AdminImpersonateResponse = {
+  user: {
+    id: string;
+    email: string | null;
+    name: string;
+    displayName: string;
+    creatorCode?: string | null;
+  };
+  tokens: { accessToken: string; refreshToken: string };
+  accessToken: string;
+  refreshToken: string;
+};
+
 export async function getInfluencers(params: {
   page: number;
   status?: InfluencerStatus;
@@ -93,6 +106,11 @@ export async function getAdminInstagramProfile(id: string) {
   const { data } = await apiClient.get<AdminInstagramProfile>(
     `/admin/influencers/${id}/instagram-profile`,
   );
+  return data;
+}
+
+export async function impersonateInfluencer(id: string) {
+  const { data } = await apiClient.post<AdminImpersonateResponse>(`/admin/influencers/${id}/impersonate`);
   return data;
 }
 

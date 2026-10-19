@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Check, GitMerge, Images, Instagram, Package, Plus, ShieldAlert, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { ArrowLeft, Check, Eye, GitMerge, Images, Instagram, Package, Plus, ShieldAlert, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/PageHeader";
+import { useAuthStore } from "@/stores/auth-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +29,7 @@ import {
   getAdminInstagramProfile,
   getInfluencer,
   getInfluencers,
+  impersonateInfluencer,
   mergeAdminInfluencers,
   provisionInfluencerCredentials,
   updateAdminInfluencerAssignedProducts,
@@ -43,6 +45,7 @@ const compactNumber = new Intl.NumberFormat("en-IN", {
 export function InfluencerDetailsPage({ influencerId }: { influencerId: string }) {
   const client = useQueryClient();
   const navigate = useNavigate();
+  const startImpersonation = useAuthStore((state) => state.startImpersonation);
   const query = useQuery({
     queryKey: ["admin", "influencer", influencerId],
     queryFn: () => getInfluencer(influencerId),
@@ -61,6 +64,29 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
       );
       void client.invalidateQueries({ queryKey: ["admin", "influencers"] });
     },
+  });
+  const impersonateMutation = useMutation({
+    mutationFn: () => impersonateInfluencer(influencerId),
+    onSuccess: (data) => {
+      const displayName = data.user.name || data.user.displayName || "Influencer";
+      startImpersonation({
+        influencerUser: {
+          id: data.user.id,
+          email: data.user.email || "",
+          name: displayName,
+          creatorCode: data.user.creatorCode ?? null,
+          roles: ["influencer"],
+          activeRole: "influencer",
+        },
+        accessToken: data.accessToken || data.tokens.accessToken,
+        refreshToken: data.refreshToken || data.tokens.refreshToken,
+        targetCreatorId: data.user.id,
+      });
+      client.clear();
+      toast.success(`Switched to impersonating ${displayName}`);
+      void navigate({ to: "/influencer/dashboard" });
+    },
+    onError: (error: any) => toast.error(error?.response?.data?.message || "Failed to impersonate influencer"),
   });
   if (query.isLoading) return <div className="h-72 animate-pulse rounded-xl bg-muted" />;
   if (!query.data)
@@ -82,19 +108,31 @@ export function InfluencerDetailsPage({ influencerId }: { influencerId: string }
         title={influencer.displayName}
         description={influencer.email ?? "No email address"}
         actions={
-          <Select
-            value={influencer.status}
-            disabled={mutation.isPending}
-            onValueChange={(value) => mutation.mutate(value as InfluencerStatus)}
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="SUSPENDED">Suspended</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={impersonateMutation.isPending || influencer.status !== "ACTIVE"}
+              onClick={() => impersonateMutation.mutate()}
+              className="gap-1.5 text-indigo-700 dark:text-indigo-300"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              {impersonateMutation.isPending ? "Impersonating..." : "Impersonate"}
+            </Button>
+            <Select
+              value={influencer.status}
+              disabled={mutation.isPending}
+              onValueChange={(value) => mutation.mutate(value as InfluencerStatus)}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="SUSPENDED">Suspended</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         }
       />
       {mutation.isError ? (

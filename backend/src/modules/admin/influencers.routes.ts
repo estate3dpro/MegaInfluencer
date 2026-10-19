@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
 import { requireRole } from '../../shared/auth/authorization.js';
+import { createSession } from '../../shared/auth/session.js';
+import { AppError } from '../../shared/errors/app-error.js';
 import { parseOrThrow } from '../../shared/validation/pagination.js';
 import { getAdminInfluencer, getAdminInfluencerInstagramProfile, listAdminInfluencers, mergeAdminInfluencers, provisionAdminInfluencerCredentials, updateAdminInfluencerStatus } from './influencers.service.js';
 import { getAssignedProductIds, setCreatorProductAssignments } from '../product-assignments/product-assignments.service.js';
@@ -32,6 +34,50 @@ export const adminInfluencerRoutes: FastifyPluginAsync = async (app) => {
     requireRole(request, ['ADMIN']);
     const { influencerId } = parseOrThrow(influencerParamsSchema, request.params);
     return { influencer: await getAdminInfluencer(app, influencerId) };
+  });
+
+  // Platform administrators may inspect the influencer experience without granting this access to stores.
+  app.post('/admin/influencers/:influencerId/impersonate', async (request) => {
+    const actor = requireRole(request, ['ADMIN']);
+    const { influencerId } = parseOrThrow(influencerParamsSchema, request.params);
+    const influencer = await prisma.user.findFirst({
+      where: { id: influencerId, role: 'INFLUENCER' },
+      select: { id: true, displayName: true, email: true, role: true, status: true, creatorCode: true },
+    });
+
+    if (!influencer) {
+      throw new AppError('INFLUENCER_NOT_FOUND', 'Influencer not found.', 404);
+    }
+    if (influencer.status !== 'ACTIVE') {
+      throw new AppError('INFLUENCER_INACTIVE', 'This influencer account is currently inactive.', 400);
+    }
+
+    const tokens = await createSession(app, { id: influencer.id, role: influencer.role });
+    const adminUser = await prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { id: true, displayName: true },
+    });
+
+    return {
+      ok: true,
+      user: {
+        id: influencer.id,
+        email: influencer.email,
+        name: influencer.displayName,
+        displayName: influencer.displayName,
+        creatorCode: influencer.creatorCode,
+        roles: ['influencer'],
+        activeRole: 'influencer',
+      },
+      tokens,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      impersonatedBy: {
+        id: actor.userId,
+        adminId: actor.userId,
+        name: adminUser?.displayName || 'Platform Admin',
+      },
+    };
   });
 
   app.get('/admin/influencers/:influencerId/instagram-profile', async (request) => {
