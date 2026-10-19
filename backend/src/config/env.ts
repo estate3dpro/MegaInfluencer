@@ -69,6 +69,10 @@ export const config = Object.freeze({
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
+  storefrontOrigins: (process.env.STOREFRONT_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   frontendOrigin: optionalUrl('FRONTEND_ORIGIN', 'http://localhost:8081'),
   publicBaseUrl: optionalUrl('PUBLIC_BASE_URL'),
   instagramAppId: process.env.INSTAGRAM_APP_ID?.trim(),

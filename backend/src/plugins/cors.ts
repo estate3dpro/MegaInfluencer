@@ -10,6 +10,7 @@ export function registerCors(app: FastifyInstance) {
       if (
         !origin ||
         config.clientOrigins.includes(origin) ||
+        config.storefrontOrigins.includes(origin) ||
         origin.startsWith('http://localhost:') ||
         origin.startsWith('http://127.0.0.1:')
       ) {

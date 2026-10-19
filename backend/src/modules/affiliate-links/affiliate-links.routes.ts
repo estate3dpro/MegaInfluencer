@@ -94,6 +94,44 @@ function asLink(row: any, baseUrl: string) {
 
 export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
   const prisma = app.prisma as any;
+  // Used by the Shopify app embed on /pages/shop?code=<affiliate-link-slug>.
+  // It deliberately returns a same-store destination rather than sending the
+  // shopper through the MegaInfluencer redirect domain.
+  app.get('/public/affiliate-links/:slug/resolve', async (request, reply) => {
+    const { slug: linkSlug } = request.params as { slug: string };
+    const link = await prisma.affiliateLink.findUnique({
+      where: { slug: linkSlug },
+      include: {
+        organization: { select: { shopDomain: true, storefrontDomain: true } },
+        creator: { select: { creatorCode: true } },
+        collection: { select: { handle: true } },
+      },
+    });
+    if (!link || link.status !== 'ACTIVE' || (link.expiresAt && link.expiresAt <= new Date())) {
+      throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'This affiliate link is unavailable.', 404);
+    }
+
+    const publicDomain = link.organization.storefrontDomain ?? link.organization.shopDomain;
+    const landingPath = link.targetType === 'COLLECTION' && link.collection?.handle
+      ? `/collections/${link.collection.handle}`
+      : link.destinationPath;
+    const destination = safeDestination(publicDomain, landingPath);
+    destination.searchParams.set('mi_link', link.slug);
+    if (link.creatorId) {
+      const creatorCode = link.creator?.creatorCode ?? await ensureCreatorCode(prisma, link.creatorId);
+      destination.searchParams.set('mi_creator_code', creatorCode);
+      destination.searchParams.set('utm_creator_code', creatorCode);
+    }
+
+    const visitorHash = request.headers['user-agent']
+      ? createHash('sha256').update(`${request.headers['user-agent']}|${request.ip}`).digest('hex')
+      : null;
+    await prisma.affiliateLinkClick.create({
+      data: { organizationId: link.organizationId, linkId: link.id, visitorHash, referrer: request.headers.referer?.slice(0, 2_000) },
+    });
+    return reply.header('Cache-Control', 'no-store').send({ destinationUrl: destination.toString() });
+  });
+
   app.get('/store/affiliate-links', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId);
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
