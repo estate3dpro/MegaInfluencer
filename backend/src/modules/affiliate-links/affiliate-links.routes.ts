@@ -248,6 +248,103 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const baseUrl = getFrontendBaseUrl(request); return { link: asLink(link, baseUrl) };
   });
 
+  // Full attribution report for one link. This deliberately includes tracked
+  // orders that are awaiting commission reconciliation, so operators see the
+  // real order journey rather than a misleading empty report.
+  app.get('/store/affiliate-links/:linkId/report', async (request) => {
+    const actor = requireRole(request, ['STORE_OWNER']);
+    const organization = await organizationFor(app, actor.userId);
+    const { linkId } = request.params as { linkId: string };
+    const link = await prisma.affiliateLink.findFirst({
+      where: { id: linkId, organizationId: organization.id },
+      include: {
+        creator: { select: { id: true, displayName: true, creatorCode: true, email: true, instagramConnection: { select: { username: true } } } },
+        product: { select: { title: true } },
+        collection: { select: { title: true } },
+        _count: { select: { clicks: true } },
+        commissions: {
+          include: { shopifyOrder: { select: { id: true, name: true, email: true, total: true, currency: true, financialStatus: true, fulfillmentStatus: true, processedAt: true } } },
+        },
+        trackedOrders: { select: { id: true, name: true, email: true, total: true, currency: true, financialStatus: true, fulfillmentStatus: true, processedAt: true } },
+      },
+    });
+    if (!link) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
+
+    const reportOrders = new Map<string, any>();
+    for (const commission of link.commissions) {
+      const order = commission.shopifyOrder;
+      if (!order) continue;
+      reportOrders.set(order.id, {
+        id: order.id,
+        name: order.name,
+        email: order.email,
+        amount: Number(order.total ?? commission.orderAmount ?? 0),
+        currency: order.currency ?? 'INR',
+        financialStatus: order.financialStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
+        processedAt: order.processedAt,
+        commissionAmount: Number(commission.amount ?? 0),
+        commissionStatus: commission.status,
+        commissionType: commission.commissionType,
+        commissionRate: Number(commission.commissionRate ?? 0),
+      });
+    }
+    for (const order of link.trackedOrders) {
+      if (reportOrders.has(order.id)) continue;
+      reportOrders.set(order.id, {
+        id: order.id,
+        name: order.name,
+        email: order.email,
+        amount: Number(order.total ?? 0),
+        currency: order.currency ?? 'INR',
+        financialStatus: order.financialStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
+        processedAt: order.processedAt,
+        commissionAmount: 0,
+        commissionStatus: null,
+        commissionType: link.commissionType,
+        commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : Number(link.commissionRate ?? 0),
+      });
+    }
+
+    const orders = [...reportOrders.values()].sort((a, b) =>
+      new Date(b.processedAt ?? 0).getTime() - new Date(a.processedAt ?? 0).getTime(),
+    );
+    const qualifyingOrders = orders.filter((order) => !['refunded', 'voided', 'cancelled'].includes(String(order.financialStatus ?? '').toLowerCase()) && order.commissionStatus !== 'REVERSED');
+    const gmv = qualifyingOrders.reduce((sum, order) => sum + order.amount, 0);
+    const creatorEarnings = qualifyingOrders.reduce((sum, order) => sum + order.commissionAmount, 0);
+    const clicks = Number(link._count.clicks ?? 0);
+
+    return {
+      link: {
+        id: link.id,
+        slug: link.slug,
+        destination: link.product?.title ?? link.collection?.title ?? 'Storewide link',
+        targetType: link.targetType,
+        status: link.status,
+        commissionType: link.commissionType,
+        commissionRate: Number(link.commissionRate ?? 0),
+        commissionAmount: link.commissionAmount === null ? null : Number(link.commissionAmount),
+        creator: link.creator ? {
+          id: link.creator.id,
+          name: link.creator.displayName,
+          creatorCode: link.creator.creatorCode,
+          email: link.creator.email,
+          instagramUsername: link.creator.instagramConnection?.username ?? null,
+        } : null,
+      },
+      metrics: {
+        clicks,
+        totalOrders: qualifyingOrders.length,
+        gmv,
+        averageOrderAmount: qualifyingOrders.length ? gmv / qualifyingOrders.length : 0,
+        creatorEarnings,
+        conversionRate: clicks ? qualifyingOrders.length / clicks : 0,
+      },
+      orders,
+    };
+  });
+
   app.get('/influencer/affiliate-links', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
     const query = request.query as { search?: string; storeId?: string };

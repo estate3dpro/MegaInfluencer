@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
   BadgeIndianRupee,
+  BarChart3,
   CheckCircle2,
   ChevronRight,
   Copy,
@@ -1375,6 +1376,11 @@ export function AffiliatePage() {
                     <div className="flex justify-end gap-1.5">
                       <Button size="sm" variant="ghost" onClick={() => handleCopyLink(link)} className="h-7 px-2 text-xs">
                         <Copy className="h-3.5 w-3.5 mr-1" /> Copy
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs font-semibold">
+                        <a href={`/store-admin/affiliate/${link.id}`}>
+                          <BarChart3 className="h-3.5 w-3.5 mr-1" /> View Reports
+                        </a>
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => handleOpenPlatformHub(link)} className="h-7 px-2 text-xs font-bold text-primary border-primary/30">
                         <Share2 className="h-3.5 w-3.5 mr-1" /> Hub
