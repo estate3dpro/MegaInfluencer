@@ -22,7 +22,7 @@ import { getInfluencerAnalytics } from "../api/analytics.api";
 import { getInfluencerStoresOverview } from "../api/stores.api";
 import { getInfluencerLinks } from "../api/links.api";
 
-export function AnalyticsPage() {
+export function AnalyticsPage() { 
   const [range, setRange] = useState<string>("30d");
   const [selectedPlatform, setSelectedPlatform] = useState<string>("all");
   const [selectedStore, setSelectedStore] = useState<string>("all");
@@ -96,7 +96,7 @@ export function AnalyticsPage() {
         id: "creator_storewide",
         baseUrl: `/r/${fallbackSlug}`,
         directUrl: firstStore?.shopDomain
-          ? `https://${firstStore.shopDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/?mi_creator_code=${code}&utm_creator_code=${code}&ref=${code}`
+          ? `https://${firstStore.shopDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}/pages/shop?code=${fallbackSlug}`
           : null,
         shopDomain: firstStore?.shopDomain || null,
         destinationPath: "/",
