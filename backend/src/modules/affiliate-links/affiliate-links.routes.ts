@@ -44,12 +44,14 @@ function asLink(row: any, baseUrl: string) {
   const clicks = Number(row._count?.clicks ?? 0);
   const commissions = (row.commissions ?? []).filter((commission: any) => commission.status !== 'REVERSED');
   const trackedOrders = (row.trackedOrders ?? []).filter((order: any) => !['refunded', 'voided', 'cancelled'].includes(String(order.financialStatus ?? '').toLowerCase()));
-  // Creator links use their commission ledger. Store-owned links still retain
-  // visit/order analytics without creating a creator commission.
-  const orders = row.creatorId ? commissions.length : trackedOrders.length;
-  const revenue = row.creatorId
-    ? commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
-    : trackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
+  // A Shopify order can be attributed before its commission ledger is created
+  // (for example while a webhook is retried). Count those orders once rather
+  // than showing zero orders/GMV for an already attributed affiliate link.
+  const commissionedOrderIds = new Set(commissions.map((commission: any) => commission.shopifyOrderId).filter(Boolean));
+  const pendingTrackedOrders = trackedOrders.filter((order: any) => !commissionedOrderIds.has(order.id));
+  const orders = commissions.length + pendingTrackedOrders.length;
+  const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
+    + pendingTrackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
   const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
   const creatorCode = row.creator?.creatorCode ?? null;
   const shopDomain = row.organization?.storefrontDomain ?? row.organization?.shopDomain ?? null;
@@ -165,7 +167,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
     const rows = await prisma.affiliateLink.findMany({
       where: { organizationId: organization.id, ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ slug: { contains: query.search, mode: 'insensitive' } }, { creator: { displayName: { contains: query.search, mode: 'insensitive' } } }, { creator: { creatorCode: { contains: query.search, mode: 'insensitive' } } }, { product: { title: { contains: query.search, mode: 'insensitive' } } }] } : {}) },
-      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
+      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { shopifyOrderId: true, orderAmount: true, status: true } }, trackedOrders: { select: { id: true, total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
     });
     const baseUrl = getFrontendBaseUrl(request);
     return { links: rows.map((row: any) => asLink(row, baseUrl)) };
@@ -218,8 +220,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         product: { select: { title: true } },
         collection: { select: { title: true } },
         _count: { select: { clicks: true } },
-        commissions: { select: { orderAmount: true, status: true } },
-        trackedOrders: { select: { total: true, financialStatus: true } },
+        commissions: { select: { shopifyOrderId: true, orderAmount: true, status: true } },
+        trackedOrders: { select: { id: true, total: true, financialStatus: true } },
       },
     });
     const baseUrl = getFrontendBaseUrl(request);
@@ -241,7 +243,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         ...(input.commissionRate !== undefined ? { commissionRate: input.commissionRate } : {}),
         ...(input.commissionAmount !== undefined ? { commissionAmount: input.commissionAmount } : {}),
       },
-      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }
+      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { shopifyOrderId: true, orderAmount: true, status: true } }, trackedOrders: { select: { id: true, total: true, financialStatus: true } } }
     });
     const baseUrl = getFrontendBaseUrl(request); return { link: asLink(link, baseUrl) };
   });
@@ -1153,7 +1155,13 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           status: commissionStatus,
         },
         update: {
+          // Reconciliation can identify a more specific link than an earlier
+          // sync. Keep the ledger aligned with the order's actual mi_link.
+          linkId: link.id,
+          creatorId: matchedUserId ?? null,
           orderAmount,
+          commissionType: link.commissionType ?? 'PERCENTAGE',
+          commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : (link.commissionRate ?? 10),
           amount,
           status: commissionStatus,
         },

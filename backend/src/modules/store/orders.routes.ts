@@ -368,7 +368,9 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
               select: {
                 id: true,
                 creatorId: true,
+                commissionType: true,
                 commissionRate: true,
+                commissionAmount: true,
                 creator: { select: { id: true, creatorCode: true, role: true } },
               },
             });
@@ -388,7 +390,9 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
               select: {
                 id: true,
                 creatorId: true,
+                commissionType: true,
                 commissionRate: true,
+                commissionAmount: true,
                 creator: { select: { id: true, creatorCode: true, role: true } },
               },
             });
@@ -407,7 +411,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
               if (creator) {
                 link = await prisma.affiliateLink.findFirst({
                   where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
-                  select: { id: true, creatorId: true, commissionRate: true },
+                  select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
                 });
               }
             }
@@ -424,7 +428,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 trackedCreatorCode = creator.creatorCode;
                 link = await prisma.affiliateLink.findFirst({
                   where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
-                  select: { id: true, creatorId: true, commissionRate: true },
+                  select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
                 });
                 break;
               }
@@ -495,16 +499,21 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             });
           }
 
-          if (link && creator && (compensationMode === 'BARTER' || Number(link.commissionRate ?? 0) > 0)) {
+          const hasLinkCommission = link?.commissionType === 'FIXED_AMOUNT'
+            ? Number(link.commissionAmount ?? 0) > 0
+            : Number(link?.commissionRate ?? 0) > 0;
+
+          if (link && creator && (compensationMode === 'BARTER' || hasLinkCommission)) {
             const orderAmount = Number(d.total ?? 0);
             const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
             const status = isRefunded ? 'REVERSED' : (isAutoCommission ? 'APPROVED' : 'PENDING');
-            const commissionRate = compensationMode === 'BARTER' ? 0 : Number(link.commissionRate ?? 10);
+            const isFixedAmountLink = link.commissionType === 'FIXED_AMOUNT';
+            const commissionRate = compensationMode === 'BARTER' || isFixedAmountLink ? 0 : Number(link.commissionRate ?? 10);
             const matchedUserId = link.creatorId ?? creator.id;
 
-            let commAmount = (orderAmount * commissionRate) / 100;
+            let commAmount = isFixedAmountLink ? Number(link.commissionAmount ?? 0) : (orderAmount * commissionRate) / 100;
 
-            if (compensationMode !== 'BARTER') {
+            if (compensationMode !== 'BARTER' && !isFixedAmountLink) {
               const storeConfig = await prisma.storeReferralConfig.findUnique({
                 where: { organizationId: s.id },
                 select: {
@@ -589,15 +598,19 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 creatorId: matchedUserId,
                 shopifyOrderId: order.id,
                 orderAmount,
+                commissionType: isFixedAmountLink ? 'FIXED_AMOUNT' : 'PERCENTAGE',
                 commissionRate,
                 amount: commAmount,
                 status,
               },
               update: {
+                linkId: link.id,
+                creatorId: matchedUserId,
                 orderAmount,
+                commissionType: isFixedAmountLink ? 'FIXED_AMOUNT' : 'PERCENTAGE',
                 commissionRate,
                 amount: commAmount,
-                status: isRefunded ? 'REVERSED' : undefined,
+                status,
               },
             });
           }
