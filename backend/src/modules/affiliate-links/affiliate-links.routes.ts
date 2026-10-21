@@ -132,6 +132,34 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     return reply.header('Cache-Control', 'no-store').send({ destinationUrl: destination.toString() });
   });
 
+  // Public click tracking endpoint used by tracking.js when visitors land directly on ?code=<slug>
+  app.route({
+    method: ['GET', 'POST'],
+    url: '/public/affiliate-links/:slug/click',
+    handler: async (request, reply) => {
+      const { slug: linkSlug } = request.params as { slug: string };
+      const query = request.query as { ref?: string };
+      const link = await prisma.affiliateLink.findUnique({
+        where: { slug: linkSlug },
+        select: { id: true, organizationId: true, status: true, expiresAt: true },
+      });
+      if (!link || link.status !== 'ACTIVE' || (link.expiresAt && link.expiresAt <= new Date())) {
+        return reply.header('Access-Control-Allow-Origin', '*').header('Cache-Control', 'no-store').send({ ok: false });
+      }
+
+      const visitorHash = request.headers['user-agent']
+        ? createHash('sha256').update(`${request.headers['user-agent']}|${request.ip}`).digest('hex')
+        : null;
+      const referrer = query.ref || (request.headers.referer ? String(request.headers.referer).slice(0, 2_000) : null);
+
+      await prisma.affiliateLinkClick.create({
+        data: { organizationId: link.organizationId, linkId: link.id, visitorHash, referrer },
+      });
+
+      return reply.header('Access-Control-Allow-Origin', '*').header('Cache-Control', 'no-store').send({ ok: true });
+    },
+  });
+
   app.get('/store/affiliate-links', async (request) => {
     const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId);
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
@@ -555,24 +583,47 @@ export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {
   app.get('/r/:slug', handleTrackingRedirect);
   app.get('/api/v1/r/:slug', handleTrackingRedirect);
 
-  // Serve client-side Shopify Cart attribution script
-  const trackingScript = `(function(){
+  // Serve client-side Shopify Cart attribution and direct-click tracking script
+  const buildTrackingScript = (defaultApiBase?: string) => `(function(){
     try {
       var params = new URLSearchParams(window.location.search);
-      var link = params.get('mi_link') || params.get('_mi_link') || params.get('code');
+      var queryCode = params.get('mi_link') || params.get('_mi_link') || params.get('code');
       var creator = params.get('mi_creator_code') || params.get('_mi_creator_code') || params.get('utm_creator_code') || params.get('ref');
+      var link = queryCode;
+
       if (link) {
         sessionStorage.setItem('mi_link', link);
         localStorage.setItem('mi_link', link);
+
+        // Ping MegaInfluencer to record the click if arriving with referral parameter
+        var clickKey = 'mi_clk_' + link;
+        if (!sessionStorage.getItem(clickKey)) {
+          sessionStorage.setItem(clickKey, '1');
+          try {
+            var scriptEl = document.currentScript || document.querySelector('script[src*="tracking.js"]');
+            var apiBase = scriptEl && scriptEl.src ? new URL(scriptEl.src).origin : ${JSON.stringify(defaultApiBase || '')};
+            if (apiBase) {
+              var clickUrl = apiBase + '/public/affiliate-links/' + encodeURIComponent(link) + '/click?ref=' + encodeURIComponent(document.referrer || '');
+              if (navigator.sendBeacon) {
+                navigator.sendBeacon(clickUrl);
+              } else {
+                var img = new Image();
+                img.src = clickUrl;
+              }
+            }
+          } catch(e) {}
+        }
       } else {
         link = sessionStorage.getItem('mi_link') || localStorage.getItem('mi_link');
       }
+
       if (creator) {
         sessionStorage.setItem('mi_creator_code', creator);
         localStorage.setItem('mi_creator_code', creator);
       } else {
         creator = sessionStorage.getItem('mi_creator_code') || localStorage.getItem('mi_creator_code');
       }
+
       if (link || creator) {
         var body = { attributes: {} };
         if (link) body.attributes['mi_link'] = link;
@@ -586,11 +637,13 @@ export const affiliateTrackingRoutes: FastifyPluginAsync = async (app) => {
     } catch(e) {}
   })();`;
 
-  app.get('/tracking.js', async (_request, reply) => {
-    return reply.type('application/javascript; charset=utf-8').send(trackingScript);
+  app.get('/tracking.js', async (request, reply) => {
+    const apiBase = config.publicBaseUrl || `${request.protocol}://${request.headers.host}`;
+    return reply.type('application/javascript; charset=utf-8').send(buildTrackingScript(apiBase));
   });
-  app.get('/api/v1/tracking.js', async (_request, reply) => {
-    return reply.type('application/javascript; charset=utf-8').send(trackingScript);
+  app.get('/api/v1/tracking.js', async (request, reply) => {
+    const apiBase = config.publicBaseUrl || `${request.protocol}://${request.headers.host}`;
+    return reply.type('application/javascript; charset=utf-8').send(buildTrackingScript(apiBase));
   });
 };
 

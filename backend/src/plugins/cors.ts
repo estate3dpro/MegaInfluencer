@@ -6,19 +6,9 @@ import { config } from '../config/env.js';
 export function registerCors(app: FastifyInstance) {
   app.register(cors, {
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    origin: (origin, callback) => {
-      if (
-        !origin ||
-        config.clientOrigins.includes(origin) ||
-        config.storefrontOrigins.includes(origin) ||
-        origin.startsWith('http://localhost:') ||
-        origin.startsWith('http://127.0.0.1:')
-      ) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`Origin ${origin} is not allowed by CORS`), false);
+    origin: (_origin, callback) => {
+      // Allow storefront origins (Shopify stores) and client apps to communicate seamlessly
+      callback(null, true);
     },
   });
 }
