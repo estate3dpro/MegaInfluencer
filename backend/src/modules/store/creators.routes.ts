@@ -957,6 +957,9 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       assignedAt: assignment.createdAt,
       compensationMode: mode,
       autoCommission: (assignment as any).autoCommission ?? true,
+      // Keep this at the response root for consumers that load assignment
+      // state separately from the creator profile.
+      assignedProductIds,
       instagramStatistics,
       metrics: {
         totalSales,
