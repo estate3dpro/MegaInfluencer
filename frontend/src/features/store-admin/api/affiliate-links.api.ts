@@ -43,6 +43,8 @@ export type AffiliateLinkReport = {
     processedAt: string | null;
     commissionAmount: number;
     commissionStatus: "PENDING" | "APPROVED" | "PAID" | "REVERSED" | null;
+    /** True when the payout is calculated from the link rule while the order is awaiting ledger reconciliation. */
+    isEstimated?: boolean;
     commissionType: string;
     commissionRate: number;
   }>;

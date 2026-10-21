@@ -287,23 +287,32 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         commissionStatus: commission.status,
         commissionType: commission.commissionType,
         commissionRate: Number(commission.commissionRate ?? 0),
+        isEstimated: false,
       });
     }
     for (const order of link.trackedOrders) {
       if (reportOrders.has(order.id)) continue;
+      const orderAmount = Number(order.total ?? 0);
+      // The order is already verified as belonging to this link. Its ledger
+      // may still be waiting for the webhook/order-sync retry, but the link's
+      // own reward rule lets us show the creator's expected earning now.
+      const expectedCommissionAmount = link.commissionType === 'FIXED_AMOUNT'
+        ? Number(link.commissionAmount ?? 0)
+        : (orderAmount * Number(link.commissionRate ?? 0)) / 100;
       reportOrders.set(order.id, {
         id: order.id,
         name: order.name,
         email: order.email,
-        amount: Number(order.total ?? 0),
+        amount: orderAmount,
         currency: order.currency ?? 'INR',
         financialStatus: order.financialStatus,
         fulfillmentStatus: order.fulfillmentStatus,
         processedAt: order.processedAt,
-        commissionAmount: 0,
+        commissionAmount: expectedCommissionAmount,
         commissionStatus: null,
         commissionType: link.commissionType,
         commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : Number(link.commissionRate ?? 0),
+        isEstimated: true,
       });
     }
 
