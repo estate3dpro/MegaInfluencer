@@ -663,13 +663,36 @@ export const storeProductsRoutes: FastifyPluginAsync = async (app) => {
     await ensureProductAssignmentsTable(prisma);
     await ensureCreatorCode(prisma, input.creatorId);
 
+    // Ensure store-creator relationship exists
+    await prisma.storeInfluencerAssignment.upsert({
+      where: {
+        organizationId_influencerId: {
+          organizationId: store.id,
+          influencerId: input.creatorId,
+        },
+      },
+      create: {
+        organizationId: store.id,
+        influencerId: input.creatorId,
+      },
+      update: {},
+    });
+
     // Upsert assignment
-    const id = `cpa_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    await prisma.$executeRaw`
-      INSERT INTO "ProductInfluencerAssignment" ("id", "organizationId", "productId", "influencerId", "createdAt")
-      VALUES (${id}, ${store.id}, ${productId}, ${input.creatorId}, NOW())
-      ON CONFLICT ("productId", "influencerId") DO NOTHING
-    `;
+    await prisma.productInfluencerAssignment.upsert({
+      where: {
+        productId_influencerId: {
+          productId: product.id,
+          influencerId: input.creatorId,
+        },
+      },
+      create: {
+        organizationId: store.id,
+        productId: product.id,
+        influencerId: input.creatorId,
+      },
+      update: {},
+    });
 
     let generatedLink = null;
     if (input.generateLink) {
@@ -712,10 +735,13 @@ export const storeProductsRoutes: FastifyPluginAsync = async (app) => {
     const { productId, influencerId } = request.params as { productId: string; influencerId: string };
 
     await ensureProductAssignmentsTable(prisma);
-    await prisma.$executeRaw`
-      DELETE FROM "ProductInfluencerAssignment"
-      WHERE "organizationId" = ${store.id} AND "productId" = ${productId} AND "influencerId" = ${influencerId}
-    `;
+    await prisma.productInfluencerAssignment.deleteMany({
+      where: {
+        organizationId: store.id,
+        productId,
+        influencerId,
+      },
+    });
 
     return { ok: true };
   });

@@ -879,7 +879,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
         /* profile remains available */
       }
     }
-    const assignedProductIds = await getAssignedProductIds(app, org.id, creatorId);
+    const assignedProductIds = await getAssignedProductIds(prisma, creatorId, org.id);
 
     const inf = assignment.influencer;
     const commissions = (inf.affiliateCommissions ?? []).filter((c: any) => c.status !== 'REVERSED');
@@ -980,7 +980,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     const { creatorId } = req.params as { creatorId: string };
     const { productIds } = req.body as { productIds: string[] };
     if (!Array.isArray(productIds)) throw new AppError('INVALID_INPUT', 'productIds must be an array', 400);
-    const assignedProductIds = await setCreatorProductAssignments(app, org.id, creatorId, productIds);
+    const assignedProductIds = await setCreatorProductAssignments(prisma, org.id, creatorId, productIds);
     return { ok: true, assignedProductIds };
   });
 };

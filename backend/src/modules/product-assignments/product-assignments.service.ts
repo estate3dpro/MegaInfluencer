@@ -8,8 +8,13 @@ export interface ProductAssignmentRecord {
 
 let tableEnsured = false;
 
-export async function ensureProductAssignmentsTable(prisma: any) {
+function resolvePrisma(prismaOrApp: any) {
+  return prismaOrApp?.prisma || prismaOrApp;
+}
+
+export async function ensureProductAssignmentsTable(prismaOrApp: any) {
   if (tableEnsured) return;
+  const prisma = resolvePrisma(prismaOrApp);
   try {
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "ProductInfluencerAssignment" (
@@ -32,26 +37,22 @@ export async function ensureProductAssignmentsTable(prisma: any) {
 }
 
 export async function getAssignedProductIds(
-  prisma: any,
+  prismaOrApp: any,
   influencerId: string,
   organizationId?: string
 ): Promise<string[]> {
   try {
+    const prisma = resolvePrisma(prismaOrApp);
     await ensureProductAssignmentsTable(prisma);
 
-    if (organizationId) {
-      const rows = await prisma.$queryRaw`
-        SELECT "productId" FROM "ProductInfluencerAssignment" 
-        WHERE "influencerId" = ${influencerId} AND "organizationId" = ${organizationId}
-      `;
-      return Array.isArray(rows) ? rows.map((r: any) => r.productId) : [];
-    }
-
-    const rows = await prisma.$queryRaw`
-      SELECT "productId" FROM "ProductInfluencerAssignment" 
-      WHERE "influencerId" = ${influencerId}
-    `;
-    return Array.isArray(rows) ? rows.map((r: any) => r.productId) : [];
+    const rows = await prisma.productInfluencerAssignment.findMany({
+      where: {
+        influencerId,
+        ...(organizationId ? { organizationId } : {}),
+      },
+      select: { productId: true },
+    });
+    return rows.map((r: any) => r.productId);
   } catch (error) {
     console.error('Error fetching assigned product IDs:', error);
     return [];
@@ -59,26 +60,29 @@ export async function getAssignedProductIds(
 }
 
 export async function setCreatorProductAssignments(
-  prisma: any,
+  prismaOrApp: any,
   organizationId: string,
   influencerId: string,
   productIds: string[]
-): Promise<number> {
+): Promise<string[]> {
+  const prisma = resolvePrisma(prismaOrApp);
   await ensureProductAssignmentsTable(prisma);
 
-  await prisma.$executeRaw`
-    DELETE FROM "ProductInfluencerAssignment" 
-    WHERE "organizationId" = ${organizationId} AND "influencerId" = ${influencerId}
-  `;
+  await prisma.productInfluencerAssignment.deleteMany({
+    where: { organizationId, influencerId },
+  });
 
-  for (const productId of productIds) {
-    const id = `cpa_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    await prisma.$executeRaw`
-      INSERT INTO "ProductInfluencerAssignment" ("id", "organizationId", "productId", "influencerId", "createdAt")
-      VALUES (${id}, ${organizationId}, ${productId}, ${influencerId}, NOW())
-      ON CONFLICT ("productId", "influencerId") DO NOTHING
-    `;
+  if (productIds.length > 0) {
+    await prisma.productInfluencerAssignment.createMany({
+      data: productIds.map((productId) => ({
+        organizationId,
+        productId,
+        influencerId,
+      })),
+      skipDuplicates: true,
+    });
   }
 
-  return productIds.length;
+  return productIds;
 }
+
