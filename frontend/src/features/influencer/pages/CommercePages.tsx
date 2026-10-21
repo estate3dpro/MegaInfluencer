@@ -1251,7 +1251,7 @@ export function OrdersPage() {
                     <td className="px-5 py-3.5 font-medium">{order.orderTotal}</td>
                     {!ordersData?.metrics.isBarterOnly ? (
                       <td className="px-5 py-3.5">
-                        {order.isBarter ? <p className="text-xs font-semibold text-amber-600">Barter order</p> : <><p className="font-display font-bold text-primary">{order.commission}</p><p className="text-[11px] text-muted-foreground">{order.commissionRate} rate</p></>}
+                      {order.isBarter ? <p className="text-xs font-semibold text-amber-600">Barter order</p> : <><p className="font-display font-bold text-primary">{order.commission}</p><p className="text-[11px] text-muted-foreground">{order.commissionRate}{order.commissionEstimated ? " · pending sync" : ""}</p></>}
                       </td>
                     ) : null}
                     <td className="px-5 py-3.5">{getStatusBadge(order.status)}</td>
