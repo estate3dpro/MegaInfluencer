@@ -8,6 +8,7 @@ import { AppError } from '../../shared/errors/app-error.js';
 import { ensureCreatorCode } from '../../shared/creator-code.js';
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 import { buildDirectStoreUrl } from '../../shared/helpers/affiliate-url.js';
+import { getCreatorAttributions } from './creator-attribution.service.js';
 
 const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
@@ -357,7 +358,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
   app.get('/influencer/affiliate-links', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
     const query = request.query as { search?: string; storeId?: string };
-    const [rows, assignments] = await Promise.all([
+    const [rows, assignments, attributions] = await Promise.all([
       prisma.affiliateLink.findMany({
       where: {
         creatorId: actor.userId,
@@ -384,22 +385,30 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         where: { influencerId: actor.userId },
         select: { organizationId: true, compensationMode: true },
       }),
+      getCreatorAttributions(prisma, actor.userId, { scope: query.storeId }),
     ]);
     const barterOrganizationIds = new Set(
       assignments.filter((assignment: any) => assignment.compensationMode === 'BARTER').map((assignment: any) => assignment.organizationId),
     );
 
     const baseUrl = getFrontendBaseUrl(request);
+    const attributionsByLinkId = new Map<string, any[]>();
+    for (const attribution of attributions) {
+      const linkId = attribution.link?.id;
+      if (!linkId || attribution.status === 'REVERSED') continue;
+      const items = attributionsByLinkId.get(linkId) ?? [];
+      items.push(attribution);
+      attributionsByLinkId.set(linkId, items);
+    }
     return {
       isBarterOnly: assignments.length > 0 && assignments.every((assignment: any) => assignment.compensationMode === 'BARTER'),
       links: rows.map((row: any) => {
         const clicks = Number(row._count?.clicks ?? 0);
-        const allCommissions = row.commissions ?? [];
-        const commissions = allCommissions.filter((commission: any) => commission.status !== 'REVERSED');
-        const orders = allCommissions.length;
-        const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0);
+        const linkAttributions = attributionsByLinkId.get(row.id) ?? [];
+        const orders = linkAttributions.length;
+        const revenue = linkAttributions.reduce((sum: number, attribution: any) => sum + Number(attribution.orderAmount), 0);
         const isBarter = barterOrganizationIds.has(row.organizationId);
-        const earnings = isBarter ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
+        const earnings = isBarter ? 0 : linkAttributions.reduce((sum: number, attribution: any) => sum + Number(attribution.commissionAmount), 0);
 
         const creatorCode = row.creator?.creatorCode ?? null;
         const shopDomain = row.organization?.storefrontDomain ?? row.organization?.shopDomain ?? null;
