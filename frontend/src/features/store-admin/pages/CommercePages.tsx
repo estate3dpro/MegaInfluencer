@@ -1004,7 +1004,7 @@ export function OrdersPage() {
           <thead className="border-y bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-5 py-3 font-medium">Order & Customer</th>
-              <th className="px-5 py-3 font-medium">Date</th>
+              <th className="px-5 py-3 font-medium">Date & Time</th>
               <th className="px-5 py-3 font-medium">Traffic Source / Channel</th>
               <th className="px-5 py-3 font-medium">Attribution & Commission</th>
               <th className="px-5 py-3 font-medium">Payment</th>
@@ -1053,14 +1053,28 @@ export function OrdersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">
-                      {order.processedAt
-                        ? new Date(order.processedAt).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "—"}
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
+                      {order.processedAt ? (
+                        <div>
+                          <p className="font-semibold text-foreground">
+                            {new Date(order.processedAt).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
+                            <Clock className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                            {new Date(order.processedAt).toLocaleTimeString("en-IN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </p>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-5 py-3.5">
                       <PlatformBadge
@@ -1174,6 +1188,25 @@ export function OrdersPage() {
                                     <span>Traffic Channel:</span>
                                     <span className="font-medium text-foreground">
                                       {order.platformLabel || order.platform}
+                                    </span>
+                                  </div>
+                                ) : null}
+
+                                {order.processedAt ? (
+                                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5 border-t">
+                                    <span>Order Placed:</span>
+                                    <span className="font-medium text-foreground font-mono">
+                                      {new Date(order.processedAt).toLocaleDateString("en-IN", {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                      })}{" "}
+                                      ·{" "}
+                                      {new Date(order.processedAt).toLocaleTimeString("en-IN", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        hour12: true,
+                                      })}
                                     </span>
                                   </div>
                                 ) : null}
@@ -1515,14 +1548,28 @@ export function CustomersPage() {
                   <td className="px-5 py-3.5 font-bold text-foreground">
                     {formatCurrency(customer.lifetimeSpend, customer.currency)}
                   </td>
-                  <td className="px-5 py-3.5 text-xs text-muted-foreground">
-                    {customer.lastOrderAt
-                      ? new Date(customer.lastOrderAt).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "—"}
+                  <td className="px-5 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {customer.lastOrderAt ? (
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {new Date(customer.lastOrderAt).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
+                          <Clock className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                          {new Date(customer.lastOrderAt).toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
+                        </p>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <Button
@@ -1693,11 +1740,15 @@ export function CustomersPage() {
                       <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
                         <span>
                           {order.processedAt
-                            ? new Date(order.processedAt).toLocaleDateString("en-IN", {
+                            ? `${new Date(order.processedAt).toLocaleDateString("en-IN", {
                                 day: "numeric",
                                 month: "short",
                                 year: "numeric",
-                              })
+                              })} at ${new Date(order.processedAt).toLocaleTimeString("en-IN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: true,
+                              })}`
                             : "—"}
                         </span>
                         <span>·</span>
@@ -1984,14 +2035,29 @@ export function DiscountsPage() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-xs text-muted-foreground">
-                    {discount.expiresAt
-                      ? `Expires ${new Date(discount.expiresAt).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}`
-                      : "No expiration"}
+                  <td className="px-5 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {discount.expiresAt ? (
+                      <div>
+                        <p className="font-medium text-foreground">
+                          Expires{" "}
+                          {new Date(discount.expiresAt).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5 font-mono">
+                          <Clock className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                          {new Date(discount.expiresAt).toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
+                        </p>
+                      </div>
+                    ) : (
+                      "No expiration"
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <div className="inline-flex items-center gap-2">
