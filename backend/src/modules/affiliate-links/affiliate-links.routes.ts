@@ -8,6 +8,7 @@ import { AppError } from '../../shared/errors/app-error.js';
 import { ensureCreatorCode } from '../../shared/creator-code.js';
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 import { buildDirectStoreUrl } from '../../shared/helpers/affiliate-url.js';
+import { getCreatorAttributions } from './creator-attribution.service.js';
 
 const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
@@ -44,12 +45,14 @@ function asLink(row: any, baseUrl: string) {
   const clicks = Number(row._count?.clicks ?? 0);
   const commissions = (row.commissions ?? []).filter((commission: any) => commission.status !== 'REVERSED');
   const trackedOrders = (row.trackedOrders ?? []).filter((order: any) => !['refunded', 'voided', 'cancelled'].includes(String(order.financialStatus ?? '').toLowerCase()));
-  // Creator links use their commission ledger. Store-owned links still retain
-  // visit/order analytics without creating a creator commission.
-  const orders = row.creatorId ? commissions.length : trackedOrders.length;
-  const revenue = row.creatorId
-    ? commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
-    : trackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
+  // A Shopify order can be attributed before its commission ledger is created
+  // (for example while a webhook is retried). Count those orders once rather
+  // than showing zero orders/GMV for an already attributed affiliate link.
+  const commissionedOrderIds = new Set(commissions.map((commission: any) => commission.shopifyOrderId).filter(Boolean));
+  const pendingTrackedOrders = trackedOrders.filter((order: any) => !commissionedOrderIds.has(order.id));
+  const orders = commissions.length + pendingTrackedOrders.length;
+  const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0)
+    + pendingTrackedOrders.reduce((sum: number, order: any) => sum + Number(order.total ?? 0), 0);
   const storeCredits = row.creatorId ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
   const creatorCode = row.creator?.creatorCode ?? null;
   const shopDomain = row.organization?.storefrontDomain ?? row.organization?.shopDomain ?? null;
@@ -165,7 +168,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     const query = request.query as { search?: string; status?: 'ACTIVE' | 'PAUSED' };
     const rows = await prisma.affiliateLink.findMany({
       where: { organizationId: organization.id, ...(query.status ? { status: query.status } : {}), ...(query.search ? { OR: [{ slug: { contains: query.search, mode: 'insensitive' } }, { creator: { displayName: { contains: query.search, mode: 'insensitive' } } }, { creator: { creatorCode: { contains: query.search, mode: 'insensitive' } } }, { product: { title: { contains: query.search, mode: 'insensitive' } } }] } : {}) },
-      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } }, trackedOrders: { select: { total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
+      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { shopifyOrderId: true, orderAmount: true, status: true } }, trackedOrders: { select: { id: true, total: true, financialStatus: true } } }, orderBy: { createdAt: 'desc' },
     });
     const baseUrl = getFrontendBaseUrl(request);
     return { links: rows.map((row: any) => asLink(row, baseUrl)) };
@@ -218,8 +221,8 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         product: { select: { title: true } },
         collection: { select: { title: true } },
         _count: { select: { clicks: true } },
-        commissions: { select: { orderAmount: true, status: true } },
-        trackedOrders: { select: { total: true, financialStatus: true } },
+        commissions: { select: { shopifyOrderId: true, orderAmount: true, status: true } },
+        trackedOrders: { select: { id: true, total: true, financialStatus: true } },
       },
     });
     const baseUrl = getFrontendBaseUrl(request);
@@ -265,7 +268,7 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
         product: { select: { title: true } },
         collection: { select: { title: true } },
         _count: { select: { clicks: true } },
-        commissions: { select: { id: true, orderAmount: true, amount: true, status: true } },
+        commissions: { select: { id: true, shopifyOrderId: true, orderAmount: true, amount: true, status: true } },
         trackedOrders: { select: { id: true, total: true, financialStatus: true } },
       },
     });
@@ -273,52 +276,166 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     return { link: asLink(link, baseUrl) };
   });
 
+  // Full attribution report for one link. This deliberately includes tracked
+  // orders that are awaiting commission reconciliation, so operators see the
+  // real order journey rather than a misleading empty report.
+  app.get('/store/affiliate-links/:linkId/report', async (request) => {
+    const actor = requireRole(request, ['STORE_OWNER']);
+    const organization = await organizationFor(app, actor.userId);
+    const { linkId } = request.params as { linkId: string };
+    const link = await prisma.affiliateLink.findFirst({
+      where: { id: linkId, organizationId: organization.id },
+      include: {
+        creator: { select: { id: true, displayName: true, creatorCode: true, email: true, instagramConnection: { select: { username: true } } } },
+        product: { select: { title: true } },
+        collection: { select: { title: true } },
+        _count: { select: { clicks: true } },
+        commissions: {
+          include: { shopifyOrder: { select: { id: true, name: true, email: true, total: true, currency: true, financialStatus: true, fulfillmentStatus: true, processedAt: true } } },
+        },
+        trackedOrders: { select: { id: true, name: true, email: true, total: true, currency: true, financialStatus: true, fulfillmentStatus: true, processedAt: true } },
+      },
+    });
+    if (!link) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
+
+    const reportOrders = new Map<string, any>();
+    for (const commission of link.commissions) {
+      const order = commission.shopifyOrder;
+      if (!order) continue;
+      reportOrders.set(order.id, {
+        id: order.id,
+        name: order.name,
+        email: order.email,
+        amount: Number(order.total ?? commission.orderAmount ?? 0),
+        currency: order.currency ?? 'INR',
+        financialStatus: order.financialStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
+        processedAt: order.processedAt,
+        commissionAmount: Number(commission.amount ?? 0),
+        commissionStatus: commission.status,
+        commissionType: commission.commissionType,
+        commissionRate: Number(commission.commissionRate ?? 0),
+        isEstimated: false,
+      });
+    }
+    for (const order of link.trackedOrders) {
+      if (reportOrders.has(order.id)) continue;
+      const orderAmount = Number(order.total ?? 0);
+      // The order is already verified as belonging to this link. Its ledger
+      // may still be waiting for the webhook/order-sync retry, but the link's
+      // own reward rule lets us show the creator's expected earning now.
+      const expectedCommissionAmount = link.commissionType === 'FIXED_AMOUNT'
+        ? Number(link.commissionAmount ?? 0)
+        : (orderAmount * Number(link.commissionRate ?? 0)) / 100;
+      reportOrders.set(order.id, {
+        id: order.id,
+        name: order.name,
+        email: order.email,
+        amount: orderAmount,
+        currency: order.currency ?? 'INR',
+        financialStatus: order.financialStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
+        processedAt: order.processedAt,
+        commissionAmount: expectedCommissionAmount,
+        commissionStatus: null,
+        commissionType: link.commissionType,
+        commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : Number(link.commissionRate ?? 0),
+        isEstimated: true,
+      });
+    }
+
+    const orders = [...reportOrders.values()].sort((a, b) =>
+      new Date(b.processedAt ?? 0).getTime() - new Date(a.processedAt ?? 0).getTime(),
+    );
+    const qualifyingOrders = orders.filter((order) => !['refunded', 'voided', 'cancelled'].includes(String(order.financialStatus ?? '').toLowerCase()) && order.commissionStatus !== 'REVERSED');
+    const gmv = qualifyingOrders.reduce((sum, order) => sum + order.amount, 0);
+    const creatorEarnings = qualifyingOrders.reduce((sum, order) => sum + order.commissionAmount, 0);
+    const clicks = Number(link._count.clicks ?? 0);
+
+    return {
+      link: {
+        id: link.id,
+        slug: link.slug,
+        destination: link.product?.title ?? link.collection?.title ?? 'Storewide link',
+        targetType: link.targetType,
+        status: link.status,
+        commissionType: link.commissionType,
+        commissionRate: Number(link.commissionRate ?? 0),
+        commissionAmount: link.commissionAmount === null ? null : Number(link.commissionAmount),
+        creator: link.creator ? {
+          id: link.creator.id,
+          name: link.creator.displayName,
+          creatorCode: link.creator.creatorCode,
+          email: link.creator.email,
+          instagramUsername: link.creator.instagramConnection?.username ?? null,
+        } : null,
+      },
+      metrics: {
+        clicks,
+        totalOrders: qualifyingOrders.length,
+        gmv,
+        averageOrderAmount: qualifyingOrders.length ? gmv / qualifyingOrders.length : 0,
+        creatorEarnings,
+        conversionRate: clicks ? qualifyingOrders.length / clicks : 0,
+      },
+      orders,
+    };
+  });
+
   app.get('/influencer/affiliate-links', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
     const query = request.query as { search?: string; storeId?: string };
-    const [rows, assignments] = await Promise.all([
+    const [rows, assignments, attributions] = await Promise.all([
       prisma.affiliateLink.findMany({
-      where: {
-        creatorId: actor.userId,
-        ...(query.storeId ? { organizationId: query.storeId } : {}),
-        ...(query.search ? {
-          OR: [
-            { slug: { contains: query.search, mode: 'insensitive' } },
-            { product: { title: { contains: query.search, mode: 'insensitive' } } },
-            { organization: { name: { contains: query.search, mode: 'insensitive' } } },
-          ],
-        } : {}),
-      },
-      include: {
-        organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } },
-        creator: { select: { creatorCode: true, displayName: true } },
-        product: { select: { id: true, title: true, imageUrl: true, price: true } },
-        products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
-        _count: { select: { clicks: true } },
-        commissions: { select: { orderAmount: true, amount: true, status: true } },
-      },
-      orderBy: { createdAt: 'desc' },
+        where: {
+          creatorId: actor.userId,
+          ...(query.storeId ? { organizationId: query.storeId } : {}),
+          ...(query.search ? {
+            OR: [
+              { slug: { contains: query.search, mode: 'insensitive' } },
+              { product: { title: { contains: query.search, mode: 'insensitive' } } },
+              { organization: { name: { contains: query.search, mode: 'insensitive' } } },
+            ],
+          } : {}),
+        },
+        include: {
+          organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } },
+          creator: { select: { creatorCode: true, displayName: true } },
+          product: { select: { id: true, title: true, imageUrl: true, price: true } },
+          products: { include: { product: { select: { id: true, title: true, imageUrl: true, price: true } } }, orderBy: { position: 'asc' } },
+          _count: { select: { clicks: true } },
+          commissions: { select: { orderAmount: true, amount: true, status: true } },
+        },
+        orderBy: { createdAt: 'desc' },
       }),
       prisma.storeInfluencerAssignment.findMany({
         where: { influencerId: actor.userId },
         select: { organizationId: true, compensationMode: true },
       }),
+      getCreatorAttributions(prisma, actor.userId, { scope: query.storeId }),
     ]);
     const barterOrganizationIds = new Set(
       assignments.filter((assignment: any) => assignment.compensationMode === 'BARTER').map((assignment: any) => assignment.organizationId),
     );
 
     const baseUrl = getFrontendBaseUrl(request);
+    const attributionsByLinkId = new Map<string, any[]>();
+    for (const attribution of attributions) {
+      const linkId = attribution.link?.id;
+      if (!linkId || attribution.status === 'REVERSED') continue;
+      const items = attributionsByLinkId.get(linkId) ?? [];
+      items.push(attribution);
+      attributionsByLinkId.set(linkId, items);
+    }
     return {
       isBarterOnly: assignments.length > 0 && assignments.every((assignment: any) => assignment.compensationMode === 'BARTER'),
       links: rows.map((row: any) => {
         const clicks = Number(row._count?.clicks ?? 0);
-        const allCommissions = row.commissions ?? [];
-        const commissions = allCommissions.filter((commission: any) => commission.status !== 'REVERSED');
-        const orders = allCommissions.length;
-        const revenue = commissions.reduce((sum: number, commission: any) => sum + Number(commission.orderAmount), 0);
+        const linkAttributions = attributionsByLinkId.get(row.id) ?? [];
+        const orders = linkAttributions.length;
+        const revenue = linkAttributions.reduce((sum: number, attribution: any) => sum + Number(attribution.orderAmount), 0);
         const isBarter = barterOrganizationIds.has(row.organizationId);
-        const earnings = isBarter ? 0 : commissions.reduce((sum: number, commission: any) => sum + Number(commission.amount), 0);
+        const earnings = isBarter ? 0 : linkAttributions.reduce((sum: number, attribution: any) => sum + Number(attribution.commissionAmount), 0);
 
         const creatorCode = row.creator?.creatorCode ?? null;
         const shopDomain = row.organization?.storefrontDomain ?? row.organization?.shopDomain ?? null;
@@ -434,9 +551,9 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
     }
     const collectionProducts = input.productIds?.length
       ? await prisma.shopifyProduct.findMany({
-          where: { id: { in: input.productIds }, organizationId: organization.id },
-          select: { id: true, title: true, imageUrl: true, price: true },
-        })
+        where: { id: { in: input.productIds }, organizationId: organization.id },
+        select: { id: true, title: true, imageUrl: true, price: true },
+      })
       : [];
     if (input.productIds?.length && collectionProducts.length !== input.productIds.length) {
       throw new AppError('PRODUCT_NOT_FOUND', 'One or more selected products do not belong to this store.', 404);
@@ -681,8 +798,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     const rawBuffer = Buffer.isBuffer(request.body)
       ? request.body
       : typeof request.body === 'string'
-      ? Buffer.from(request.body, 'utf8')
-      : Buffer.from(JSON.stringify(request.body || {}), 'utf8');
+        ? Buffer.from(request.body, 'utf8')
+        : Buffer.from(JSON.stringify(request.body || {}), 'utf8');
 
     const shopifySignature = request.headers['x-shopify-hmac-sha256'];
     const bridgeSignature = request.headers['x-megainfluencer-signature-256'] ?? request.headers['x-megachat-signature-256'];
@@ -785,8 +902,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     const rawAttributes = Array.isArray(payload.note_attributes)
       ? payload.note_attributes
       : Array.isArray(payload.customAttributes)
-      ? payload.customAttributes
-      : [];
+        ? payload.customAttributes
+        : [];
     const lineItems = Array.isArray(payload.line_items) ? payload.line_items : Array.isArray(payload.lineItems) ? payload.lineItems : [];
     const lineAttributes = lineItems.flatMap((line: any) => Array.isArray(line.properties) ? line.properties : Array.isArray(line.customAttributes) ? line.customAttributes : []);
     const attributionAttributes = [...rawAttributes, ...lineAttributes];
@@ -870,8 +987,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     const tagList = Array.isArray(rawTags)
       ? rawTags
       : typeof rawTags === 'string'
-      ? rawTags.split(',').map((t: string) => t.trim())
-      : [];
+        ? rawTags.split(',').map((t: string) => t.trim())
+        : [];
     const isSampleOrder = tagList.some((t: string) =>
       ['influencersample', 'bartersample', 'sample', 'barter'].includes(t.toLowerCase())
     );
@@ -1180,7 +1297,13 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           status: commissionStatus,
         },
         update: {
+          // Reconciliation can identify a more specific link than an earlier
+          // sync. Keep the ledger aligned with the order's actual mi_link.
+          linkId: link.id,
+          creatorId: matchedUserId ?? null,
           orderAmount,
+          commissionType: link.commissionType ?? 'PERCENTAGE',
+          commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : (link.commissionRate ?? 10),
           amount,
           status: commissionStatus,
         },

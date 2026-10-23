@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
+import { getCreatorAttributions } from '../affiliate-links/creator-attribution.service.js';
 
 const inrCurrency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -71,6 +72,13 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
 
     const cashCommissions = allCommissions.filter((commission: any) => !pureBarterOrganizationIds.has(commission.organizationId));
     const cashPayouts = allPayouts.filter((payout: any) => !pureBarterOrganizationIds.has(payout.organizationId));
+    // Shopify can arrive before the commission ledger is reconciled. Include
+    // only the logged-in creator's own tracked orders as pending estimates;
+    // they never become withdrawable until a real ledger row is approved.
+    const attributions = await getCreatorAttributions(prisma, actor.userId, { scope: query.scope });
+    const estimatedCommissions = attributions.filter((attribution: any) =>
+      attribution.isEstimated && attribution.status !== 'REVERSED' && !pureBarterOrganizationIds.has(attribution.organizationId),
+    );
 
     let availableToWithdraw = 0;
     let pendingApproval = 0;
@@ -90,6 +98,11 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
         paidEarnings += amount;
         lifetimeEarnings += amount;
       }
+    }
+
+    for (const attribution of estimatedCommissions) {
+      pendingApproval += Number(attribution.commissionAmount);
+      pendingOrdersCount += 1;
     }
 
     for (const payout of cashPayouts) {
@@ -134,6 +147,17 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    for (const attribution of estimatedCommissions) {
+      const d = new Date(attribution.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const entry = timelineMap.get(key);
+      if (entry) {
+        entry.amount += Number(attribution.commissionAmount);
+        entry.sales += Number(attribution.orderAmount);
+        entry.count += 1;
+      }
+    }
+
     for (const payout of cashPayouts) {
       if (payout.status === 'CANCELLED') continue;
       const d = new Date(payout.createdAt);
@@ -172,6 +196,17 @@ export const influencerEarningsRoutes: FastifyPluginAsync = async (app) => {
         orderAmount: inrCurrency.format(Number(c.orderAmount)),
         status: c.status,
         date: new Date(c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      })),
+      ...estimatedCommissions.slice(0, 15).map((attribution: any) => ({
+        id: `estimated-${attribution.id}`,
+        type: 'COMMISSION',
+        orderName: attribution.order?.name || `Order #${String(attribution.id).slice(-6)}`,
+        storeName: attribution.organization?.name || 'Brand Store',
+        amount: inrCurrency.format(Number(attribution.commissionAmount)),
+        amountRaw: Number(attribution.commissionAmount),
+        orderAmount: inrCurrency.format(Number(attribution.orderAmount)),
+        status: 'PENDING',
+        date: new Date(attribution.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
       })),
       ...cashPayouts.slice(0, 10).map((p: any) => ({
         id: p.id,

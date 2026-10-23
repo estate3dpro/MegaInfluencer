@@ -338,12 +338,16 @@ export async function getCreatorAssignedProducts(creatorId: string) {
     getStoreCreatorDetails(creatorId),
     getStoreAssignableProducts(),
   ]);
-  const assignedSet = new Set(details.assignedProductIds || []);
+  // The creator-details response originally exposed this field under
+  // `creator`. Accept that shape as well as the top-level field so previously
+  // saved assignments render correctly while the API response is normalized.
+  const assignedProductIds = details.assignedProductIds ?? details.creator.assignedProductIds ?? [];
+  const assignedSet = new Set(assignedProductIds);
   const products = allProducts.map((p) => ({
     ...p,
     isAssigned: assignedSet.has(p.id),
   }));
-  return { products, assignedCount: details.assignedProductIds?.length ?? 0 };
+  return { products, assignedCount: assignedProductIds.length };
 }
 
 export async function updateCreatorAssignedProducts(creatorId: string, productIds: string[]) {

@@ -4,6 +4,7 @@ import { getAssignedProductIds } from '../product-assignments/product-assignment
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 import { buildDirectStoreUrl } from '../../shared/helpers/affiliate-url.js';
 import { config } from '../../config/env.js';
+import { getCreatorAttributions } from '../affiliate-links/creator-attribution.service.js';
 
 const inrFormat = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const numberStandard = new Intl.NumberFormat('en-IN');
@@ -50,11 +51,18 @@ export const influencerStoresRoutes: FastifyPluginAsync = async (app) => {
       stores = creatorLinks.map((l: any) => l.organization).filter(Boolean);
     }
 
-    // 2. Fetch commissions & clicks
-    const commissions = await prisma.affiliateCommission.findMany({
-      where: { creatorId: actor.userId, status: { not: 'REVERSED' } },
-      select: { organizationId: true, amount: true, orderAmount: true, createdAt: true },
-    });
+    // 2. Fetch creator-owned tracked orders & clicks. This includes an order
+    // immediately when Shopify has its affiliate link/code, even if the
+    // payout ledger is still being reconciled.
+    const attributions = await getCreatorAttributions(prisma, actor.userId);
+    const commissions = attributions
+      .filter((attribution: any) => attribution.status !== 'REVERSED')
+      .map((attribution: any) => ({
+        organizationId: attribution.organizationId,
+        amount: attribution.commissionAmount,
+        orderAmount: attribution.orderAmount,
+        createdAt: attribution.createdAt,
+      }));
 
     const clicks = await prisma.affiliateLinkClick.findMany({
       where: { link: { creatorId: actor.userId } },

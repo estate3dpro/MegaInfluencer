@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { getInstagramProfile, listInstagramMedia } from '../instagram/instagram.service.js';
 import { resolveOrderPlatform } from '../../shared/order-platform.js';
+import { getCreatorAttributions } from '../affiliate-links/creator-attribution.service.js';
 
 const numberCompact = new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 });
 const numberStandard = new Intl.NumberFormat('en-IN');
@@ -84,8 +85,8 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
     const [
       allClicksInRange,
       prevClicksCount,
-      currentCommissions,
-      previousCommissions,
+      currentAttributions,
+      previousAttributions,
     ] = await Promise.all([
       prisma.affiliateLinkClick.findMany({
         where: {
@@ -109,22 +110,23 @@ export const influencerAnalyticsRoutes: FastifyPluginAsync = async (app) => {
           createdAt: { gte: prevStartDate, lt: startDate },
         },
       }),
-      prisma.affiliateCommission.findMany({
-        where: { ...activeCommissionFilter, createdAt: { gte: startDate } },
-        select: {
-          id: true,
-          amount: true,
-          orderAmount: true,
-          linkId: true,
-          createdAt: true,
-          shopifyOrder: { select: { id: true, name: true, payload: true } },
-        },
-      }),
-      prisma.affiliateCommission.findMany({
-        where: { ...activeCommissionFilter, createdAt: { gte: prevStartDate, lt: startDate } },
-        select: { amount: true, orderAmount: true },
-      }),
+      getCreatorAttributions(prisma, actor.userId, { scope: query.storeId, from: startDate }),
+      getCreatorAttributions(prisma, actor.userId, { scope: query.storeId, from: prevStartDate, to: startDate }),
     ]);
+
+    const currentCommissions = currentAttributions
+      .filter((attribution: any) => attribution.status !== 'REVERSED')
+      .map((attribution: any) => ({
+        id: attribution.commission?.id ?? attribution.id,
+        amount: attribution.commissionAmount,
+        orderAmount: attribution.orderAmount,
+        linkId: attribution.link?.id ?? null,
+        createdAt: attribution.createdAt,
+        shopifyOrder: attribution.order,
+      }));
+    const previousCommissions = previousAttributions
+      .filter((attribution: any) => attribution.status !== 'REVERSED')
+      .map((attribution: any) => ({ amount: attribution.commissionAmount, orderAmount: attribution.orderAmount }));
 
     const selectedPlatformFilter = query.platform && query.platform !== 'all' ? query.platform.toLowerCase() : null;
 

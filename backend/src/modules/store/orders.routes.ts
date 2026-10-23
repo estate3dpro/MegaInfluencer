@@ -115,12 +115,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       ],
       ...(search
         ? {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { creatorCode: { contains: search, mode: 'insensitive' } },
-            ],
-          }
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+            { creatorCode: { contains: search, mode: 'insensitive' } },
+          ],
+        }
         : {}),
       ...(q.financialStatus && q.financialStatus !== 'ALL'
         ? { financialStatus: { equals: q.financialStatus, mode: 'insensitive' } }
@@ -128,11 +128,11 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       ...(q.fulfillmentStatus && q.fulfillmentStatus !== 'ALL'
         ? q.fulfillmentStatus === 'UNFULFILLED'
           ? {
-              OR: [
-                { fulfillmentStatus: null },
-                { fulfillmentStatus: { in: ['UNFULFILLED', 'unfulfilled', 'null', ''] } },
-              ],
-            }
+            OR: [
+              { fulfillmentStatus: null },
+              { fulfillmentStatus: { in: ['UNFULFILLED', 'unfulfilled', 'null', ''] } },
+            ],
+          }
           : { fulfillmentStatus: { in: ['FULFILLED', 'fulfilled'] } }
         : {}),
     };
@@ -205,8 +205,8 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       const igHandle = creator?.instagramConnection?.username
         ? `@${creator.instagramConnection.username}`
         : order.creatorCode
-        ? `@${order.creatorCode}`
-        : null;
+          ? `@${order.creatorCode}`
+          : null;
 
       const clickUtm = commission?.link?.clicks?.[0] ?? null;
       const sourceInfo = resolveOrderPlatform(order.payload, clickUtm);
@@ -229,20 +229,20 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         utmCampaign: sourceInfo.utmCampaign,
         creator: creator
           ? {
-              id: creator.id,
-              name: creator.displayName,
-              handle: igHandle,
-              code: creator.creatorCode ?? order.creatorCode,
-            }
+            id: creator.id,
+            name: creator.displayName,
+            handle: igHandle,
+            code: creator.creatorCode ?? order.creatorCode,
+          }
           : null,
         commission: commission
           ? {
-              id: commission.id,
-              amount: Number(commission.amount),
-              rate: Number(commission.commissionRate),
-              status: commission.status,
-              linkSlug: commission.link?.slug,
-            }
+            id: commission.id,
+            amount: Number(commission.amount),
+            rate: Number(commission.commissionRate),
+            status: commission.status,
+            linkSlug: commission.link?.slug,
+          }
           : null,
       };
     });
@@ -350,8 +350,8 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           const tagList: string[] = Array.isArray(tags)
             ? tags.map((t: any) => String(t).trim())
             : typeof tags === 'string'
-            ? tags.split(',').map((t: string) => t.trim())
-            : [];
+              ? tags.split(',').map((t: string) => t.trim())
+              : [];
 
           const isSampleOrder = tagList.some((t: string) =>
             ['influencersample', 'bartersample', 'sample', 'barter'].includes(t.toLowerCase())
@@ -499,25 +499,21 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             });
           }
 
-          const hasCommission = link?.commissionType === 'FIXED_AMOUNT'
-            ? Number(link?.commissionAmount ?? 0) > 0
+          const hasLinkCommission = link?.commissionType === 'FIXED_AMOUNT'
+            ? Number(link.commissionAmount ?? 0) > 0
             : Number(link?.commissionRate ?? 0) > 0;
 
-          if (link && creator && (compensationMode === 'BARTER' || hasCommission)) {
+          if (link && creator && (compensationMode === 'BARTER' || hasLinkCommission)) {
             const orderAmount = Number(d.total ?? 0);
             const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
             const status = isRefunded ? 'REVERSED' : (isAutoCommission ? 'APPROVED' : 'PENDING');
-            const commissionRate = compensationMode === 'BARTER' ? 0 : Number(link.commissionRate ?? 10);
+            const isFixedAmountLink = link.commissionType === 'FIXED_AMOUNT';
+            const commissionRate = compensationMode === 'BARTER' || isFixedAmountLink ? 0 : Number(link.commissionRate ?? 10);
             const matchedUserId = link.creatorId ?? creator.id;
 
-            let commAmount = 0;
-            if (link.commissionType === 'FIXED_AMOUNT') {
-              commAmount = Number(link.commissionAmount ?? 0);
-            } else {
-              commAmount = (orderAmount * commissionRate) / 100;
-            }
+            let commAmount = isFixedAmountLink ? Number(link.commissionAmount ?? 0) : (orderAmount * commissionRate) / 100;
 
-            if (compensationMode !== 'BARTER') {
+            if (compensationMode !== 'BARTER' && !isFixedAmountLink) {
               const storeConfig = await prisma.storeReferralConfig.findUnique({
                 where: { organizationId: s.id },
                 select: {
@@ -558,8 +554,8 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 const lineItems = Array.isArray(rawOrder.line_items)
                   ? rawOrder.line_items
                   : Array.isArray(rawOrder.lineItems)
-                  ? rawOrder.lineItems
-                  : [];
+                    ? rawOrder.lineItems
+                    : [];
 
                 let assignedItemsTotal = 0;
                 let unassignedItemsTotal = 0;
@@ -602,15 +598,19 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 creatorId: matchedUserId,
                 shopifyOrderId: order.id,
                 orderAmount,
+                commissionType: isFixedAmountLink ? 'FIXED_AMOUNT' : 'PERCENTAGE',
                 commissionRate,
                 amount: commAmount,
                 status,
               },
               update: {
+                linkId: link.id,
+                creatorId: matchedUserId,
                 orderAmount,
+                commissionType: isFixedAmountLink ? 'FIXED_AMOUNT' : 'PERCENTAGE',
                 commissionRate,
                 amount: commAmount,
-                status: isRefunded ? 'REVERSED' : undefined,
+                status,
               },
             });
           }
@@ -724,24 +724,24 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         },
         commission: commission
           ? {
-              id: commission.id,
-              amount: Number(commission.amount),
-              rate: Number(commission.commissionRate),
-              status: commission.status,
-              createdAt: commission.createdAt,
-              creator: commission.creator
-                ? {
-                    id: commission.creator.id,
-                    name: commission.creator.displayName,
-                    email: commission.creator.email,
-                    creatorCode: commission.creator.creatorCode,
-                    handle: commission.creator.instagramConnection?.username
-                      ? `@${commission.creator.instagramConnection.username}`
-                      : `@${commission.creator.creatorCode || 'creator'}`,
-                  }
-                : null,
-              link: commission.link,
-            }
+            id: commission.id,
+            amount: Number(commission.amount),
+            rate: Number(commission.commissionRate),
+            status: commission.status,
+            createdAt: commission.createdAt,
+            creator: commission.creator
+              ? {
+                id: commission.creator.id,
+                name: commission.creator.displayName,
+                email: commission.creator.email,
+                creatorCode: commission.creator.creatorCode,
+                handle: commission.creator.instagramConnection?.username
+                  ? `@${commission.creator.instagramConnection.username}`
+                  : `@${commission.creator.creatorCode || 'creator'}`,
+              }
+              : null,
+            link: commission.link,
+          }
           : null,
       },
     };
