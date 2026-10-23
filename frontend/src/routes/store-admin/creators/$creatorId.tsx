@@ -27,6 +27,7 @@ import {
   Zap,
   ShieldCheck,
   ShieldAlert,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,7 @@ import {
   updateCreatorAutoCommission,
   createManualCommission,
   sendBarterSample,
+  updateCommissionStatus,
   type CompensationMode,
 } from "@/features/store-admin/api/creators.api";
 import { EditAffiliateCommissionModal } from "@/features/store-admin/components/EditAffiliateCommissionModal";
@@ -99,6 +101,9 @@ function CreatorDetailPage() {
   const [manualCommOrderName, setManualCommOrderName] = useState("");
   const [manualCommNotes, setManualCommNotes] = useState("");
   const [manualCommStatus, setManualCommStatus] = useState<"APPROVED" | "PENDING" | "PAID">("APPROVED");
+
+  // Attributed customer orders search query
+  const [orderSearchQuery, setOrderSearchQuery] = useState("");
 
   // 1. Fetch Creator Detailed Info & Metrics
   const creatorQuery = useQuery({
@@ -188,6 +193,19 @@ function CreatorDetailPage() {
     },
     onError: () => {
       toast.error("Failed to add manual commission.");
+    },
+  });
+
+  // 6. Mutation to approve commission
+  const approveCommissionMutation = useMutation({
+    mutationFn: (commissionId: string) => updateCommissionStatus(commissionId, "APPROVED"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["store", "creator", creatorId] });
+      queryClient.invalidateQueries({ queryKey: ["store", "creators"] });
+      toast.success("Commission approved successfully!");
+    },
+    onError: () => {
+      toast.error("Failed to approve commission.");
     },
   });
 
@@ -290,6 +308,17 @@ function CreatorDetailPage() {
   const filteredModalProducts = allProducts.filter((p: any) =>
     (p.title || p.name || "").toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
+
+  const filteredOrders = recentOrders.filter((o: any) => {
+    if (!orderSearchQuery.trim()) return true;
+    const q = orderSearchQuery.toLowerCase().trim();
+    return (
+      (o.orderName || "").toLowerCase().includes(q) ||
+      (o.customerEmail || "").toLowerCase().includes(q) ||
+      (o.linkSlug || "").toLowerCase().includes(q) ||
+      (o.status || "").toLowerCase().includes(q)
+    );
+  });
 
   const formattedAssignedDate = assignedAt
     ? new Date(assignedAt).toLocaleDateString("en-IN", {
@@ -826,65 +855,168 @@ function CreatorDetailPage() {
         {/* TAB 3: ATTRIBUTED ORDERS */}
         <TabsContent value="orders" className="space-y-4">
           <Card className="shadow-card">
-            <CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-3">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 pb-3">
               <div>
-                <CardTitle className="text-base font-bold">Attributed Customer Orders</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base font-bold">Attributed Customer Orders</CardTitle>
+                  <Badge variant="secondary" className="text-xs px-2 py-0.5 font-semibold">
+                    {filteredOrders.length}
+                  </Badge>
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Purchases tracked to {creator.displayName}&apos;s referral links and discount codes.
+                  Purchases tracked to {creator.displayName}&apos;s referral links and discount codes ({creator.creatorCode || "SARAH88"}).
                 </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by order # or email..."
+                    className="h-8 pl-8 text-xs"
+                    value={orderSearchQuery}
+                    onChange={(e) => setOrderSearchQuery(e.target.value)}
+                  />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-5 pt-0">
-              {recentOrders.length > 0 ? (
-                <div className="rounded-xl border overflow-hidden">
-                  <table className="w-full text-xs">
+              {filteredOrders.length > 0 ? (
+                <div className="rounded-xl border overflow-x-auto">
+                  <table className="w-full text-xs min-w-[700px]">
                     <thead className="bg-muted/50 border-b text-muted-foreground font-semibold">
                       <tr>
-                        <th className="py-2.5 px-3 text-left">Order</th>
-                        <th className="py-2.5 px-3 text-left">Date</th>
-                        <th className="py-2.5 px-3 text-right">Order Amount</th>
+                        <th className="py-2.5 px-3 text-left">Order & Customer</th>
+                        <th className="py-2.5 px-3 text-left">Date & Time</th>
+                        <th className="py-2.5 px-3 text-right">Order Value</th>
                         <th className="py-2.5 px-3 text-right">Commission</th>
                         <th className="py-2.5 px-3 text-center">Status</th>
+                        <th className="py-2.5 px-3 text-right pr-4">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {recentOrders.map((order: any) => (
-                        <tr key={order.id} className="hover:bg-muted/20">
-                          <td className="py-3 px-3 font-semibold text-foreground">
-                            {order.orderName}
-                          </td>
-                          <td className="py-3 px-3 text-muted-foreground">
-                            {new Date(order.processedAt).toLocaleDateString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </td>
-                          <td className="py-3 px-3 text-right font-semibold text-foreground">
-                            {money.format(order.orderAmount)}
-                          </td>
-                          <td className="py-3 px-3 text-right font-bold text-emerald-600">
-                            {compensationMode === "BARTER" ? "Barter" : money.format(order.amount)}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <Badge
-                              variant={order.status === "APPROVED" || order.status === "PAID" ? "default" : "secondary"}
-                              className="text-[10px]"
-                            >
-                              {order.status}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredOrders.map((order: any) => {
+                        const processedDate = order.processedAt ? new Date(order.processedAt) : null;
+                        const isPending = order.status === "PENDING";
+                        return (
+                          <tr key={order.id} className="hover:bg-muted/20">
+                            <td className="py-3 px-3">
+                              <div className="space-y-0.5">
+                                <Link
+                                  to="/store-admin/orders/$orderId"
+                                  params={{ orderId: order.orderId || order.id }}
+                                  className="font-semibold text-primary hover:underline flex items-center gap-1"
+                                >
+                                  {order.orderName}
+                                  <ExternalLink className="h-3 w-3 opacity-60" />
+                                </Link>
+                                {order.customerEmail ? (
+                                  <p className="text-[11px] text-muted-foreground truncate max-w-[200px]" title={order.customerEmail}>
+                                    {order.customerEmail}
+                                  </p>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground/70">Shopify Checkout</span>
+                                )}
+                                {order.linkSlug && (
+                                  <span className="inline-block text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                    /{order.linkSlug}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              {processedDate ? (
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-foreground">
+                                    {new Intl.DateTimeFormat("en-IN", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    }).format(processedDate)}
+                                  </span>
+                                  <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                                    <Clock className="h-3 w-3 text-muted-foreground/70" />
+                                    {new Intl.DateTimeFormat("en-IN", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      hour12: true,
+                                    }).format(processedDate)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <span className="font-semibold text-foreground">
+                                {money.format(order.orderAmount)}
+                              </span>
+                              {order.financialStatus && (
+                                <p className="text-[10px] text-muted-foreground capitalize mt-0.5">
+                                  {order.financialStatus.toLowerCase()}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <p className="font-bold text-emerald-600">
+                                {compensationMode === "BARTER" ? "Barter" : money.format(order.amount)}
+                              </p>
+                              {order.commissionRate > 0 && compensationMode !== "BARTER" && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  ({order.commissionRate}%)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <Badge
+                                variant={order.status === "APPROVED" || order.status === "PAID" ? "default" : "secondary"}
+                                className={`text-[10px] ${
+                                  order.status === "PAID"
+                                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                                    : order.status === "APPROVED"
+                                    ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30"
+                                    : order.status === "REVERSED"
+                                    ? "bg-destructive/10 text-destructive border-destructive/30"
+                                    : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                                }`}
+                              >
+                                {order.status}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-3 text-right pr-4">
+                              {isPending ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2.5 text-xs font-semibold hover:border-emerald-600 hover:text-emerald-600 gap-1"
+                                  disabled={approveCommissionMutation.isPending}
+                                  onClick={() => approveCommissionMutation.mutate(order.id)}
+                                >
+                                  <Check className="h-3 w-3 text-emerald-600" />
+                                  Approve
+                                </Button>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground font-medium">
+                                  {order.status === "PAID" ? "Settled" : "Processed"}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed p-8 text-center bg-muted/10">
                   <ShoppingBag className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm font-semibold">No orders attributed yet</p>
+                  <p className="mt-2 text-sm font-semibold">
+                    {orderSearchQuery ? "No matching orders found" : "No orders attributed yet"}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-                    Once shoppers complete orders using {creator.displayName}&apos;s link or creator code, they will automatically appear here.
+                    {orderSearchQuery
+                      ? "Try searching with a different order number or customer email."
+                      : `Once shoppers complete orders using ${creator.displayName}'s link or creator code (${creator.creatorCode || "SARAH88"}), they will automatically appear here.`}
                   </p>
                 </div>
               )}

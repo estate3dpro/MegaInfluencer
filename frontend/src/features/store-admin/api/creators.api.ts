@@ -272,11 +272,17 @@ export type CreatorDetailsResponse = {
   }>;
   recentOrders: Array<{
     id: string;
+    orderId?: string;
+    shopifyId?: string;
     orderName: string;
+    customerEmail?: string | null;
     orderAmount: number;
     commissionRate: number;
     amount: number;
     status: string;
+    financialStatus?: string | null;
+    fulfillmentStatus?: string | null;
+    linkSlug?: string | null;
     processedAt: string;
   }>;
   barterFulfillments: Array<{
