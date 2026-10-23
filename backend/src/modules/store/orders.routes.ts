@@ -100,41 +100,105 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       search?: string;
       financialStatus?: string;
       fulfillmentStatus?: string;
+      platform?: string;
+      creatorId?: string;
+      commissionStatus?: string;
+      startDate?: string;
+      endDate?: string;
     };
 
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 25));
     const search = q.search?.trim();
 
+    const andClauses: Prisma.ShopifyOrderWhereInput[] = [
+      {
+        OR: [
+          { creatorCode: { not: null } },
+          { affiliateLinkId: { not: null } },
+          { affiliateCommissions: { some: {} } },
+        ],
+      },
+    ];
+
+    if (search) {
+      andClauses.push({
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { creatorCode: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (q.financialStatus && q.financialStatus !== 'ALL') {
+      andClauses.push({ financialStatus: { equals: q.financialStatus, mode: 'insensitive' } });
+    }
+
+    if (q.fulfillmentStatus && q.fulfillmentStatus !== 'ALL') {
+      if (q.fulfillmentStatus === 'UNFULFILLED') {
+        andClauses.push({
+          OR: [
+            { fulfillmentStatus: null },
+            { fulfillmentStatus: { in: ['UNFULFILLED', 'unfulfilled', 'null', ''] } },
+          ],
+        });
+      } else {
+        andClauses.push({ fulfillmentStatus: { in: ['FULFILLED', 'fulfilled'] } });
+      }
+    }
+
+    if (q.creatorId && q.creatorId !== 'ALL') {
+      const targetCreator = await prisma.user.findUnique({
+        where: { id: q.creatorId },
+        select: { id: true, creatorCode: true },
+      });
+      andClauses.push({
+        OR: [
+          { affiliateCommissions: { some: { creatorId: q.creatorId } } },
+          { affiliateLink: { creatorId: q.creatorId } },
+          ...(targetCreator?.creatorCode
+            ? [{ creatorCode: { equals: targetCreator.creatorCode, mode: 'insensitive' as const } }]
+            : []),
+        ],
+      });
+    }
+
+    if (q.commissionStatus && q.commissionStatus !== 'ALL') {
+      andClauses.push({
+        affiliateCommissions: {
+          some: {
+            status: q.commissionStatus as any,
+          },
+        },
+      });
+    }
+
+    if (q.startDate || q.endDate) {
+      const dateCondition: { gte?: Date; lte?: Date } = {};
+      if (q.startDate) {
+        const start = new Date(q.startDate);
+        if (!isNaN(start.getTime())) {
+          dateCondition.gte = start;
+        }
+      }
+      if (q.endDate) {
+        const end = new Date(q.endDate);
+        if (!isNaN(end.getTime())) {
+          if (q.endDate.length === 10) {
+            end.setHours(23, 59, 59, 999);
+          }
+          dateCondition.lte = end;
+        }
+      }
+      if (dateCondition.gte || dateCondition.lte) {
+        andClauses.push({ processedAt: dateCondition });
+      }
+    }
+
     const where: Prisma.ShopifyOrderWhereInput = {
       organizationId: s.id,
-      OR: [
-        { creatorCode: { not: null } },
-        { affiliateLinkId: { not: null } },
-        { affiliateCommissions: { some: {} } },
-      ],
-      ...(search
-        ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-            { creatorCode: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-        : {}),
-      ...(q.financialStatus && q.financialStatus !== 'ALL'
-        ? { financialStatus: { equals: q.financialStatus, mode: 'insensitive' } }
-        : {}),
-      ...(q.fulfillmentStatus && q.fulfillmentStatus !== 'ALL'
-        ? q.fulfillmentStatus === 'UNFULFILLED'
-          ? {
-            OR: [
-              { fulfillmentStatus: null },
-              { fulfillmentStatus: { in: ['UNFULFILLED', 'unfulfilled', 'null', ''] } },
-            ],
-          }
-          : { fulfillmentStatus: { in: ['FULFILLED', 'fulfilled'] } }
-        : {}),
+      AND: andClauses,
     };
 
     const [rows, total, allOrdersSummary] = await Promise.all([
@@ -144,6 +208,27 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         skip: (page - 1) * limit,
         take: limit,
         include: {
+          affiliateLink: {
+            include: {
+              creator: {
+                select: {
+                  id: true,
+                  displayName: true,
+                  creatorCode: true,
+                  email: true,
+                  influencerProfile: {
+                    select: {
+                      profileImageUrl: true,
+                      city: true,
+                      phone: true,
+                      bio: true,
+                    },
+                  },
+                  instagramConnection: { select: { username: true } },
+                },
+              },
+            },
+          },
           affiliateCommissions: {
             include: {
               creator: {
@@ -151,6 +236,15 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                   id: true,
                   displayName: true,
                   creatorCode: true,
+                  email: true,
+                  influencerProfile: {
+                    select: {
+                      profileImageUrl: true,
+                      city: true,
+                      phone: true,
+                      bio: true,
+                    },
+                  },
                   instagramConnection: { select: { username: true } },
                 },
               },
@@ -199,14 +293,51 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // Lookup any missing creator profiles for orders that have creatorCode but no linked commission yet
+    const missingCodes = [
+      ...new Set(
+        rows
+          .filter((o: any) => !o.affiliateCommissions?.[0]?.creator && !o.affiliateLink?.creator && o.creatorCode)
+          .map((o: any) => o.creatorCode as string)
+      ),
+    ];
+    let creatorsByCode: Record<string, any> = {};
+    if (missingCodes.length > 0) {
+      const foundCreators = await prisma.user.findMany({
+        where: { creatorCode: { in: missingCodes, mode: 'insensitive' } },
+        select: {
+          id: true,
+          displayName: true,
+          creatorCode: true,
+          email: true,
+          influencerProfile: {
+            select: { profileImageUrl: true, city: true, phone: true, bio: true },
+          },
+          instagramConnection: { select: { username: true } },
+        },
+      });
+      for (const fc of foundCreators) {
+        if (fc.creatorCode) {
+          creatorsByCode[fc.creatorCode.toLowerCase()] = fc;
+        }
+      }
+    }
+
     const formattedOrders = rows.map((order: any) => {
       const commission = order.affiliateCommissions?.[0];
-      const creator = commission?.creator;
-      const igHandle = creator?.instagramConnection?.username
-        ? `@${creator.instagramConnection.username}`
-        : order.creatorCode
-          ? `@${order.creatorCode}`
-          : null;
+      const creator =
+        commission?.creator ||
+        order.affiliateLink?.creator ||
+        (order.creatorCode ? creatorsByCode[order.creatorCode.toLowerCase()] : null);
+
+      const igUsername = creator?.instagramConnection?.username;
+      const igHandle = igUsername
+        ? `@${igUsername}`
+        : creator?.creatorCode
+          ? `@${creator.creatorCode}`
+          : order.creatorCode
+            ? `@${order.creatorCode}`
+            : null;
 
       const clickUtm = commission?.link?.clicks?.[0] ?? null;
       const sourceInfo = resolveOrderPlatform(order.payload, clickUtm);
@@ -233,6 +364,11 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             name: creator.displayName,
             handle: igHandle,
             code: creator.creatorCode ?? order.creatorCode,
+            email: creator.email ?? null,
+            avatarUrl: creator.influencerProfile?.profileImageUrl ?? null,
+            city: creator.influencerProfile?.city ?? null,
+            phone: creator.influencerProfile?.phone ?? null,
+            bio: creator.influencerProfile?.bio ?? null,
           }
           : null,
         commission: commission
@@ -247,8 +383,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       };
     });
 
+    const finalOrders = q.platform && q.platform !== 'ALL'
+      ? formattedOrders.filter((o: any) => o.platform === q.platform)
+      : formattedOrders;
+
     return {
-      orders: formattedOrders,
+      orders: finalOrders,
       shopDomain: s.shopDomain,
       summary: {
         totalOrders: allOrdersSummary.length,

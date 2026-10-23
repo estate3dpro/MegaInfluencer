@@ -31,6 +31,11 @@ export type StoreOrder = {
     name: string;
     handle: string | null;
     code: string | null;
+    email?: string | null;
+    avatarUrl?: string | null;
+    city?: string | null;
+    phone?: string | null;
+    bio?: string | null;
   } | null;
   commission?: {
     id: string;
@@ -123,6 +128,10 @@ export async function getStoreOrders(
     financialStatus?: string;
     fulfillmentStatus?: string;
     platform?: string;
+    creatorId?: string;
+    commissionStatus?: string;
+    startDate?: string;
+    endDate?: string;
   } = {}
 ) {
   return (
@@ -139,6 +148,10 @@ export async function getStoreOrders(
         financialStatus: options.financialStatus || undefined,
         fulfillmentStatus: options.fulfillmentStatus || undefined,
         platform: options.platform || undefined,
+        creatorId: options.creatorId || undefined,
+        commissionStatus: options.commissionStatus || undefined,
+        startDate: options.startDate || undefined,
+        endDate: options.endDate || undefined,
       },
     })
   ).data;

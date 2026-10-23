@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   BadgeIndianRupee,
   Calendar,
+  CalendarDays,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -20,12 +21,16 @@ import {
   Phone,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   ShoppingBag,
+  SlidersHorizontal,
   Sparkles,
   Tag,
   User,
+  UserCheck,
   UsersRound,
+  X,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -54,10 +59,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getStoreProducts, getStoreProductSyncStatus, syncStoreProducts } from "../api/products.api";
 import { getStoreOrders, syncStoreOrders, updateOrderCommissionStatus } from "../api/orders.api";
+import { getStoreCreators } from "../api/creators.api";
 import { PlatformBadge } from "@/components/app/PlatformBadge";
 import { getStoreCustomers, getStoreCustomerDetails } from "../api/customers.api";
 import {
@@ -489,17 +500,76 @@ export function OrdersPage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PAID" | "UNFULFILLED" | "REFUNDED">("ALL");
   const [platformFilter, setPlatformFilter] = useState<string>("ALL");
+  const [creatorFilter, setCreatorFilter] = useState<string>("ALL");
+  const [commissionFilter, setCommissionFilter] = useState<"ALL" | "PENDING" | "APPROVED" | "PAID" | "REVERSED">("ALL");
+  const [datePreset, setDatePreset] = useState<"ALL" | "TODAY" | "YESTERDAY" | "7D" | "30D" | "THIS_MONTH" | "CUSTOM">("ALL");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
   const [orderPage, setOrderPage] = useState(1);
+
+  const dateRange = useMemo(() => {
+    const now = new Date();
+    if (datePreset === "TODAY") {
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return { startDate: today.toISOString(), endDate: undefined };
+    }
+    if (datePreset === "YESTERDAY") {
+      const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const yesterdayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, -1);
+      return { startDate: yesterdayStart.toISOString(), endDate: yesterdayEnd.toISOString() };
+    }
+    if (datePreset === "7D") {
+      const d7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      return { startDate: d7.toISOString(), endDate: undefined };
+    }
+    if (datePreset === "30D") {
+      const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      return { startDate: d30.toISOString(), endDate: undefined };
+    }
+    if (datePreset === "THIS_MONTH") {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { startDate: monthStart.toISOString(), endDate: undefined };
+    }
+    if (datePreset === "CUSTOM") {
+      return {
+        startDate: customStartDate ? new Date(customStartDate).toISOString() : undefined,
+        endDate: customEndDate ? new Date(customEndDate).toISOString() : undefined,
+      };
+    }
+    return { startDate: undefined, endDate: undefined };
+  }, [datePreset, customStartDate, customEndDate]);
+
+  const creatorsQuery = useQuery({
+    queryKey: ["store", "creators"],
+    queryFn: getStoreCreators,
+  });
+  const storeCreators = creatorsQuery.data ?? [];
 
   const normalizedOrderSearch = orderSearch.trim();
   const ordersQuery = useQuery({
-    queryKey: ["store", "orders", orderPage, normalizedOrderSearch, statusFilter, platformFilter],
+    queryKey: [
+      "store",
+      "orders",
+      orderPage,
+      normalizedOrderSearch,
+      statusFilter,
+      platformFilter,
+      creatorFilter,
+      commissionFilter,
+      datePreset,
+      dateRange.startDate,
+      dateRange.endDate,
+    ],
     queryFn: () =>
       getStoreOrders(orderPage, {
         search: normalizedOrderSearch || undefined,
         financialStatus: statusFilter === "PAID" ? "PAID" : statusFilter === "REFUNDED" ? "REFUNDED" : undefined,
         fulfillmentStatus: statusFilter === "UNFULFILLED" ? "UNFULFILLED" : undefined,
         platform: platformFilter === "ALL" ? undefined : platformFilter,
+        creatorId: creatorFilter === "ALL" ? undefined : creatorFilter,
+        commissionStatus: commissionFilter === "ALL" ? undefined : commissionFilter,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
       }),
   });
 
@@ -537,6 +607,29 @@ export function OrdersPage() {
       toast.error(err.response?.data?.message || "Failed to update commission status.");
     },
   });
+
+  const hasActiveFilters = Boolean(
+    normalizedOrderSearch ||
+      statusFilter !== "ALL" ||
+      platformFilter !== "ALL" ||
+      creatorFilter !== "ALL" ||
+      commissionFilter !== "ALL" ||
+      datePreset !== "ALL" ||
+      customStartDate ||
+      customEndDate
+  );
+
+  const resetAllFilters = () => {
+    setOrderSearch("");
+    setStatusFilter("ALL");
+    setPlatformFilter("ALL");
+    setCreatorFilter("ALL");
+    setCommissionFilter("ALL");
+    setDatePreset("ALL");
+    setCustomStartDate("");
+    setCustomEndDate("");
+    setOrderPage(1);
+  };
 
   return (
     <div className="space-y-6">
@@ -596,13 +689,15 @@ export function OrdersPage() {
         />
       </section>
 
-      {/* Filter Tabs & Search */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Filter Toolbar with Creator, Date-Range, and Statuses */}
+      <div className="space-y-3 rounded-xl border bg-card/60 p-4 shadow-xs">
+        {/* Row 1: Search & Dropdown Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Box */}
           <div className="relative min-w-64 flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-9 h-9"
+              className="pl-9 h-9 bg-background"
               placeholder="Search order number (#1001), customer email, or creator..."
               value={orderSearch}
               onChange={(e) => {
@@ -611,61 +706,297 @@ export function OrdersPage() {
               }}
             />
           </div>
-          <div className="flex rounded-lg border bg-muted/30 p-0.5">
-            {(
-              [
-                { id: "ALL", label: "All Orders" },
-                { id: "PAID", label: "Paid" },
-                { id: "UNFULFILLED", label: "To Fulfill" },
-                { id: "REFUNDED", label: "Refunded" },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => {
-                  setStatusFilter(t.id);
+
+          {/* Filter by Creator */}
+          <div className="w-56">
+            <Select
+              value={creatorFilter}
+              onValueChange={(val) => {
+                setCreatorFilter(val);
+                setOrderPage(1);
+              }}
+            >
+              <SelectTrigger className="h-9 bg-background text-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <UserCheck className="h-3.5 w-3.5 text-coral shrink-0" />
+                  <span className="truncate">
+                    {creatorFilter === "ALL"
+                      ? "All Creators"
+                      : storeCreators.find((c) => c.id === creatorFilter)?.displayName ||
+                        storeCreators.find((c) => c.id === creatorFilter)?.creatorCode ||
+                        "Selected Creator"}
+                  </span>
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Creators ({storeCreators.length})</SelectItem>
+                {storeCreators.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{c.displayName}</span>
+                      {c.creatorCode || c.instagramUsername ? (
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          (@{c.instagramUsername || c.creatorCode})
+                        </span>
+                      ) : null}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Filter Date Preset */}
+          <div className="w-44">
+            <Select
+              value={datePreset}
+              onValueChange={(val: any) => {
+                setDatePreset(val);
+                setOrderPage(1);
+              }}
+            >
+              <SelectTrigger className="h-9 bg-background text-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="truncate">
+                    {datePreset === "ALL"
+                      ? "All Dates"
+                      : datePreset === "TODAY"
+                      ? "Today"
+                      : datePreset === "YESTERDAY"
+                      ? "Yesterday"
+                      : datePreset === "7D"
+                      ? "Last 7 Days"
+                      : datePreset === "30D"
+                      ? "Last 30 Days"
+                      : datePreset === "THIS_MONTH"
+                      ? "This Month"
+                      : "Custom Range"}
+                  </span>
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Time</SelectItem>
+                <SelectItem value="TODAY">Today</SelectItem>
+                <SelectItem value="YESTERDAY">Yesterday</SelectItem>
+                <SelectItem value="7D">Last 7 Days</SelectItem>
+                <SelectItem value="30D">Last 30 Days</SelectItem>
+                <SelectItem value="THIS_MONTH">This Month</SelectItem>
+                <SelectItem value="CUSTOM">Custom Range...</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Commission Status Filter */}
+          <div className="w-44">
+            <Select
+              value={commissionFilter}
+              onValueChange={(val: any) => {
+                setCommissionFilter(val);
+                setOrderPage(1);
+              }}
+            >
+              <SelectTrigger className="h-9 bg-background text-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <BadgeIndianRupee className="h-3.5 w-3.5 text-teal shrink-0" />
+                  <span className="truncate">
+                    {commissionFilter === "ALL"
+                      ? "All Commissions"
+                      : commissionFilter === "PENDING"
+                      ? "Pending Approval"
+                      : commissionFilter === "APPROVED"
+                      ? "Approved"
+                      : commissionFilter === "PAID"
+                      ? "Paid"
+                      : "Reversed"}
+                  </span>
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Commissions</SelectItem>
+                <SelectItem value="PENDING">Pending Approval</SelectItem>
+                <SelectItem value="APPROVED">Approved</SelectItem>
+                <SelectItem value="PAID">Paid</SelectItem>
+                <SelectItem value="REVERSED">Reversed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Reset Filters Button */}
+          {hasActiveFilters ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetAllFilters}
+              className="h-9 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 px-2.5"
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1 text-coral" /> Reset
+            </Button>
+          ) : null}
+        </div>
+
+        {/* Custom Date Range Pickers (shown when Custom Range selected) */}
+        {datePreset === "CUSTOM" ? (
+          <div className="flex flex-wrap items-center gap-3 pt-2 border-t text-xs">
+            <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+              <CalendarDays className="h-4 w-4 text-primary" /> Date Range:
+            </span>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground">From:</Label>
+              <Input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => {
+                  setCustomStartDate(e.target.value);
                   setOrderPage(1);
                 }}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
-                  statusFilter === t.id
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                className="h-8 w-38 bg-background text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground">To:</Label>
+              <Input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => {
+                  setCustomEndDate(e.target.value);
+                  setOrderPage(1);
+                }}
+                className="h-8 w-38 bg-background text-xs"
+              />
+            </div>
+            {customStartDate || customEndDate ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={() => {
+                  setCustomStartDate("");
+                  setCustomEndDate("");
+                }}
+              >
+                Clear Dates
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Row 2: Status tabs and Channel tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t">
+          {/* Order Status Tabs */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground shrink-0">Order Status:</span>
+            <div className="flex rounded-lg border bg-muted/30 p-0.5">
+              {(
+                [
+                  { id: "ALL", label: "All Orders" },
+                  { id: "PAID", label: "Paid" },
+                  { id: "UNFULFILLED", label: "To Fulfill" },
+                  { id: "REFUNDED", label: "Refunded" },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    setStatusFilter(t.id);
+                    setOrderPage(1);
+                  }}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                    statusFilter === t.id
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Traffic Channel Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <span className="text-xs font-semibold text-muted-foreground shrink-0">Traffic Channel:</span>
+            {(
+              [
+                { id: "ALL", label: "All Channels" },
+                { id: "WHATSAPP", label: "WhatsApp" },
+                { id: "FACEBOOK", label: "Facebook" },
+                { id: "INSTAGRAM", label: "Instagram" },
+                { id: "DIRECT", label: "Direct / Link" },
+              ] as const
+            ).map((c) => (
+              <Button
+                key={c.id}
+                variant={platformFilter === c.id ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => {
+                  setPlatformFilter(c.id);
+                  setOrderPage(1);
+                }}
+                className={`h-7 px-2.5 text-xs font-medium ${
+                  platformFilter === c.id ? "bg-muted font-semibold shadow-xs" : "text-muted-foreground"
                 }`}
               >
-                {t.label}
-              </button>
+                {c.label}
+              </Button>
             ))}
           </div>
         </div>
 
-        {/* Traffic Source / Channel Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="text-xs font-semibold text-muted-foreground shrink-0">Traffic Channel:</span>
-          {(
-            [
-              { id: "ALL", label: "All Channels" },
-              { id: "WHATSAPP", label: "WhatsApp" },
-              { id: "FACEBOOK", label: "Facebook" },
-              { id: "INSTAGRAM", label: "Instagram" },
-              { id: "DIRECT", label: "Direct / Link" },
-            ] as const
-          ).map((c) => (
-            <Button
-              key={c.id}
-              variant={platformFilter === c.id ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => {
-                setPlatformFilter(c.id);
-                setOrderPage(1);
-              }}
-              className={`h-7 px-2.5 text-xs font-medium ${
-                platformFilter === c.id ? "bg-muted font-semibold shadow-xs" : "text-muted-foreground"
-              }`}
-            >
-              {c.label}
-            </Button>
-          ))}
-        </div>
+        {/* Active Filter Pills Bar (if filters active) */}
+        {hasActiveFilters ? (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t">
+            <span className="text-[11px] font-semibold text-muted-foreground mr-1">Active Filters:</span>
+            {creatorFilter !== "ALL" ? (
+              <Badge variant="secondary" className="text-[11px] py-0.5 pl-2 pr-1 gap-1 bg-coral/10 text-coral border-coral/20">
+                Creator: {storeCreators.find((c) => c.id === creatorFilter)?.displayName || "Selected"}
+                <button onClick={() => setCreatorFilter("ALL")} className="hover:opacity-75">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ) : null}
+            {datePreset !== "ALL" ? (
+              <Badge variant="secondary" className="text-[11px] py-0.5 pl-2 pr-1 gap-1 bg-primary/10 text-primary border-primary/20">
+                Date: {datePreset === "CUSTOM" ? `${customStartDate || "Start"} to ${customEndDate || "End"}` : datePreset}
+                <button onClick={() => { setDatePreset("ALL"); setCustomStartDate(""); setCustomEndDate(""); }} className="hover:opacity-75">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ) : null}
+            {commissionFilter !== "ALL" ? (
+              <Badge variant="secondary" className="text-[11px] py-0.5 pl-2 pr-1 gap-1 bg-teal/10 text-teal border-teal/20">
+                Commission: {commissionFilter}
+                <button onClick={() => setCommissionFilter("ALL")} className="hover:opacity-75">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ) : null}
+            {statusFilter !== "ALL" ? (
+              <Badge variant="secondary" className="text-[11px] py-0.5 pl-2 pr-1 gap-1">
+                Status: {statusFilter}
+                <button onClick={() => setStatusFilter("ALL")} className="hover:opacity-75">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ) : null}
+            {platformFilter !== "ALL" ? (
+              <Badge variant="secondary" className="text-[11px] py-0.5 pl-2 pr-1 gap-1">
+                Channel: {platformFilter}
+                <button onClick={() => setPlatformFilter("ALL")} className="hover:opacity-75">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ) : null}
+            {orderSearch ? (
+              <Badge variant="secondary" className="text-[11px] py-0.5 pl-2 pr-1 gap-1">
+                Query: "{orderSearch}"
+                <button onClick={() => setOrderSearch("")} className="hover:opacity-75">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <PageTable>
@@ -741,11 +1072,143 @@ export function OrdersPage() {
                     <td className="px-5 py-3.5">
                       {order.creatorCode || order.creator ? (
                         <div className="space-y-1.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant="outline" className="border-coral/30 bg-coral/10 font-medium text-coral text-xs">
-                              <Instagram className="mr-1 h-3 w-3" /> {order.creator?.handle ?? `@${order.creatorCode}`}
-                            </Badge>
-                          </div>
+                          {/* HoverCard for Creator Profile Card */}
+                          <HoverCard openDelay={150} closeDelay={150}>
+                            <HoverCardTrigger asChild>
+                              <div className="inline-flex items-center gap-1.5 cursor-pointer group">
+                                <Badge
+                                  variant="outline"
+                                  className="border-coral/40 bg-coral/10 group-hover:bg-coral/20 font-medium text-coral text-xs transition-colors py-0.5 px-2 cursor-pointer shadow-2xs"
+                                >
+                                  <Instagram className="mr-1.5 h-3 w-3 shrink-0" />
+                                  <span className="font-semibold">{order.creator?.handle ?? `@${order.creatorCode}`}</span>
+                                </Badge>
+                              </div>
+                            </HoverCardTrigger>
+                            <HoverCardContent
+                              align="start"
+                              side="top"
+                              className="w-80 p-4 shadow-xl border bg-card/98 backdrop-blur-md rounded-xl space-y-3 z-50 animate-in fade-in-0 zoom-in-95"
+                            >
+                              {/* Creator Header with Avatar & Details */}
+                              <div className="flex items-start gap-3">
+                                {order.creator?.avatarUrl ? (
+                                  <img
+                                    src={order.creator.avatarUrl}
+                                    alt={order.creator.name}
+                                    className="h-11 w-11 rounded-full object-cover border-2 border-primary/20 shadow-xs shrink-0"
+                                  />
+                                ) : (
+                                  <div className="grid h-11 w-11 place-items-center rounded-full bg-primary/10 text-primary font-bold text-sm shadow-xs shrink-0">
+                                    {(order.creator?.name?.[0] || order.creatorCode?.[0] || "C").toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <p className="font-bold text-foreground text-sm truncate">
+                                      {order.creator?.name || order.creatorCode}
+                                    </p>
+                                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-coral/30 text-coral bg-coral/5 font-mono">
+                                      Partner
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-coral font-medium flex items-center gap-1 mt-0.5">
+                                    <Instagram className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{order.creator?.handle ?? `@${order.creatorCode}`}</span>
+                                  </p>
+                                  {order.creator?.city ? (
+                                    <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1">
+                                      <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                      <span className="truncate">{order.creator.city}</span>
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              {/* Bio if available */}
+                              {order.creator?.bio ? (
+                                <p className="text-xs text-muted-foreground line-clamp-2 italic bg-muted/30 p-2 rounded-lg border border-muted/50">
+                                  "{order.creator.bio}"
+                                </p>
+                              ) : null}
+
+                              {/* Order Attribution Context Box */}
+                              <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5 text-xs">
+                                <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                                  <span className="font-medium">Order Attribution</span>
+                                  <span className="font-mono font-semibold text-foreground">{order.name}</span>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">Order Total:</span>
+                                  <span className="font-bold text-foreground">
+                                    {formatCurrency(Number(order.total || 0), order.currency)}
+                                  </span>
+                                </div>
+
+                                {order.commission ? (
+                                  <div className="flex items-center justify-between pt-1 border-t">
+                                    <span className="text-muted-foreground">Commission Earned:</span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-teal">
+                                        {formatCurrency(order.commission.amount, order.currency)}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground font-medium">
+                                        ({order.commission.rate}%)
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                {order.commission?.linkSlug ? (
+                                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+                                    <span>Tracked Link:</span>
+                                    <span className="font-mono text-primary font-semibold truncate max-w-[150px]">
+                                      /r/{order.commission.linkSlug}
+                                    </span>
+                                  </div>
+                                ) : null}
+
+                                {order.platformLabel || order.platform ? (
+                                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+                                    <span>Traffic Channel:</span>
+                                    <span className="font-medium text-foreground">
+                                      {order.platformLabel || order.platform}
+                                    </span>
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              {/* Action Buttons in HoverCard */}
+                              <div className="flex items-center gap-2 pt-1">
+                                {order.creator?.id ? (
+                                  <Button asChild size="sm" variant="default" className="flex-1 h-8 text-xs font-medium">
+                                    <Link to="/store-admin/creators/$creatorId" params={{ creatorId: order.creator.id }}>
+                                      View Profile <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                                    </Link>
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-xs px-2.5 font-medium"
+                                  onClick={() => {
+                                    if (order.creator?.id) {
+                                      setCreatorFilter(order.creator.id);
+                                      setOrderPage(1);
+                                    } else if (order.creatorCode) {
+                                      setOrderSearch(order.creatorCode);
+                                      setOrderPage(1);
+                                    }
+                                  }}
+                                  title="Filter orders by this creator"
+                                >
+                                  <Filter className="h-3.5 w-3.5 mr-1" /> Only Creator
+                                </Button>
+                              </div>
+                            </HoverCardContent>
+                          </HoverCard>
+
                           {order.commission ? (
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[11px] font-semibold text-foreground">
