@@ -227,23 +227,50 @@ export const affiliateLinkRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.patch('/store/affiliate-links/:linkId', async (request) => {
-    const actor = requireRole(request, ['STORE_OWNER']); const organization = await organizationFor(app, actor.userId); const { linkId } = request.params as { linkId: string }; const input = updateLinkSchema.parse(request.body);
-    const existing = await prisma.affiliateLink.findFirst({ where: { id: linkId, organizationId: organization.id } }); if (!existing) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
-    if (input.commissionType === 'FIXED_AMOUNT' && input.commissionAmount !== undefined && (input.commissionAmount === null || input.commissionAmount <= 0)) {
-      throw new AppError('INVALID_COMMISSION_AMOUNT', 'Flat commission amount must be greater than 0.', 422);
+    const actor = requireRole(request, ['STORE_OWNER']);
+    const organization = await organizationFor(app, actor.userId);
+    const { linkId } = request.params as { linkId: string };
+    const input = updateLinkSchema.parse(request.body);
+    const existing = await prisma.affiliateLink.findFirst({
+      where: { id: linkId, organizationId: organization.id },
+    });
+    if (!existing) throw new AppError('AFFILIATE_LINK_NOT_FOUND', 'Affiliate link not found.', 404);
+
+    const targetCommissionType = input.commissionType ?? existing.commissionType;
+    let targetCommissionRate = input.commissionRate !== undefined ? input.commissionRate : Number(existing.commissionRate);
+    let targetCommissionAmount = input.commissionAmount !== undefined ? input.commissionAmount : (existing.commissionAmount ? Number(existing.commissionAmount) : null);
+
+    if (targetCommissionType === 'FIXED_AMOUNT') {
+      if (targetCommissionAmount === null || targetCommissionAmount === undefined || targetCommissionAmount <= 0) {
+        throw new AppError('INVALID_COMMISSION_AMOUNT', 'Flat commission amount must be greater than 0.', 422);
+      }
+    } else if (targetCommissionType === 'PERCENTAGE') {
+      if (input.commissionAmount === undefined && input.commissionType === 'PERCENTAGE') {
+        targetCommissionAmount = null;
+      }
     }
+
     const link = await prisma.affiliateLink.update({
       where: { id: linkId },
       data: {
         ...(input.status ? { status: input.status } : {}),
         ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
-        ...(input.commissionType ? { commissionType: input.commissionType } : {}),
-        ...(input.commissionRate !== undefined ? { commissionRate: input.commissionRate } : {}),
-        ...(input.commissionAmount !== undefined ? { commissionAmount: input.commissionAmount } : {}),
+        commissionType: targetCommissionType,
+        commissionRate: targetCommissionRate,
+        commissionAmount: targetCommissionAmount,
       },
-      include: { organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } }, creator: { select: { displayName: true, creatorCode: true } }, product: { select: { title: true } }, collection: { select: { title: true } }, _count: { select: { clicks: true } }, commissions: { select: { orderAmount: true, status: true } } }
+      include: {
+        organization: { select: { id: true, name: true, slug: true, shopDomain: true, storefrontDomain: true } },
+        creator: { select: { displayName: true, creatorCode: true } },
+        product: { select: { title: true } },
+        collection: { select: { title: true } },
+        _count: { select: { clicks: true } },
+        commissions: { select: { id: true, orderAmount: true, amount: true, status: true } },
+        trackedOrders: { select: { id: true, total: true, financialStatus: true } },
+      },
     });
-    const baseUrl = getFrontendBaseUrl(request); return { link: asLink(link, baseUrl) };
+    const baseUrl = getFrontendBaseUrl(request);
+    return { link: asLink(link, baseUrl) };
   });
 
   app.get('/influencer/affiliate-links', async (request) => {

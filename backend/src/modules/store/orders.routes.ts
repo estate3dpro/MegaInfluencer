@@ -368,7 +368,9 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
               select: {
                 id: true,
                 creatorId: true,
+                commissionType: true,
                 commissionRate: true,
+                commissionAmount: true,
                 creator: { select: { id: true, creatorCode: true, role: true } },
               },
             });
@@ -388,7 +390,9 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
               select: {
                 id: true,
                 creatorId: true,
+                commissionType: true,
                 commissionRate: true,
+                commissionAmount: true,
                 creator: { select: { id: true, creatorCode: true, role: true } },
               },
             });
@@ -407,7 +411,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
               if (creator) {
                 link = await prisma.affiliateLink.findFirst({
                   where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
-                  select: { id: true, creatorId: true, commissionRate: true },
+                  select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
                 });
               }
             }
@@ -424,7 +428,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 trackedCreatorCode = creator.creatorCode;
                 link = await prisma.affiliateLink.findFirst({
                   where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
-                  select: { id: true, creatorId: true, commissionRate: true },
+                  select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
                 });
                 break;
               }
@@ -480,7 +484,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                 commissionRate: 10,
                 slug: `link_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
               },
-              select: { id: true, creatorId: true, commissionRate: true },
+              select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
             });
           }
 
@@ -495,14 +499,23 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             });
           }
 
-          if (link && creator && (compensationMode === 'BARTER' || Number(link.commissionRate ?? 0) > 0)) {
+          const hasCommission = link?.commissionType === 'FIXED_AMOUNT'
+            ? Number(link?.commissionAmount ?? 0) > 0
+            : Number(link?.commissionRate ?? 0) > 0;
+
+          if (link && creator && (compensationMode === 'BARTER' || hasCommission)) {
             const orderAmount = Number(d.total ?? 0);
             const isRefunded = d.financialStatus === 'REFUNDED' || d.financialStatus === 'refunded';
             const status = isRefunded ? 'REVERSED' : (isAutoCommission ? 'APPROVED' : 'PENDING');
             const commissionRate = compensationMode === 'BARTER' ? 0 : Number(link.commissionRate ?? 10);
             const matchedUserId = link.creatorId ?? creator.id;
 
-            let commAmount = (orderAmount * commissionRate) / 100;
+            let commAmount = 0;
+            if (link.commissionType === 'FIXED_AMOUNT') {
+              commAmount = Number(link.commissionAmount ?? 0);
+            } else {
+              commAmount = (orderAmount * commissionRate) / 100;
+            }
 
             if (compensationMode !== 'BARTER') {
               const storeConfig = await prisma.storeReferralConfig.findUnique({

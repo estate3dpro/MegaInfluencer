@@ -98,7 +98,9 @@ export type ProductDetails = {
     id: string;
     slug: string;
     url: string;
+    commissionType?: "PERCENTAGE" | "FIXED_AMOUNT";
     commissionRate: number;
+    commissionAmount?: number | null;
     status: "ACTIVE" | "PAUSED";
     expiresAt: string | null;
     createdAt: string;

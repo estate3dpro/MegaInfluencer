@@ -16,6 +16,7 @@ import {
   Link2,
   Megaphone,
   Package,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -57,6 +58,7 @@ import { toast } from "sonner";
 import { PlatformLinkGeneratorModal, type PlatformLinkItem } from "@/components/app/PlatformLinkGeneratorModal";
 import { createAffiliateLink, getAffiliateLinks, updateAffiliateLink } from "../api/affiliate-links.api";
 import { ReferralProgramSettingsModal } from "../components/ReferralProgramSettingsModal";
+import { EditAffiliateCommissionModal } from "../components/EditAffiliateCommissionModal";
 import {
   assignStoreCreator,
   bulkApproveCommissions,
@@ -1199,6 +1201,8 @@ export function AffiliatePage() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [platformModalOpen, setPlatformModalOpen] = useState(false);
   const [selectedPlatformLink, setSelectedPlatformLink] = useState<PlatformLinkItem | null>(null);
+  const [editCommissionModalOpen, setEditCommissionModalOpen] = useState(false);
+  const [selectedEditLink, setSelectedEditLink] = useState<any | null>(null);
   const [search, setSearch] = useState("");
   const [linkType, setLinkType] = useState<"CREATOR" | "STORE">("CREATOR");
   const [creatorId, setCreatorId] = useState("");
@@ -1303,6 +1307,11 @@ export function AffiliatePage() {
     setPlatformModalOpen(true);
   };
 
+  const handleOpenEditCommission = (link: any) => {
+    setSelectedEditLink(link);
+    setEditCommissionModalOpen(true);
+  };
+
   const allProducts = Array.isArray(productsQuery.data?.products) ? productsQuery.data.products : [];
   const filteredProducts = allProducts.filter((product: any) => String(product?.title ?? product?.name ?? "").toLowerCase().includes(productSearch.toLowerCase()));
 
@@ -1363,16 +1372,38 @@ export function AffiliatePage() {
                     <p className="text-[11px] text-muted-foreground truncate max-w-xs">{link.product || link.productTitle || link.collection || (link.targetType === "COLLECTION" ? "Custom product collection" : "Storewide Link")}</p>
                   </td>
                   <td className="px-5 py-3.5 font-medium">{link.creator || link.creatorName || "Storewide"}</td>
-                  <td className="px-5 py-3.5 font-semibold text-teal">
-                    {link.commissionType === "FIXED_AMOUNT"
-                      ? `₹${Number(link.commissionAmount ?? 0).toLocaleString()} (flat)`
-                      : `${link.commissionRate}%`}
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-teal">
+                        {link.commissionType === "FIXED_AMOUNT"
+                          ? `₹${Number(link.commissionAmount ?? 0).toLocaleString()} (flat)`
+                          : `${link.commissionRate}%`}
+                      </span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleOpenEditCommission(link)}
+                        className="h-6 w-6 text-muted-foreground hover:text-primary transition-colors"
+                        title="Edit commission"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </td>
                   <td className="px-5 py-3.5 text-center font-mono">{Number(link.clicks ?? 0).toLocaleString()}</td>
                   <td className="px-5 py-3.5 text-center font-mono font-bold">{Number(link.orders ?? 0)}</td>
                   <td className="px-5 py-3.5 text-right font-mono font-bold">{formatCurrency(Number(link.revenue ?? 0))}</td>
                   <td className="px-5 py-3.5 text-right pr-6">
                     <div className="flex justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenEditCommission(link)}
+                        className="h-7 px-2 text-xs font-semibold hover:border-primary hover:text-primary"
+                        title="Edit link commission"
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1 text-primary" /> Edit
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => handleCopyLink(link)} className="h-7 px-2 text-xs">
                         <Copy className="h-3.5 w-3.5 mr-1" /> Copy
                       </Button>
@@ -1616,6 +1647,12 @@ export function AffiliatePage() {
       </Dialog>
 
       <PlatformLinkGeneratorModal open={platformModalOpen} onOpenChange={setPlatformModalOpen} linkItem={selectedPlatformLink} />
+
+      <EditAffiliateCommissionModal
+        open={editCommissionModalOpen}
+        onOpenChange={setEditCommissionModalOpen}
+        link={selectedEditLink}
+      />
     </div>
   );
 }

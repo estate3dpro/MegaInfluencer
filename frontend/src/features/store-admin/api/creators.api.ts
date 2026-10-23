@@ -261,7 +261,9 @@ export type CreatorDetailsResponse = {
     targetType: string;
     product?: string | null;
     collection?: string | null;
+    commissionType?: "PERCENTAGE" | "FIXED_AMOUNT";
     commissionRate: number;
+    commissionAmount?: number | null;
     status: string;
     clicks: number;
     orders: number;

@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Check,
   Package,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -60,6 +61,7 @@ import {
   sendBarterSample,
   type CompensationMode,
 } from "@/features/store-admin/api/creators.api";
+import { EditAffiliateCommissionModal } from "@/features/store-admin/components/EditAffiliateCommissionModal";
 
 const money = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -79,6 +81,8 @@ function CreatorDetailPage() {
   const [sampleDialogOpen, setSampleDialogOpen] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const [editCommissionModalOpen, setEditCommissionModalOpen] = useState(false);
+  const [selectedEditLink, setSelectedEditLink] = useState<any | null>(null);
 
   // Search & selections for product assignment
   const [searchQuery, setSearchQuery] = useState("");
@@ -728,11 +732,12 @@ function CreatorDetailPage() {
                       <tr>
                         <th className="py-2.5 px-3 text-left">Destination</th>
                         <th className="py-2.5 px-3 text-left">Tracking URL</th>
-                        <th className="py-2.5 px-3 text-left">Rate</th>
+                        <th className="py-2.5 px-3 text-left">Commission</th>
                         <th className="py-2.5 px-3 text-center">Clicks</th>
                         <th className="py-2.5 px-3 text-center">Orders</th>
                         <th className="py-2.5 px-3 text-right">Revenue</th>
                         <th className="py-2.5 px-3 text-center">Status</th>
+                        <th className="py-2.5 px-3 text-right pr-4">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -761,8 +766,10 @@ function CreatorDetailPage() {
                               </Button>
                             </div>
                           </td>
-                          <td className="py-3 px-3 font-semibold">
-                            {link.commissionRate ? `${link.commissionRate}%` : "—"}
+                          <td className="py-3 px-3 font-semibold text-teal">
+                            {link.commissionType === "FIXED_AMOUNT"
+                              ? `₹${Number(link.commissionAmount ?? 0).toLocaleString()} (flat)`
+                              : link.commissionRate ? `${link.commissionRate}%` : "—"}
                           </td>
                           <td className="py-3 px-3 text-center font-semibold">
                             {link.clicks || 0}
@@ -777,6 +784,23 @@ function CreatorDetailPage() {
                             <Badge variant={link.status === "ACTIVE" ? "default" : "secondary"} className="text-[10px]">
                               {link.status}
                             </Badge>
+                          </td>
+                          <td className="py-3 px-3 text-right pr-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs font-semibold hover:border-primary hover:text-primary"
+                              onClick={() => {
+                                setSelectedEditLink({
+                                  ...link,
+                                  creator: creator.displayName,
+                                  creatorCode: creator.creatorCode,
+                                });
+                                setEditCommissionModalOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5 mr-1 text-primary" /> Edit
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -1300,6 +1324,15 @@ function CreatorDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditAffiliateCommissionModal
+        open={editCommissionModalOpen}
+        onOpenChange={setEditCommissionModalOpen}
+        link={selectedEditLink}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["store", "creator", creatorId] });
+        }}
+      />
     </div>
   );
 }

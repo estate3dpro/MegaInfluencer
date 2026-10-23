@@ -24,6 +24,7 @@ import {
   Tag,
   Building2,
   Share2,
+  Pencil,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,7 @@ import {
   unassignCreatorFromProduct,
   createProductAffiliateLink,
 } from "../api/products.api";
+import { EditAffiliateCommissionModal } from "../components/EditAffiliateCommissionModal";
 
 function formatMoney(amount: number | string | null | undefined, currency = "INR") {
   const num = Number(amount ?? 0);
@@ -71,6 +73,8 @@ export function ProductDetailsPage() {
 
   const [activeTab, setActiveTab] = useState<"influencers" | "links" | "orders" | "variants" | "media">("influencers");
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [editCommissionModalOpen, setEditCommissionModalOpen] = useState(false);
+  const [selectedEditLink, setSelectedEditLink] = useState<any | null>(null);
 
   // Dialog States
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -521,7 +525,9 @@ export function ProductDetailsPage() {
                               </td>
                               <td className="px-4 py-3.5">
                                 <Badge variant="secondary" className="font-mono text-xs">
-                                  {link.commissionRate}%
+                                  {link.commissionType === "FIXED_AMOUNT"
+                                    ? `₹${Number(link.commissionAmount ?? 0).toLocaleString()} (flat)`
+                                    : `${link.commissionRate}%`}
                                 </Badge>
                               </td>
                               <td className="px-4 py-3.5">
@@ -535,13 +541,32 @@ export function ProductDetailsPage() {
                                 </div>
                               </td>
                               <td className="px-4 py-3.5 text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleCopyLink(link.url, link.id)}
-                                >
-                                  {copiedLinkId === link.id ? "Copied" : "Copy Link"}
-                                </Button>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs font-semibold hover:border-primary hover:text-primary"
+                                    onClick={() => {
+                                      setSelectedEditLink({
+                                        ...link,
+                                        product: product.title,
+                                        creator: link.creator?.name,
+                                        creatorCode: link.creator?.creatorCode,
+                                      });
+                                      setEditCommissionModalOpen(true);
+                                    }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5 mr-1 text-primary" /> Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => handleCopyLink(link.url, link.id)}
+                                  >
+                                    {copiedLinkId === link.id ? "Copied" : "Copy Link"}
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -963,6 +988,15 @@ export function ProductDetailsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditAffiliateCommissionModal
+        open={editCommissionModalOpen}
+        onOpenChange={setEditCommissionModalOpen}
+        link={selectedEditLink}
+        onSuccess={() => {
+          refetch();
+        }}
+      />
     </div>
   );
 }
