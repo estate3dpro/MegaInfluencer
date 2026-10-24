@@ -46,6 +46,17 @@ export type StoreOrder = {
   } | null;
 };
 
+export type OrderAttributionAudit = {
+  id: string;
+  action: string;
+  actor: string;
+  fromCode?: string | null;
+  toCode?: string | null;
+  reason?: string | null;
+  metadata?: any;
+  createdAt: string;
+};
+
 export type OrderDetails = {
   id: string;
   shopifyId: string;
@@ -58,6 +69,13 @@ export type OrderDetails = {
   processedAt: string | null;
   creatorCode: string | null;
   shopDomain: string | null;
+  isAttributionLocked?: boolean;
+  attributionMethod?: string | null;
+  attributionLockedAt?: string | null;
+  attributionEvidence?: any;
+  tamperFlagged?: boolean;
+  tamperDetails?: any;
+  attributionAudits?: OrderAttributionAudit[];
   shippingAddress?: {
     firstName?: string;
     lastName?: string;
@@ -176,7 +194,7 @@ export async function syncStoreOrders() {
 
 export async function attributeStoreOrder(
   orderId: string,
-  payload: { creatorId?: string | null; commissionRate?: number }
+  payload: { creatorId?: string | null; commissionRate?: number; reason?: string }
 ) {
   return (
     await apiClient.post<{ ok: boolean; commission: any; creator: any }>(

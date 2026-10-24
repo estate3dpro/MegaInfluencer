@@ -30,6 +30,10 @@ import {
   UserCheck,
   UserX,
   Link2,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  History,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { PlatformBadge } from "@/components/app/PlatformBadge";
@@ -82,6 +86,7 @@ export function OrderDetailsPage() {
   const [isAttributionModalOpen, setIsAttributionModalOpen] = useState(false);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string>("none");
   const [customRate, setCustomRate] = useState<string>("10");
+  const [overrideReason, setOverrideReason] = useState<string>("");
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["store", "order", orderId],
@@ -107,11 +112,12 @@ export function OrderDetailsPage() {
   });
 
   const attributionMutation = useMutation({
-    mutationFn: (payload: { creatorId: string | null; commissionRate: number }) =>
+    mutationFn: (payload: { creatorId: string | null; commissionRate: number; reason?: string }) =>
       attributeStoreOrder(orderId, payload),
     onSuccess: (res) => {
       toast.success(res.creator ? `Order attributed to ${res.creator.displayName || "creator"}` : "Order creator attribution cleared");
       setIsAttributionModalOpen(false);
+      setOverrideReason("");
       void refetch();
       void queryClient.invalidateQueries({ queryKey: ["store", "orders"] });
       void queryClient.invalidateQueries({ queryKey: ["store", "commissions"] });
@@ -125,13 +131,14 @@ export function OrderDetailsPage() {
     const existingCreatorId = data?.order?.commission?.creator?.id;
     setSelectedCreatorId(existingCreatorId || "none");
     setCustomRate(String(data?.order?.commission?.rate || 10));
+    setOverrideReason("");
     setIsAttributionModalOpen(true);
   };
 
   const handleSaveAttribution = () => {
     const creatorId = selectedCreatorId === "none" ? null : selectedCreatorId;
     const rate = Math.max(0, Math.min(100, Number(customRate) || 10));
-    attributionMutation.mutate({ creatorId, commissionRate: rate });
+    attributionMutation.mutate({ creatorId, commissionRate: rate, reason: overrideReason || undefined });
   };
 
 
@@ -346,6 +353,20 @@ export function OrderDetailsPage() {
                 </p>
               </div>
             )}
+
+            <div className="space-y-2">
+              <Label htmlFor="override-reason">Reason for Override (Audit Log)</Label>
+              <Input
+                id="override-reason"
+                type="text"
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                placeholder="e.g. Customer verified they used Priya's code at checkout"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Recorded permanently in the immutable order attribution audit ledger.
+              </p>
+            </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -512,6 +533,48 @@ export function OrderDetailsPage() {
         </Card>
       ) : null}
 
+      {/* Attribution Tamper / Conflict Alert Banner */}
+      {order.tamperFlagged ? (
+        <Card className="border-amber-500/50 bg-amber-500/10 shadow-sm">
+          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-500/20 text-amber-700 shrink-0">
+                <ShieldAlert className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-foreground">
+                    Attribution Lock Protected: Shopify Modification Attempt Blocked
+                  </h4>
+                  <Badge variant="destructive" className="text-[10px] uppercase font-mono">
+                    Attempt Blocked
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  An external update from Shopify tried to re-attribute this order to{" "}
+                  <span className="font-semibold text-foreground">
+                    @{order.tamperDetails?.attemptedCreatorCode || "unknown"}
+                  </span>
+                  , but was blocked because this order's attribution was already sealed for{" "}
+                  <span className="font-semibold text-foreground">
+                    @{order.creatorCode || "original creator"}
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleOpenAttributionModal}
+              className="border-amber-500/40 text-amber-800 hover:bg-amber-500/20 shrink-0"
+            >
+              Review / Re-assign
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Main 2-Column Section */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left 2 Columns: Purchased Items & Marketing Attribution */}
@@ -610,10 +673,21 @@ export function OrderDetailsPage() {
           {/* Marketing & Creator Attribution Tracker */}
           <Card className="border-border/60 shadow-sm">
             <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-coral" />
-                <span>Marketing & Creator Attribution</span>
-              </CardTitle>
+              <div className="flex items-center gap-2.5">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-coral" />
+                  <span>Marketing & Creator Attribution</span>
+                </CardTitle>
+                {order.isAttributionLocked ? (
+                  <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 gap-1 text-[11px]">
+                    <ShieldCheck className="h-3 w-3" /> Sealed
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[11px] text-muted-foreground">
+                    Unlocked
+                  </Badge>
+                )}
+              </div>
               <Button
                 variant="outline"
                 size="sm"
@@ -715,6 +789,79 @@ export function OrderDetailsPage() {
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* Attribution Security & Audit Ledger */}
+              <div className="space-y-3 pt-3 border-t">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <History className="h-3.5 w-3.5 text-primary" />
+                    <span>Attribution Security & Audit Trail</span>
+                  </h4>
+                  {order.isAttributionLocked ? (
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 text-[11px] gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Sealed & Tamper Protected
+                    </Badge>
+                  ) : null}
+                </div>
+
+                {order.attributionAudits && order.attributionAudits.length > 0 ? (
+                  <div className="space-y-2">
+                    {order.attributionAudits.map((audit) => (
+                      <div
+                        key={audit.id}
+                        className={`rounded-lg border p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                          audit.action === "TAMPER_ATTEMPT_BLOCKED"
+                            ? "bg-amber-500/10 border-amber-500/30 text-amber-900"
+                            : "bg-muted/15"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          {audit.action === "TAMPER_ATTEMPT_BLOCKED" ? (
+                            <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                          ) : audit.action === "ADMIN_OVERRIDE" ? (
+                            <Edit3 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          ) : (
+                            <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-foreground">
+                                {audit.action === "INITIAL_LOCK"
+                                  ? "Attribution Sealed at Point-of-Sale"
+                                  : audit.action === "TAMPER_ATTEMPT_BLOCKED"
+                                  ? "Shopify Tamper Attempt Blocked"
+                                  : audit.action === "ADMIN_OVERRIDE"
+                                  ? "Store Owner Override"
+                                  : audit.action}
+                              </span>
+                              <Badge variant="outline" className="text-[10px] font-mono">
+                                {audit.actor}
+                              </Badge>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {audit.reason || (audit.action === "INITIAL_LOCK" ? "Attribution locked upon order creation" : "Attribution event recorded")}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground shrink-0 font-mono">
+                          {new Date(audit.createdAt).toLocaleString("en-IN", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">
+                    {order.isAttributionLocked
+                      ? "Attribution locked at creation time."
+                      : "No attribution audit events recorded yet."}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>

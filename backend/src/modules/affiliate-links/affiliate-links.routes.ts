@@ -1105,6 +1105,111 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
     const finalCreatorCode = trackedCreatorCode ?? link?.creator?.creatorCode ?? creator?.creatorCode ?? null;
     const finalLinkId = link?.id ?? null;
 
+    // Check if order already exists in our database and whether attribution is locked
+    const existingOrder = await prisma.shopifyOrder.findUnique({
+      where: {
+        organizationId_shopifyId: {
+          organizationId: organization.id,
+          shopifyId,
+        },
+      },
+      include: {
+        affiliateCommissions: true,
+      },
+    });
+
+    let effectiveCreatorCode = finalCreatorCode;
+    let effectiveLinkId = finalLinkId;
+    let effectiveLink = link;
+    let effectiveCreator = creator;
+    let isLocked = existingOrder?.isAttributionLocked ?? false;
+    let attributionMethod = existingOrder?.attributionMethod ?? null;
+    let attributionEvidence = existingOrder?.attributionEvidence ?? null;
+    let attributionLockedAt = existingOrder?.attributionLockedAt ?? null;
+    let tamperFlagged = existingOrder?.tamperFlagged ?? false;
+    let tamperDetails = existingOrder?.tamperDetails ?? null;
+
+    if (existingOrder && existingOrder.isAttributionLocked) {
+      // ORDER ATTRIBUTION IS LOCKED (Standard Enterprise Protection)
+      // Check if external webhook contains a conflicting creator code attempting to steal or reassign this order
+      const incomingDiffers = finalCreatorCode && finalCreatorCode.toLowerCase() !== String(existingOrder.creatorCode || '').toLowerCase();
+
+      if (incomingDiffers) {
+        tamperFlagged = true;
+        tamperDetails = {
+          attemptedCreatorCode: finalCreatorCode,
+          attemptedLinkId: finalLinkId,
+          lockedCreatorCode: existingOrder.creatorCode,
+          lockedLinkId: existingOrder.affiliateLinkId,
+          detectedAt: new Date().toISOString(),
+          eventTopic: eventKey || 'orders/updated',
+          reason: 'Incoming external Shopify update attempted to modify attribution for an already locked order.',
+        };
+
+        // Write immutable audit trail entry
+        await prisma.orderAttributionAudit.create({
+          data: {
+            organizationId: organization.id,
+            shopifyOrderId: existingOrder.id,
+            action: 'TAMPER_ATTEMPT_BLOCKED',
+            actor: 'WEBHOOK',
+            fromCode: existingOrder.creatorCode,
+            toCode: finalCreatorCode,
+            reason: `Blocked external Shopify update attempting to re-attribute locked order from @${existingOrder.creatorCode || 'None'} to @${finalCreatorCode}.`,
+            metadata: {
+              incomingDiscountCodes: discountCodes,
+              incomingNote: noteText,
+              incomingAttributes: rawAttributes,
+            },
+          },
+        }).catch((err: any) => app.log.warn({ err }, 'Failed to record attribution audit log'));
+
+        app.log.warn(
+          { shopifyId, lockedCode: existingOrder.creatorCode, attemptedCode: finalCreatorCode },
+          'Security Alert: Blocked external attempt to reassign locked order attribution.'
+        );
+      }
+
+      // Preserve the locked attribution!
+      effectiveCreatorCode = existingOrder.creatorCode;
+      effectiveLinkId = existingOrder.affiliateLinkId;
+
+      // Re-hydrate the locked link & creator so commission ledger stays with the legitimate owner
+      if (effectiveLinkId) {
+        effectiveLink = await prisma.affiliateLink.findUnique({
+          where: { id: effectiveLinkId },
+          include: { creator: true, products: { select: { product: { select: { shopifyId: true } } } }, collection: { select: { products: { select: { product: { select: { shopifyId: true } } } } } } },
+        });
+        if (effectiveLink?.creator) effectiveCreator = effectiveLink.creator;
+      } else if (effectiveCreatorCode) {
+        effectiveCreator = await prisma.user.findFirst({
+          where: { creatorCode: { equals: effectiveCreatorCode, mode: 'insensitive' } },
+        });
+        if (effectiveCreator && !effectiveLink) {
+          effectiveLink = await prisma.affiliateLink.findFirst({
+            where: { creatorId: effectiveCreator.id, organizationId: organization.id, status: 'ACTIVE' },
+          });
+        }
+      }
+    } else {
+      // Order is new or was not yet locked: Lock it upon first verified attribution!
+      if (finalCreatorCode || finalLinkId) {
+        isLocked = true;
+        attributionLockedAt = new Date();
+        attributionMethod = discountCodes.length > 0
+          ? 'DISCOUNT_CODE'
+          : (linkSlug ? 'AFFILIATE_LINK' : (trackedCreatorCode ? 'CHECKOUT_ATTRIBUTE' : 'CUSTOMER_JOURNEY'));
+        attributionEvidence = {
+          discountCodes,
+          linkSlug,
+          trackedCreatorCode,
+          landingUrl: landingUrl || null,
+          noteText: noteText || null,
+          lockedAt: attributionLockedAt.toISOString(),
+        };
+      }
+    }
+
     // Always upsert the Shopify Order in database so orders stay synced in real time
     const order = await prisma.shopifyOrder.upsert({
       where: {
@@ -1123,8 +1228,14 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         financialStatus,
         fulfillmentStatus,
         processedAt,
-        creatorCode: finalCreatorCode,
-        affiliateLinkId: finalLinkId,
+        creatorCode: effectiveCreatorCode,
+        affiliateLinkId: effectiveLinkId,
+        isAttributionLocked: isLocked,
+        attributionMethod,
+        attributionEvidence: attributionEvidence as Prisma.InputJsonValue,
+        attributionLockedAt,
+        tamperFlagged,
+        tamperDetails: tamperDetails as Prisma.InputJsonValue,
         payload: payload as Prisma.InputJsonValue,
       },
       update: {
@@ -1135,18 +1246,39 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         financialStatus,
         fulfillmentStatus,
         processedAt,
-        creatorCode: finalCreatorCode,
-        affiliateLinkId: finalLinkId,
+        creatorCode: effectiveCreatorCode,
+        affiliateLinkId: effectiveLinkId,
+        isAttributionLocked: isLocked,
+        attributionMethod,
+        attributionEvidence: attributionEvidence as Prisma.InputJsonValue,
+        attributionLockedAt,
+        tamperFlagged,
+        tamperDetails: tamperDetails as Prisma.InputJsonValue,
         payload: payload as Prisma.InputJsonValue,
       },
     });
 
+    if (!existingOrder && isLocked) {
+      await prisma.orderAttributionAudit.create({
+        data: {
+          organizationId: organization.id,
+          shopifyOrderId: order.id,
+          action: 'INITIAL_LOCK',
+          actor: 'SYSTEM_CHECKOUT',
+          toCreatorId: effectiveCreator?.id ?? null,
+          toCode: effectiveCreatorCode,
+          reason: `Attribution locked at point-of-sale via ${attributionMethod}.`,
+          metadata: attributionEvidence as Prisma.InputJsonValue,
+        },
+      }).catch((err: any) => app.log.warn({ err }, 'Failed to record initial attribution lock audit'));
+    }
+
     // Check if creator's active deal in this store is strictly BARTER or FIXED (no sales commission)
     let isBarterOrFixedOnly = false;
-    if (creator && creator.role === 'INFLUENCER') {
+    if (effectiveCreator && effectiveCreator.role === 'INFLUENCER') {
       const nonCommissionAssignment = await prisma.campaignAssignment.findFirst({
         where: {
-          influencerId: creator.id,
+          influencerId: effectiveCreator.id,
           status: 'ASSIGNED',
           campaign: {
             organizationId: organization.id,
@@ -1157,7 +1289,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       });
       const hasCommissionDeal = await prisma.campaignAssignment.findFirst({
         where: {
-          influencerId: creator.id,
+          influencerId: effectiveCreator.id,
           status: 'ASSIGNED',
           campaign: {
             organizationId: organization.id,
@@ -1176,41 +1308,41 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       String(financialStatus).toLowerCase() === 'refunded' ||
       String(financialStatus).toLowerCase() === 'voided'
     );
-    const assignment = creator ? await prisma.storeInfluencerAssignment.findUnique({
-      where: { organizationId_influencerId: { organizationId: organization.id, influencerId: creator.id } },
+    const assignment = effectiveCreator ? await prisma.storeInfluencerAssignment.findUnique({
+      where: { organizationId_influencerId: { organizationId: organization.id, influencerId: effectiveCreator.id } },
       select: { compensationMode: true, autoCommission: true },
     }) : null;
     const isAutoCommission = (assignment as any)?.autoCommission ?? true;
     const commissionStatus = isCancelledOrRefunded ? 'REVERSED' : (isAutoCommission ? 'APPROVED' : 'PENDING');
 
     // Auto-create affiliate link if creator is matched but has no link yet and NOT on Barter/Fixed deal
-    if (creator && !link && !isSampleOrder && !isBarterOrFixedOnly) {
-      link = await prisma.affiliateLink.create({
+    if (effectiveCreator && !effectiveLink && !isSampleOrder && !isBarterOrFixedOnly) {
+      effectiveLink = await prisma.affiliateLink.create({
         data: {
           organizationId: organization.id,
-          creatorId: creator.id,
+          creatorId: effectiveCreator.id,
           targetType: 'STORE',
           destinationPath: '/',
           commissionRate: 10,
-          slug: `link_${creator.creatorCode || creator.id.slice(-6)}_${Date.now().toString(36)}`,
+          slug: `link_${effectiveCreator.creatorCode || effectiveCreator.id.slice(-6)}_${Date.now().toString(36)}`,
         },
         select: { id: true, creatorId: true, commissionRate: true },
       });
       await prisma.shopifyOrder.update({
         where: { id: order.id },
-        data: { affiliateLinkId: link.id },
+        data: { affiliateLinkId: effectiveLink.id },
       });
     }
 
     // If attributed and not an internal sample or Barter/Fixed deal, upsert commission
-    const hasCommission = link?.commissionType === 'FIXED_AMOUNT'
-      ? Number(link?.commissionAmount ?? 0) > 0
-      : Number(link?.commissionRate ?? 0) > 0;
+    const hasCommission = effectiveLink?.commissionType === 'FIXED_AMOUNT'
+      ? Number(effectiveLink?.commissionAmount ?? 0) > 0
+      : Number(effectiveLink?.commissionRate ?? 0) > 0;
 
-    if (link && creator && !isSampleOrder && !isBarterOrFixedOnly && hasCommission) {
+    if (effectiveLink && effectiveCreator && !isSampleOrder && !isBarterOrFixedOnly && hasCommission) {
       const orderAmount = subtotal > 0 ? subtotal : Number(total || 0);
-      const rate = Number(link.commissionRate ?? 10);
-      const matchedUserId = link.creatorId ?? creator?.id;
+      const rate = Number(effectiveLink.commissionRate ?? 10);
+      const matchedUserId = effectiveLink.creatorId ?? effectiveCreator?.id;
 
       // Fetch Store Referral Config for multi-product commission calculation policy
       const storeConfig = await prisma.storeReferralConfig.findUnique({
@@ -1233,12 +1365,12 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         const cid = canonicalId(p.product?.shopifyId);
         if (cid) assignedProductSet.add(cid);
       }
-      if (link?.productId) {
-        const cid = canonicalId(link.productId);
+      if (effectiveLink?.productId) {
+        const cid = canonicalId(effectiveLink.productId);
         if (cid) assignedProductSet.add(cid);
       }
-      if (Array.isArray(link?.products)) {
-        for (const lp of link.products) {
+      if (Array.isArray(effectiveLink?.products)) {
+        for (const lp of effectiveLink.products) {
           const cid = canonicalId(lp.product?.shopifyId);
           if (cid) assignedProductSet.add(cid);
         }
@@ -1268,8 +1400,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
 
       // Calculate final commission based on commissionType and policy
       let amount = 0;
-      if (link.commissionType === 'FIXED_AMOUNT') {
-        amount = Number(link.commissionAmount ?? 0);
+      if (effectiveLink.commissionType === 'FIXED_AMOUNT') {
+        amount = Number(effectiveLink.commissionAmount ?? 0);
       } else if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
         amount = (assignedItemsTotal * rate) / 100;
       } else if (mode === 'GATE_REQUIRED') {
@@ -1287,23 +1419,23 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         where: { shopifyOrderId: order.id },
         create: {
           organizationId: organization.id,
-          linkId: link.id,
+          linkId: effectiveLink.id,
           creatorId: matchedUserId ?? null,
           shopifyOrderId: order.id,
           orderAmount,
-          commissionType: link.commissionType ?? 'PERCENTAGE',
-          commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : (link.commissionRate ?? 10),
+          commissionType: effectiveLink.commissionType ?? 'PERCENTAGE',
+          commissionRate: effectiveLink.commissionType === 'FIXED_AMOUNT' ? 0 : (effectiveLink.commissionRate ?? 10),
           amount,
           status: commissionStatus,
         },
         update: {
           // Reconciliation can identify a more specific link than an earlier
           // sync. Keep the ledger aligned with the order's actual mi_link.
-          linkId: link.id,
+          linkId: effectiveLink.id,
           creatorId: matchedUserId ?? null,
           orderAmount,
-          commissionType: link.commissionType ?? 'PERCENTAGE',
-          commissionRate: link.commissionType === 'FIXED_AMOUNT' ? 0 : (link.commissionRate ?? 10),
+          commissionType: effectiveLink.commissionType ?? 'PERCENTAGE',
+          commissionRate: effectiveLink.commissionType === 'FIXED_AMOUNT' ? 0 : (effectiveLink.commissionRate ?? 10),
           amount,
           status: commissionStatus,
         },

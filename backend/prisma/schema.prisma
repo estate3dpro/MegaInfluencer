@@ -380,6 +380,7 @@ model Organization {
   shopifyProducts             ShopifyProduct[]
   shopifyCollections          ShopifyCollection[]
   shopifyOrders               ShopifyOrder[]
+  orderAttributionAudits      OrderAttributionAudit[]
   affiliateLinks              AffiliateLink[]
   affiliateClicks             AffiliateLinkClick[]
   affiliateCommissions        AffiliateCommission[]
@@ -550,7 +551,7 @@ model ShopifyCollectionProduct {
 }
 
 model ShopifyOrder {
-  id                   String                @id @default(cuid())
+  id                   String                  @id @default(cuid())
   organizationId       String
   shopifyId            String
   name                 String
@@ -563,16 +564,45 @@ model ShopifyOrder {
   creatorCode          String?
   affiliateLinkId      String?
   payload              Json
-  syncedAt             DateTime              @updatedAt
-  createdAt            DateTime              @default(now())
-  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  affiliateLink        AffiliateLink?        @relation("AffiliateTrackedOrders", fields: [affiliateLinkId], references: [id], onDelete: SetNull)
+  isAttributionLocked  Boolean                 @default(false)
+  attributionMethod    String?                 // DISCOUNT_CODE, AFFILIATE_LINK, CUSTOMER_JOURNEY, MANUAL_OVERRIDE
+  attributionEvidence  Json?                   // Evidence captured at point of sale / lock
+  attributionLockedAt  DateTime?
+  tamperFlagged        Boolean                 @default(false)
+  tamperDetails        Json?                   // Details of any unauthorized attempts to modify attribution
+  syncedAt             DateTime                @updatedAt
+  createdAt            DateTime                @default(now())
+  organization         Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  affiliateLink        AffiliateLink?          @relation("AffiliateTrackedOrders", fields: [affiliateLinkId], references: [id], onDelete: SetNull)
   affiliateCommissions AffiliateCommission[]
+  attributionAudits    OrderAttributionAudit[]
 
   @@unique([organizationId, shopifyId])
   @@index([organizationId, syncedAt])
   @@index([organizationId, creatorCode])
   @@index([affiliateLinkId])
+  @@index([organizationId, tamperFlagged])
+}
+
+model OrderAttributionAudit {
+  id             String       @id @default(cuid())
+  organizationId String
+  shopifyOrderId String
+  action         String       // INITIAL_LOCK, TAMPER_ATTEMPT_BLOCKED, ADMIN_OVERRIDE, COMMISSION_REVERSED
+  actor          String       // SYSTEM_CHECKOUT, WEBHOOK, ADMIN:<userId>
+  fromCreatorId  String?
+  toCreatorId    String?
+  fromCode       String?
+  toCode         String?
+  reason         String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  shopifyOrder   ShopifyOrder @relation(fields: [shopifyOrderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, shopifyOrderId])
+  @@index([shopifyOrderId, createdAt])
 }
 
 model AffiliateLink {

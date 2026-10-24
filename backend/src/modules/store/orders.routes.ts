@@ -578,6 +578,83 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           const finalCreatorCode = trackedCreatorCode ?? link?.creator?.creatorCode ?? creator?.creatorCode ?? null;
           const finalLinkId = link?.id ?? null;
 
+          const existingOrder = await prisma.shopifyOrder.findUnique({
+            where: { organizationId_shopifyId: { organizationId: s.id, shopifyId: item.shopifyGid ?? raw.id } },
+          });
+
+          let effectiveCreatorCode = finalCreatorCode;
+          let effectiveLinkId = finalLinkId;
+          let isLocked = existingOrder?.isAttributionLocked ?? false;
+          let attributionMethod = existingOrder?.attributionMethod ?? null;
+          let attributionEvidence = existingOrder?.attributionEvidence ?? null;
+          let attributionLockedAt = existingOrder?.attributionLockedAt ?? null;
+          let tamperFlagged = existingOrder?.tamperFlagged ?? false;
+          let tamperDetails = existingOrder?.tamperDetails ?? null;
+
+          if (existingOrder && existingOrder.isAttributionLocked) {
+            // Enterprise standard: Locked attribution cannot be modified by external sync
+            const incomingDiffers = finalCreatorCode && finalCreatorCode.toLowerCase() !== String(existingOrder.creatorCode || '').toLowerCase();
+            if (incomingDiffers) {
+              tamperFlagged = true;
+              tamperDetails = {
+                attemptedCreatorCode: finalCreatorCode,
+                attemptedLinkId: finalLinkId,
+                lockedCreatorCode: existingOrder.creatorCode,
+                lockedLinkId: existingOrder.affiliateLinkId,
+                detectedAt: new Date().toISOString(),
+                eventTopic: 'orders/sync',
+                reason: 'Sync from Shopify contained conflicting attribution for locked order.',
+              };
+
+              await prisma.orderAttributionAudit.create({
+                data: {
+                  organizationId: s.id,
+                  shopifyOrderId: existingOrder.id,
+                  action: 'TAMPER_ATTEMPT_BLOCKED',
+                  actor: 'SYSTEM_SYNC',
+                  fromCode: existingOrder.creatorCode,
+                  toCode: finalCreatorCode,
+                  reason: `Blocked manual sync from modifying locked attribution from @${existingOrder.creatorCode || 'None'} to @${finalCreatorCode}.`,
+                },
+              }).catch(() => null);
+            }
+
+            effectiveCreatorCode = existingOrder.creatorCode;
+            effectiveLinkId = existingOrder.affiliateLinkId;
+            if (effectiveLinkId) {
+              const lockedLink = await prisma.affiliateLink.findUnique({
+                where: { id: effectiveLinkId },
+                include: { creator: true },
+              });
+              if (lockedLink?.creator) {
+                link = lockedLink;
+                creator = lockedLink.creator;
+              }
+            } else if (effectiveCreatorCode) {
+              const lockedCreator = await prisma.user.findFirst({
+                where: { creatorCode: { equals: effectiveCreatorCode, mode: 'insensitive' } },
+              });
+              if (lockedCreator) {
+                creator = lockedCreator;
+                link = await prisma.affiliateLink.findFirst({
+                  where: { creatorId: lockedCreator.id, organizationId: s.id, status: 'ACTIVE' },
+                });
+              }
+            }
+          } else {
+            if (finalCreatorCode || finalLinkId) {
+              isLocked = true;
+              attributionLockedAt = new Date();
+              attributionMethod = rawDiscountCodes.length > 0 ? 'DISCOUNT_CODE' : (linkSlug ? 'AFFILIATE_LINK' : 'SYNC_RESOLVED');
+              attributionEvidence = {
+                discountCodes: rawDiscountCodes,
+                linkSlug,
+                trackedCreatorCode,
+                lockedAt: attributionLockedAt.toISOString(),
+              };
+            }
+          }
+
           const d = {
             shopifyId: item.shopifyGid ?? raw.id,
             name: item.name ?? raw.name,
@@ -587,8 +664,14 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
             financialStatus: item.financialStatus ?? raw.displayFinancialStatus ?? null,
             fulfillmentStatus: raw.displayFulfillmentStatus ?? null,
             processedAt: item.shopifyCreatedAt ?? raw.processedAt ? new Date(item.shopifyCreatedAt ?? raw.processedAt) : null,
-            creatorCode: finalCreatorCode,
-            affiliateLinkId: finalLinkId,
+            creatorCode: effectiveCreatorCode,
+            affiliateLinkId: effectiveLinkId,
+            isAttributionLocked: isLocked,
+            attributionMethod,
+            attributionEvidence: attributionEvidence as Prisma.InputJsonValue,
+            attributionLockedAt,
+            tamperFlagged,
+            tamperDetails: tamperDetails as Prisma.InputJsonValue,
             payload: raw as Prisma.InputJsonValue,
           };
 
@@ -629,12 +712,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           }
 
           // Ensure order retains attributed affiliateLinkId and creatorCode
-          if (link?.id || finalCreatorCode) {
+          if (link?.id || effectiveCreatorCode) {
             await prisma.shopifyOrder.update({
               where: { id: order.id },
               data: {
-                affiliateLinkId: link?.id ?? finalLinkId,
-                creatorCode: finalCreatorCode ?? creator?.creatorCode ?? undefined,
+                affiliateLinkId: link?.id ?? effectiveLinkId,
+                creatorCode: effectiveCreatorCode ?? creator?.creatorCode ?? undefined,
               },
             });
           }
@@ -770,8 +853,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
     const { orderId } = req.params as { orderId: string };
 
     const order = await prisma.shopifyOrder.findFirst({
-      where: { id: orderId, organizationId: s.id, creatorCode: { not: null } },
+      where: { id: orderId, organizationId: s.id },
       include: {
+        attributionAudits: {
+          orderBy: { createdAt: 'desc' },
+          take: 25,
+        },
         affiliateCommissions: {
           include: {
             creator: {
@@ -851,6 +938,13 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         shippingAddress: raw.shippingAddress ?? raw.shipping_address ?? null,
         customer: raw.customer ?? { email: order.email },
         lineItems,
+        isAttributionLocked: order.isAttributionLocked,
+        attributionMethod: order.attributionMethod,
+        attributionLockedAt: order.attributionLockedAt,
+        attributionEvidence: order.attributionEvidence,
+        tamperFlagged: order.tamperFlagged,
+        tamperDetails: order.tamperDetails,
+        attributionAudits: order.attributionAudits ?? [],
         attribution: {
           creatorCode: order.creatorCode,
           linkSlug,
@@ -944,13 +1038,14 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
   const attributeOrderSchema = z.object({
     creatorId: z.string().nullable().optional(),
     commissionRate: z.number().min(0).max(999.99).optional(),
+    reason: z.string().max(500).optional(),
   });
 
   app.post('/store/orders/:orderId/attribute', async (req) => {
     const a = requireRole(req, ['STORE_OWNER']);
     const s = await storeFor(app, a.userId);
     const { orderId } = req.params as { orderId: string };
-    const { creatorId, commissionRate: customRate } = attributeOrderSchema.parse(req.body);
+    const { creatorId, commissionRate: customRate, reason } = attributeOrderSchema.parse(req.body);
 
     const order = await prisma.shopifyOrder.findFirst({
       where: { id: orderId, organizationId: s.id },
@@ -964,11 +1059,32 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
       // Remove attribution
       await prisma.shopifyOrder.update({
         where: { id: order.id },
-        data: { creatorCode: null },
+        data: {
+          creatorCode: null,
+          affiliateLinkId: null,
+          isAttributionLocked: false,
+          attributionMethod: null,
+          attributionEvidence: Prisma.DbNull,
+          attributionLockedAt: null,
+          tamperFlagged: false,
+          tamperDetails: Prisma.DbNull,
+        },
       });
       await prisma.affiliateCommission.deleteMany({
         where: { shopifyOrderId: order.id },
       });
+
+      await prisma.orderAttributionAudit.create({
+        data: {
+          organizationId: s.id,
+          shopifyOrderId: order.id,
+          action: 'ATTRIBUTION_REMOVED',
+          actor: `STORE_OWNER:${a.userId}`,
+          fromCode: order.creatorCode,
+          reason: reason || 'Attribution removed by store owner',
+        },
+      }).catch(() => null);
+
       return { ok: true, attributed: false };
     }
 
@@ -1020,8 +1136,29 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
 
     await prisma.shopifyOrder.update({
       where: { id: order.id },
-      data: { creatorCode: creator.creatorCode },
+      data: {
+        creatorCode: creator.creatorCode,
+        affiliateLinkId: link.id,
+        isAttributionLocked: true,
+        attributionMethod: 'MANUAL_OVERRIDE',
+        attributionLockedAt: new Date(),
+        tamperFlagged: false,
+        tamperDetails: Prisma.DbNull,
+      },
     });
+
+    await prisma.orderAttributionAudit.create({
+      data: {
+        organizationId: s.id,
+        shopifyOrderId: order.id,
+        action: 'ADMIN_OVERRIDE',
+        actor: `STORE_OWNER:${a.userId}`,
+        fromCode: order.creatorCode,
+        toCode: creator.creatorCode,
+        toCreatorId: creator.id,
+        reason: reason || 'Manual attribution reassignment by store owner',
+      },
+    }).catch(() => null);
 
     const commission = await prisma.affiliateCommission.upsert({
       where: { shopifyOrderId: order.id },
