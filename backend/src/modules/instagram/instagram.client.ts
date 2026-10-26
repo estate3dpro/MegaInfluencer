@@ -96,24 +96,48 @@ export async function getInstagramMedia(accessToken: string, limit: number) {
   return response.data;
 }
 
-export async function getInstagramProfile(accessToken: string) {
-  const profileUrl = new URL(`${graphUrl}/me`);
-  profileUrl.searchParams.set('fields', 'id,username,name,media_count');
-  profileUrl.searchParams.set('access_token', accessToken);
-  const profile = await parseResponse<InstagramProfile>(await fetch(profileUrl));
+const profileCache = new Map<string, { data: InstagramProfile; expiresAt: number }>();
 
-  // Follower/following counts are only available to eligible Meta app/account
-  // combinations. Keep the profile usable when Meta does not grant these fields.
-  const statisticsUrl = new URL(`${graphUrl}/me`);
-  statisticsUrl.searchParams.set('fields', 'followers_count,follows_count');
-  statisticsUrl.searchParams.set('access_token', accessToken);
+export async function getInstagramProfile(accessToken: string) {
+  const trimmedToken = (accessToken || '').trim();
+  if (!trimmedToken) return null;
+
+  const cached = profileCache.get(trimmedToken);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   try {
-    const statistics = await parseResponse<Pick<InstagramProfile, 'followers_count' | 'follows_count'>>(
-      await fetch(statisticsUrl),
+    const profileUrl = new URL(`${graphUrl}/me`);
+    profileUrl.searchParams.set('fields', 'id,username,name,media_count');
+    profileUrl.searchParams.set('access_token', trimmedToken);
+    const profile = await parseResponse<InstagramProfile>(
+      await fetch(profileUrl, { signal: AbortSignal.timeout(1500) })
     );
-    return { ...profile, ...statistics };
+
+    // Follower/following counts are only available to eligible Meta app/account
+    // combinations. Keep the profile usable when Meta does not grant these fields.
+    const statisticsUrl = new URL(`${graphUrl}/me`);
+    statisticsUrl.searchParams.set('fields', 'followers_count,follows_count');
+    statisticsUrl.searchParams.set('access_token', trimmedToken);
+    let fullProfile: InstagramProfile = profile;
+    try {
+      const statistics = await parseResponse<Pick<InstagramProfile, 'followers_count' | 'follows_count'>>(
+        await fetch(statisticsUrl, { signal: AbortSignal.timeout(1500) })
+      );
+      fullProfile = { ...profile, ...statistics };
+    } catch {
+      fullProfile = profile;
+    }
+
+    // Cache valid profile for 5 minutes
+    profileCache.set(trimmedToken, { data: fullProfile, expiresAt: now + 5 * 60 * 1000 });
+    return fullProfile;
   } catch {
-    return profile;
+    // If request fails or times out, return stale cache if available, else null
+    if (cached) return cached.data;
+    return null;
   }
 }
 

@@ -1065,13 +1065,50 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         creator = slugLink.creator;
         trackedCreatorCode = creator?.creatorCode ?? trackedCreatorCode;
       } else {
-        creator = await prisma.user.findFirst({
-          where: {
-            creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' },
-            role: { in: ['INFLUENCER', 'CUSTOMER'] },
-          },
-          select: { id: true, creatorCode: true, role: true },
-        });
+        // Prioritize creators assigned to this store first
+        if (organization) {
+          const assigned = await prisma.storeInfluencerAssignment.findMany({
+            where: { organizationId: organization.id },
+            include: {
+              influencer: {
+                select: {
+                  id: true,
+                  creatorCode: true,
+                  role: true,
+                  instagramConnection: { select: { username: true } },
+                  discountCodes: { where: { organizationId: organization.id }, select: { code: true } },
+                },
+              },
+            },
+          });
+          const cleanTracked = String(trackedCreatorCode).trim().toLowerCase();
+          for (const a of assigned) {
+            const inf = a.influencer;
+            if (!inf) continue;
+            const infCode = inf.creatorCode?.toLowerCase();
+            const baseCode = infCode?.replace(/_pro$/i, '').trim();
+            const insta = inf.instagramConnection?.username?.toLowerCase();
+            const customMatch = inf.discountCodes?.some((d: any) => d.code?.toLowerCase() === cleanTracked);
+            if (infCode === cleanTracked || baseCode === cleanTracked || insta === cleanTracked || customMatch) {
+              creator = inf;
+              break;
+            }
+          }
+        }
+
+        if (!creator) {
+          creator = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' } },
+                { instagramConnection: { username: { equals: trackedCreatorCode, mode: 'insensitive' } } },
+              ],
+              role: { in: ['INFLUENCER', 'CUSTOMER'] },
+            },
+            select: { id: true, creatorCode: true, role: true },
+          });
+        }
+
         if (creator) {
           link = await prisma.affiliateLink.findFirst({
             where: { creatorId: creator.id, organizationId: organization.id, status: 'ACTIVE' },
@@ -1083,16 +1120,67 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
 
     if (!link && discountCodes.length > 0) {
       for (const code of discountCodes) {
-        const matchedCreator = await prisma.user.findFirst({
-          where: {
-            creatorCode: { equals: code, mode: 'insensitive' },
-            role: { in: ['INFLUENCER', 'CUSTOMER'] },
-          },
-          select: { id: true, creatorCode: true, role: true },
-        });
+        const cleanCode = String(code).trim().toLowerCase();
+        let matchedCreator: any = null;
+
+        if (organization) {
+          const assigned = await prisma.storeInfluencerAssignment.findMany({
+            where: { organizationId: organization.id },
+            include: {
+              influencer: {
+                select: {
+                  id: true,
+                  creatorCode: true,
+                  role: true,
+                  instagramConnection: { select: { username: true } },
+                  discountCodes: { where: { organizationId: organization.id }, select: { code: true } },
+                },
+              },
+            },
+          });
+          for (const a of assigned) {
+            const inf = a.influencer;
+            if (!inf) continue;
+            const infCode = inf.creatorCode?.toLowerCase();
+            const baseCode = infCode?.replace(/_pro$/i, '').trim();
+            const insta = inf.instagramConnection?.username?.toLowerCase();
+            const customMatch = inf.discountCodes?.some((d: any) => d.code?.toLowerCase() === cleanCode);
+            if (infCode === cleanCode || baseCode === cleanCode || insta === cleanCode || customMatch) {
+              matchedCreator = inf;
+              break;
+            }
+          }
+        }
+
+        if (!matchedCreator) {
+          matchedCreator = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { creatorCode: { equals: code, mode: 'insensitive' } },
+                { instagramConnection: { username: { equals: code, mode: 'insensitive' } } },
+              ],
+              role: { in: ['INFLUENCER', 'CUSTOMER'] },
+            },
+            select: { id: true, creatorCode: true, role: true },
+          });
+        }
+
+        if (!matchedCreator && organization) {
+          const customDisc = await prisma.discountCode.findFirst({
+            where: {
+              organizationId: organization.id,
+              code: { equals: code, mode: 'insensitive' },
+            },
+            include: { creator: { select: { id: true, creatorCode: true, role: true } } },
+          });
+          if (customDisc?.creator) {
+            matchedCreator = customDisc.creator;
+          }
+        }
+
         if (matchedCreator) {
           creator = matchedCreator;
-          trackedCreatorCode = creator.creatorCode;
+          trackedCreatorCode = creator.creatorCode || code;
           link = await prisma.affiliateLink.findFirst({
             where: { creatorId: creator.id, organizationId: organization.id, status: 'ACTIVE' },
             select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
@@ -1326,7 +1414,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           commissionRate: 10,
           slug: `link_${effectiveCreator.creatorCode || effectiveCreator.id.slice(-6)}_${Date.now().toString(36)}`,
         },
-        select: { id: true, creatorId: true, commissionRate: true },
+        select: { id: true, creatorId: true, commissionRate: true, commissionType: true, commissionAmount: true },
       });
       await prisma.shopifyOrder.update({
         where: { id: order.id },
@@ -1344,13 +1432,22 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       const rate = Number(effectiveLink.commissionRate ?? 10);
       const matchedUserId = effectiveLink.creatorId ?? effectiveCreator?.id;
 
-      // Fetch Store Referral Config for multi-product commission calculation policy
+      // Fetch Store Referral Config for multi-product commission calculation policy and flat rupee rules
       const storeConfig = await prisma.storeReferralConfig.findUnique({
         where: { organizationId: organization.id },
-        select: { multiProductCommissionMode: true, fallbackCommissionRate: true },
+        select: {
+          multiProductCommissionMode: true,
+          fallbackCommissionRate: true,
+          fixedTokensEnabled: true,
+          percentageEnabled: true,
+          fixedTokensPerOrder: true,
+        },
       });
       const mode = storeConfig?.multiProductCommissionMode ?? 'STORE_WIDE';
       const fallbackRate = Number(storeConfig?.fallbackCommissionRate ?? 0);
+      const isFlatRupees = Boolean(storeConfig?.fixedTokensEnabled && !storeConfig?.percentageEnabled);
+      const isBoth = Boolean(storeConfig?.fixedTokensEnabled && storeConfig?.percentageEnabled);
+      const flatRateAmount = Number(storeConfig?.fixedTokensPerOrder ?? 50);
 
       // Helper to extract canonical Shopify product ID
       const canonicalId = (val: unknown) => String(val ?? '').split('/').pop();
@@ -1400,19 +1497,28 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
 
       // Calculate final commission based on commissionType and policy
       let amount = 0;
+      let effectiveCommissionType = effectiveLink.commissionType ?? 'PERCENTAGE';
       if (effectiveLink.commissionType === 'FIXED_AMOUNT') {
         amount = Number(effectiveLink.commissionAmount ?? 0);
-      } else if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
-        amount = (assignedItemsTotal * rate) / 100;
-      } else if (mode === 'GATE_REQUIRED') {
-        amount = hasAssignedProductInCart ? (orderAmount * rate) / 100 : 0;
-      } else if (mode === 'HYBRID_FALLBACK') {
-        const assignedComm = (assignedItemsTotal * rate) / 100;
-        const unassignedComm = (unassignedItemsTotal * fallbackRate) / 100;
-        amount = assignedComm + unassignedComm;
+      } else if (isFlatRupees) {
+        amount = flatRateAmount;
+        effectiveCommissionType = 'FLAT_RUPEES';
       } else {
-        // STORE_WIDE (Default)
-        amount = (orderAmount * rate) / 100;
+        let variableAmount = 0;
+        if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
+          variableAmount = (assignedItemsTotal * rate) / 100;
+        } else if (mode === 'GATE_REQUIRED') {
+          variableAmount = hasAssignedProductInCart ? (orderAmount * rate) / 100 : 0;
+        } else if (mode === 'HYBRID_FALLBACK') {
+          const assignedComm = (assignedItemsTotal * rate) / 100;
+          const unassignedComm = (unassignedItemsTotal * fallbackRate) / 100;
+          variableAmount = assignedComm + unassignedComm;
+        } else {
+          // STORE_WIDE (Default)
+          variableAmount = (orderAmount * rate) / 100;
+        }
+        amount = isBoth ? flatRateAmount + variableAmount : variableAmount;
+        if (isBoth) effectiveCommissionType = 'BOTH';
       }
 
       await prisma.affiliateCommission.upsert({
@@ -1423,20 +1529,18 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           creatorId: matchedUserId ?? null,
           shopifyOrderId: order.id,
           orderAmount,
-          commissionType: effectiveLink.commissionType ?? 'PERCENTAGE',
+          commissionType: effectiveCommissionType,
           commissionRate: effectiveLink.commissionType === 'FIXED_AMOUNT' ? 0 : (effectiveLink.commissionRate ?? 10),
-          amount,
+          amount: Math.round(amount * 100) / 100,
           status: commissionStatus,
         },
         update: {
-          // Reconciliation can identify a more specific link than an earlier
-          // sync. Keep the ledger aligned with the order's actual mi_link.
           linkId: effectiveLink.id,
           creatorId: matchedUserId ?? null,
           orderAmount,
-          commissionType: effectiveLink.commissionType ?? 'PERCENTAGE',
+          commissionType: effectiveCommissionType,
           commissionRate: effectiveLink.commissionType === 'FIXED_AMOUNT' ? 0 : (effectiveLink.commissionRate ?? 10),
-          amount,
+          amount: Math.round(amount * 100) / 100,
           status: commissionStatus,
         },
       });

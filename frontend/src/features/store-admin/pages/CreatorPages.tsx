@@ -75,6 +75,7 @@ import {
   updateCreatorCompensationMode,
   updateCreatorAutoCommission,
   updateCommissionStatus,
+  recalculateAllStoreCommissions,
   type CompensationMode,
   type CreateStoreCreatorInput,
   type StoreCreator,
@@ -175,8 +176,24 @@ export function CreatorsPage() {
   const [sampleAddress, setSampleAddress] = useState("");
 
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ["store", "creators"], queryFn: getStoreCreators });
+  const query = useQuery({
+    queryKey: ["store", "creators"],
+    queryFn: getStoreCreators,
+    staleTime: 5000,
+  });
   const creators = query.data ?? [];
+
+  const recalculateAllMutation = useMutation({
+    mutationFn: () => recalculateAllStoreCommissions(),
+    onSuccess: (data) => {
+      client.invalidateQueries({ queryKey: ["store", "creators"] });
+      client.invalidateQueries({ queryKey: ["store", "commissions"] });
+      toast.success(
+        `⚡ Commissions recalculated! Reconciled ${data.recalculatedCount} order commissions across all influencers.`
+      );
+    },
+    onError: () => toast.error("Could not recalculate commissions"),
+  });
 
   const settingsQuery = useQuery({
     queryKey: ["store", "creators", "settings"],
@@ -357,6 +374,20 @@ export function CreatorsPage() {
         description="Manage verified creator partnerships, set compensation models (Commission, Barter, Hybrid), and track sample shipments."
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 font-bold rounded-xl"
+              disabled={query.isFetching || recalculateAllMutation.isPending}
+              onClick={() => recalculateAllMutation.mutate()}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${
+                  query.isFetching || recalculateAllMutation.isPending ? "animate-spin text-primary" : ""
+                }`}
+              />
+              Recalculate All
+            </Button>
             <Button onClick={() => setPartnerModalOpen(true)} className="gap-1.5 font-bold rounded-xl" size="sm">
               <UserPlus className="h-4 w-4" /> Add / Create Creator
             </Button>

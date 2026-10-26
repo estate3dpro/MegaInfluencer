@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Clock,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ import {
   createManualCommission,
   sendBarterSample,
   updateCommissionStatus,
+  recalculateCreatorCommissions,
   type CompensationMode,
 } from "@/features/store-admin/api/creators.api";
 import { EditAffiliateCommissionModal } from "@/features/store-admin/components/EditAffiliateCommissionModal";
@@ -105,10 +107,26 @@ function CreatorDetailPage() {
   // Attributed customer orders search query
   const [orderSearchQuery, setOrderSearchQuery] = useState("");
 
-  // 1. Fetch Creator Detailed Info & Metrics
+  // 1. Fetch Creator Detailed Info & Metrics (fast 5s staleTime for quick updates)
   const creatorQuery = useQuery({
     queryKey: ["store", "creator", creatorId],
     queryFn: () => getStoreCreatorDetails(creatorId),
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // Mutation to instantly recalculate commissions for this creator
+  const recalculateMutation = useMutation({
+    mutationFn: () => recalculateCreatorCommissions(creatorId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["store", "creator", creatorId] });
+      queryClient.invalidateQueries({ queryKey: ["store", "creators"] });
+      queryClient.invalidateQueries({ queryKey: ["store", "commissions"] });
+      toast.success(`⚡ Recalculated & synced commissions for ${data.recalculatedCount} orders.`);
+    },
+    onError: () => {
+      toast.error("Failed to recalculate creator commissions.");
+    },
   });
 
   // 2. Fetch Creator Assigned Products
@@ -502,6 +520,32 @@ function CreatorDetailPage() {
 
             <Button size="sm" onClick={openAssignModal}>
               <Package className="mr-1.5 h-4 w-4" /> Assign Products
+            </Button>
+
+            {/* Quick Refresh Button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void creatorQuery.refetch()}
+              disabled={creatorQuery.isFetching}
+              className="h-9 text-xs font-semibold gap-1.5"
+              title="Refresh latest orders and commissions"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${creatorQuery.isFetching ? "animate-spin text-primary" : ""}`} />
+              Refresh
+            </Button>
+
+            {/* Recalculate Commissions Button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => recalculateMutation.mutate()}
+              disabled={recalculateMutation.isPending}
+              className="h-9 text-xs font-semibold gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+              title="Force re-calculate and reconcile all order commissions for this creator"
+            >
+              <Sparkles className={`h-3.5 w-3.5 ${recalculateMutation.isPending ? "animate-spin" : "text-amber-500"}`} />
+              {recalculateMutation.isPending ? "Calculating…" : "Recalculate"}
             </Button>
           </div>
         </div>

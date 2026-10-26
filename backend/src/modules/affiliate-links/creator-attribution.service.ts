@@ -10,7 +10,14 @@ export async function getCreatorAttributions(
   options: { scope?: string; from?: Date; to?: Date } = {},
 ) {
   const [creator, assignments, creatorLinks] = await Promise.all([
-    prisma.user.findUnique({ where: { id: creatorId }, select: { creatorCode: true } }),
+    prisma.user.findUnique({
+      where: { id: creatorId },
+      select: {
+        creatorCode: true,
+        instagramConnection: { select: { username: true } },
+        discountCodes: { select: { code: true } },
+      },
+    }),
     prisma.storeInfluencerAssignment.findMany({
       where: { influencerId: creatorId },
       select: { organizationId: true },
@@ -31,9 +38,23 @@ export async function getCreatorAttributions(
   const dateWhere = options.from || options.to
     ? { createdAt: { ...(options.from ? { gte: options.from } : {}), ...(options.to ? { lt: options.to } : {}) } }
     : {};
-  const codeOrderClause = creator?.creatorCode && permittedOrganizationIds.length
+
+  const recognizableCodes = new Set<string>();
+  if (creator?.creatorCode) {
+    recognizableCodes.add(creator.creatorCode.toLowerCase());
+    const base = creator.creatorCode.replace(/_pro$/i, '').trim();
+    if (base) recognizableCodes.add(base.toLowerCase());
+  }
+  if (creator?.instagramConnection?.username) {
+    recognizableCodes.add(creator.instagramConnection.username.toLowerCase());
+  }
+  for (const d of (creator as any)?.discountCodes ?? []) {
+    if (d.code) recognizableCodes.add(d.code.toLowerCase());
+  }
+
+  const codeOrderClause = recognizableCodes.size && permittedOrganizationIds.length
     ? [{
-        creatorCode: { equals: creator.creatorCode, mode: 'insensitive' },
+        creatorCode: { in: Array.from(recognizableCodes), mode: 'insensitive' },
         organizationId: { in: permittedOrganizationIds },
       }]
     : [];
@@ -43,7 +64,11 @@ export async function getCreatorAttributions(
       where: {
         ...scopeWhere,
         ...dateWhere,
-        OR: [{ affiliateLink: { creatorId } }, ...codeOrderClause],
+        OR: [
+          { affiliateLink: { creatorId } },
+          { affiliateCommissions: { some: { creatorId } } },
+          ...codeOrderClause,
+        ],
       },
       include: {
         organization: { select: { id: true, name: true, slug: true } },

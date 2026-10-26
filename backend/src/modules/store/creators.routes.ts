@@ -8,6 +8,7 @@ import { getInstagramProfile } from '../instagram/instagram.client.js';
 import { getAssignedProductIds, setCreatorProductAssignments } from '../product-assignments/product-assignments.service.js';
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 import { ensureCreatorCode } from '../../shared/creator-code.js';
+import { calculateOrderCommission, reconcileOrdersCommissions, reconcileStoreRosterCommissions } from './commission-calculator.js';
 
 const passwordOptions = {
   type: argon2.argon2id,
@@ -67,7 +68,11 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/store/creators', async (req) => {
     const actor = requireRole(req, ['STORE_OWNER']);
     const org = await organization(actor.userId);
-    const [rows, attributedOrders] = await Promise.all([
+
+    // Automatically reconcile all store orders & commissions for all influencers in roster
+    await reconcileStoreRosterCommissions(prisma, org.id);
+
+    const [rows, attributedOrders, customDiscounts] = await Promise.all([
       prisma.storeInfluencerAssignment.findMany({
         where: { organizationId: org.id },
         orderBy: { createdAt: 'desc' },
@@ -85,11 +90,11 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
               instagramConnection: { select: { username: true, displayName: true, status: true, encryptedAccessToken: true } },
               affiliateLinks: {
                 where: { organizationId: org.id },
-                select: { id: true, status: true, commissionRate: true },
+                select: { id: true, status: true, commissionRate: true, commissionType: true, commissionAmount: true },
               },
               affiliateCommissions: {
                 where: { organizationId: org.id },
-                select: { orderAmount: true, amount: true, status: true },
+                select: { orderAmount: true, amount: true, status: true, creatorId: true },
               },
               barterFulfillments: {
                 where: { organizationId: org.id },
@@ -119,17 +124,34 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           },
         },
       }),
+      prisma.discountCode.findMany({
+        where: { organizationId: org.id },
+        select: { creatorId: true, code: true },
+      }),
     ]);
 
     return {
       creators: await Promise.all(rows.map(async (row: any) => {
         const inf = row.influencer;
         const infLinkIds = new Set((inf.affiliateLinks ?? []).map((l: any) => l.id));
-        const creatorLowerCode = inf.creatorCode ? inf.creatorCode.toLowerCase() : null;
+        const creatorCodes = new Set<string>();
+        if (inf.creatorCode) {
+          creatorCodes.add(inf.creatorCode.toLowerCase());
+          const base = inf.creatorCode.replace(/_pro$/i, '').trim();
+          if (base) creatorCodes.add(base.toLowerCase());
+        }
+        if (inf.instagramConnection?.username) {
+          creatorCodes.add(inf.instagramConnection.username.toLowerCase());
+        }
+        for (const cd of customDiscounts) {
+          if (cd.creatorId === inf.id && cd.code) {
+            creatorCodes.add(cd.code.toLowerCase());
+          }
+        }
 
         const creatorOrders = attributedOrders.filter((o: any) => {
           if (o.affiliateCommissions?.some((c: any) => c.creatorId === inf.id)) return true;
-          if (creatorLowerCode && o.creatorCode && o.creatorCode.toLowerCase() === creatorLowerCode) return true;
+          if (o.creatorCode && creatorCodes.has(o.creatorCode.toLowerCase())) return true;
           if (o.affiliateLinkId && infLinkIds.has(o.affiliateLinkId)) return true;
           return false;
         });
@@ -139,11 +161,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
         const orderSales = creatorOrders.reduce((sum: number, o: any) => sum + Number(o.total || 0), 0);
         const totalSales = Math.max(commSales, orderSales);
 
-        let totalCommissions = commissions.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
-        if (totalCommissions === 0 && totalSales > 0) {
-          totalCommissions = (totalSales * 10) / 100;
-        }
-
+        const totalCommissions = commissions.reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0);
         const totalOrders = Math.max(commissions.length, creatorOrders.length);
         const activeLinks = (inf.affiliateLinks ?? []).filter((l: any) => l.status === 'ACTIVE').length;
 
@@ -969,15 +987,27 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     }
     if (!assignment) throw new AppError('CREATOR_NOT_FOUND', 'Creator is not assigned to this store.', 404);
 
-    let instagramStatistics = null;
-    if (assignment.influencer.instagramConnection?.status === 'ACTIVE') {
-      try {
-        instagramStatistics = await getInstagramProfile(decryptToken(assignment.influencer.instagramConnection.encryptedAccessToken));
-      } catch {
-        /* profile remains available */
-      }
-    }
-    const assignedProductIds = await getAssignedProductIds(prisma, creatorId, org.id);
+    // 1. Pre-fetch Store Referral Config, Custom Discounts, Assigned Products, and Instagram Statistics in parallel
+    const [storeConfig, customDiscounts, assignedProductIds, instagramStatistics] = await Promise.all([
+      prisma.storeReferralConfig.findUnique({
+        where: { organizationId: org.id },
+        select: {
+          multiProductCommissionMode: true,
+          fallbackCommissionRate: true,
+          fixedTokensEnabled: true,
+          percentageEnabled: true,
+          fixedTokensPerOrder: true,
+        },
+      }),
+      prisma.discountCode.findMany({
+        where: { organizationId: org.id, creatorId },
+        select: { code: true },
+      }),
+      getAssignedProductIds(prisma, creatorId, org.id),
+      assignment.influencer.instagramConnection?.status === 'ACTIVE'
+        ? getInstagramProfile(decryptToken(assignment.influencer.instagramConnection.encryptedAccessToken)).catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
     const inf = assignment.influencer;
     const rawLinks = inf.affiliateLinks ?? [];
@@ -1002,12 +1032,23 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       linkIds.push(defaultLink.id);
     }
 
-    // Find all Shopify orders for this store that match this creator
+    // Include creatorCode, base code, instagram handle, and all assigned discount codes
+    const creatorCodes = [
+      ...(inf.creatorCode ? [inf.creatorCode] : []),
+      ...customDiscounts.map((d: any) => d.code).filter(Boolean),
+    ];
+    if (inf.instagramConnection?.username) {
+      creatorCodes.push(inf.instagramConnection.username);
+    }
+    if (inf.creatorCode && /_pro$/i.test(inf.creatorCode)) {
+      creatorCodes.push(inf.creatorCode.replace(/_pro$/i, ''));
+    }
+
     const orderOrClauses: any[] = [
       { affiliateCommissions: { some: { creatorId: inf.id, organizationId: org.id } } },
     ];
-    if (inf.creatorCode) {
-      orderOrClauses.push({ creatorCode: { equals: inf.creatorCode, mode: 'insensitive' } });
+    for (const code of creatorCodes) {
+      orderOrClauses.push({ creatorCode: { equals: code, mode: 'insensitive' } });
     }
     if (linkIds.length > 0) {
       orderOrClauses.push({ affiliateLinkId: { in: linkIds } });
@@ -1032,44 +1073,22 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
       orderBy: { processedAt: 'desc' },
     });
 
-    // Auto-create/backfill affiliateCommission records for attributed orders that don't have one yet
-    for (const order of shopifyOrders) {
-      if (!order.affiliateCommissions || order.affiliateCommissions.length === 0) {
-        const orderAmount = Number(order.total || 0);
-        const linkToUse = order.affiliateLink || defaultLink;
-        const commissionRate = Number(linkToUse?.commissionRate || 10);
-        const commAmount = (orderAmount * commissionRate) / 100;
-        const initialStatus = (assignment as any).autoCommission === false ? 'PENDING' : 'APPROVED';
+    const isBarter = (assignment as any).compensationMode === 'BARTER';
+    const autoCommission = (assignment as any).autoCommission ?? true;
+    const assignedProductSet = new Set<string>(assignedProductIds);
 
-        try {
-          const newComm = await prisma.affiliateCommission.create({
-            data: {
-              organizationId: org.id,
-              linkId: linkToUse.id,
-              creatorId: inf.id,
-              shopifyOrderId: order.id,
-              orderAmount,
-              commissionType: 'PERCENTAGE',
-              commissionRate,
-              amount: commAmount,
-              status: initialStatus,
-            },
-            include: {
-              link: { select: { slug: true, commissionRate: true } },
-            },
-          });
-          order.affiliateCommissions = [newComm];
-        } catch {
-          const existingComm = await prisma.affiliateCommission.findUnique({
-            where: { shopifyOrderId: order.id },
-            include: { link: { select: { slug: true, commissionRate: true } } },
-          });
-          if (existingComm) {
-            order.affiliateCommissions = [existingComm];
-          }
-        }
-      }
-    }
+    // High-performance batch reconciliation: calculates commission for any order missing one immediately
+    await reconcileOrdersCommissions(
+      prisma,
+      org.id,
+      inf.id,
+      shopifyOrders,
+      defaultLink,
+      storeConfig,
+      assignedProductSet,
+      autoCommission,
+      isBarter
+    );
 
     const totalOrders = shopifyOrders.length;
     const totalSales = shopifyOrders.reduce((sum: number, o: any) => sum + Number(o.total || 0), 0);
@@ -1193,5 +1212,132 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
     if (!Array.isArray(productIds)) throw new AppError('INVALID_INPUT', 'productIds must be an array', 400);
     const assignedProductIds = await setCreatorProductAssignments(prisma, org.id, creatorId, productIds);
     return { ok: true, assignedProductIds };
+  });
+
+  // POST /store/creators/:creatorId/recalculate - Force re-calculate commissions for all orders of this creator
+  app.post('/store/creators/:creatorId/recalculate', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const { creatorId } = req.params as { creatorId: string };
+
+    const assignment = await prisma.storeInfluencerAssignment.findFirst({
+      where: { organizationId: org.id, influencerId: creatorId },
+      include: {
+        influencer: {
+          include: {
+            affiliateLinks: { where: { organizationId: org.id } },
+          },
+        },
+      },
+    });
+
+    if (!assignment) throw new AppError('CREATOR_NOT_FOUND', 'Creator is not assigned to this store.', 404);
+
+    const inf = assignment.influencer;
+    const rawLinks = inf.affiliateLinks ?? [];
+    const linkIds = rawLinks.map((l: any) => l.id);
+    const defaultLink = rawLinks.find((l: any) => l.targetType === 'STORE' && l.status === 'ACTIVE') || rawLinks[0];
+
+    const [storeConfig, customDiscounts, assignedProductIds] = await Promise.all([
+      prisma.storeReferralConfig.findUnique({
+        where: { organizationId: org.id },
+        select: {
+          multiProductCommissionMode: true,
+          fallbackCommissionRate: true,
+          fixedTokensEnabled: true,
+          percentageEnabled: true,
+          fixedTokensPerOrder: true,
+        },
+      }),
+      prisma.discountCode.findMany({
+        where: { organizationId: org.id, creatorId },
+        select: { code: true },
+      }),
+      getAssignedProductIds(prisma, creatorId, org.id),
+    ]);
+
+    const creatorCodes = [
+      ...(inf.creatorCode ? [inf.creatorCode] : []),
+      ...customDiscounts.map((d: any) => d.code).filter(Boolean),
+    ];
+    if (inf.instagramConnection?.username) {
+      creatorCodes.push(inf.instagramConnection.username);
+    }
+    if (inf.creatorCode && /_pro$/i.test(inf.creatorCode)) {
+      creatorCodes.push(inf.creatorCode.replace(/_pro$/i, ''));
+    }
+
+    const orderOrClauses: any[] = [
+      { affiliateCommissions: { some: { creatorId: inf.id, organizationId: org.id } } },
+    ];
+    for (const code of creatorCodes) {
+      orderOrClauses.push({ creatorCode: { equals: code, mode: 'insensitive' } });
+    }
+    if (linkIds.length > 0) {
+      orderOrClauses.push({ affiliateLinkId: { in: linkIds } });
+    }
+
+    const shopifyOrders = await prisma.shopifyOrder.findMany({
+      where: { organizationId: org.id, OR: orderOrClauses },
+      include: {
+        affiliateCommissions: { where: { organizationId: org.id } },
+        affiliateLink: true,
+      },
+      orderBy: { processedAt: 'desc' },
+    });
+
+    const isBarter = (assignment as any).compensationMode === 'BARTER';
+    const autoCommission = (assignment as any).autoCommission ?? true;
+    const assignedProductSet = new Set<string>(assignedProductIds);
+
+    let recalculatedCount = 0;
+    await Promise.all(
+      shopifyOrders.map(async (order: any) => {
+        const linkToUse = order.affiliateLink || defaultLink;
+        if (!linkToUse?.id) return;
+
+        const calc = calculateOrderCommission(
+          order,
+          linkToUse,
+          storeConfig,
+          assignedProductSet,
+          autoCommission,
+          isBarter
+        );
+
+        await prisma.affiliateCommission.upsert({
+          where: { shopifyOrderId: order.id },
+          create: {
+            organizationId: org.id,
+            linkId: linkToUse.id,
+            creatorId: inf.id,
+            shopifyOrderId: order.id,
+            orderAmount: Number(order.total || 0),
+            commissionType: calc.commissionType,
+            commissionRate: calc.commissionRate,
+            amount: calc.amount,
+            status: calc.status,
+          },
+          update: {
+            amount: calc.amount,
+            commissionRate: calc.commissionRate,
+            commissionType: calc.commissionType,
+            linkId: linkToUse.id,
+            creatorId: inf.id,
+          },
+        });
+        recalculatedCount++;
+      })
+    );
+
+    return { ok: true, recalculatedCount, totalOrders: shopifyOrders.length };
+  });
+
+  // POST /store/creators/recalculate - Force recalculate commissions for all creators in the store roster
+  app.post('/store/creators/recalculate', async (req) => {
+    const actor = requireRole(req, ['STORE_OWNER']);
+    const org = await organization(actor.userId);
+    const result = await reconcileStoreRosterCommissions(prisma, org.id, { forceRecalculate: true });
+    return { ok: true, recalculatedCount: result.reconciledCount };
   });
 };

@@ -416,9 +416,12 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
 
     do {
       const p = await fetchOrderPage(s, after);
-      await Promise.all(
-        p.items.map(async (item: Node) => {
-          const raw = item.raw ?? item;
+      const chunkSize = 10;
+      for (let i = 0; i < p.items.length; i += chunkSize) {
+        const chunk = p.items.slice(i, i + chunkSize);
+        await Promise.all(
+          chunk.map(async (item: Node) => {
+            const raw = item.raw ?? item;
           const total = raw.totalPriceSet?.shopMoney;
           const orderAttributes = raw.customAttributes ?? item.customAttributes ?? raw.note_attributes ?? [];
           const lineItems = raw.lineItems?.nodes ?? raw.lineItems ?? item.lineItems ?? [];
@@ -541,13 +544,48 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
               creator = slugLink.creator;
               trackedCreatorCode = creator?.creatorCode ?? trackedCreatorCode;
             } else {
-              creator = await prisma.user.findFirst({
-                where: {
-                  creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' },
-                  role: { in: ['INFLUENCER', 'CUSTOMER'] },
+              // Prioritize creators assigned to this store first
+              const assigned = await prisma.storeInfluencerAssignment.findMany({
+                where: { organizationId: s.id },
+                include: {
+                  influencer: {
+                    select: {
+                      id: true,
+                      creatorCode: true,
+                      role: true,
+                      instagramConnection: { select: { username: true } },
+                      discountCodes: { where: { organizationId: s.id }, select: { code: true } },
+                    },
+                  },
                 },
-                select: { id: true, creatorCode: true, role: true },
               });
+              const cleanTracked = String(trackedCreatorCode).trim().toLowerCase();
+              for (const a of assigned) {
+                const inf = a.influencer;
+                if (!inf) continue;
+                const infCode = inf.creatorCode?.toLowerCase();
+                const baseCode = infCode?.replace(/_pro$/i, '').trim();
+                const insta = inf.instagramConnection?.username?.toLowerCase();
+                const customMatch = inf.discountCodes?.some((d: any) => d.code?.toLowerCase() === cleanTracked);
+                if (infCode === cleanTracked || baseCode === cleanTracked || insta === cleanTracked || customMatch) {
+                  creator = inf;
+                  break;
+                }
+              }
+
+              if (!creator) {
+                creator = await prisma.user.findFirst({
+                  where: {
+                    OR: [
+                      { creatorCode: { equals: trackedCreatorCode, mode: 'insensitive' } },
+                      { instagramConnection: { username: { equals: trackedCreatorCode, mode: 'insensitive' } } },
+                    ],
+                    role: { in: ['INFLUENCER', 'CUSTOMER'] },
+                  },
+                  select: { id: true, creatorCode: true, role: true },
+                });
+              }
+
               if (creator) {
                 link = await prisma.affiliateLink.findFirst({
                   where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
@@ -559,13 +597,65 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
 
           if (!link && rawDiscountCodes.length > 0) {
             for (const code of rawDiscountCodes) {
-              const matchedCreator = await prisma.user.findFirst({
-                where: { creatorCode: { equals: code, mode: 'insensitive' }, role: { in: ['INFLUENCER', 'CUSTOMER'] } },
-                select: { id: true, creatorCode: true, role: true },
+              const cleanCode = String(code).trim().toLowerCase();
+              let matchedCreator: any = null;
+
+              const assigned = await prisma.storeInfluencerAssignment.findMany({
+                where: { organizationId: s.id },
+                include: {
+                  influencer: {
+                    select: {
+                      id: true,
+                      creatorCode: true,
+                      role: true,
+                      instagramConnection: { select: { username: true } },
+                      discountCodes: { where: { organizationId: s.id }, select: { code: true } },
+                    },
+                  },
+                },
               });
+              for (const a of assigned) {
+                const inf = a.influencer;
+                if (!inf) continue;
+                const infCode = inf.creatorCode?.toLowerCase();
+                const baseCode = infCode?.replace(/_pro$/i, '').trim();
+                const insta = inf.instagramConnection?.username?.toLowerCase();
+                const customMatch = inf.discountCodes?.some((d: any) => d.code?.toLowerCase() === cleanCode);
+                if (infCode === cleanCode || baseCode === cleanCode || insta === cleanCode || customMatch) {
+                  matchedCreator = inf;
+                  break;
+                }
+              }
+
+              if (!matchedCreator) {
+                matchedCreator = await prisma.user.findFirst({
+                  where: {
+                    OR: [
+                      { creatorCode: { equals: code, mode: 'insensitive' } },
+                      { instagramConnection: { username: { equals: code, mode: 'insensitive' } } },
+                    ],
+                    role: { in: ['INFLUENCER', 'CUSTOMER'] },
+                  },
+                  select: { id: true, creatorCode: true, role: true },
+                });
+              }
+
+              if (!matchedCreator) {
+                const customDisc = await prisma.discountCode.findFirst({
+                  where: {
+                    organizationId: s.id,
+                    code: { equals: code, mode: 'insensitive' },
+                  },
+                  include: { creator: { select: { id: true, creatorCode: true, role: true } } },
+                });
+                if (customDisc?.creator) {
+                  matchedCreator = customDisc.creator;
+                }
+              }
+
               if (matchedCreator) {
                 creator = matchedCreator;
-                trackedCreatorCode = creator.creatorCode;
+                trackedCreatorCode = creator.creatorCode || code;
                 link = await prisma.affiliateLink.findFirst({
                   where: { creatorId: creator.id, organizationId: s.id, status: 'ACTIVE' },
                   select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
@@ -839,6 +929,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
           }
         })
       );
+      }
       synced += p.items.length;
       after = p.pageInfo.hasNextPage ? p.pageInfo.endCursor : null;
     } while (after);

@@ -361,3 +361,21 @@ export async function updateCreatorAssignedProducts(creatorId: string, productId
   return { ok: true, assignedCount: res.assignedProductIds?.length ?? 0 };
 }
 
+export async function recalculateCreatorCommissions(creatorId: string) {
+  return (
+    await apiClient.post<{ ok: boolean; recalculatedCount: number; totalOrders: number }>(
+      `/store/creators/${creatorId}/recalculate`
+    )
+  ).data;
+}
+
+export async function recalculateAllStoreCommissions() {
+  return (
+    await apiClient.post<{ ok: boolean; recalculatedCount: number }>(
+      "/store/creators/recalculate"
+    )
+  ).data;
+}
+
+
+
