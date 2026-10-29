@@ -9,6 +9,7 @@ import { ensureCreatorCode } from '../../shared/creator-code.js';
 import { getFrontendBaseUrl } from '../../shared/helpers/frontend-url.js';
 import { buildDirectStoreUrl } from '../../shared/helpers/affiliate-url.js';
 import { getCreatorAttributions } from './creator-attribution.service.js';
+import { calculateOrderCommission } from '../store/commission-calculator.js';
 
 const createLinkSchema = z.object({
   creatorId: z.string().min(1).optional().nullable(), productId: z.string().min(1).optional().nullable(),
@@ -1270,12 +1271,21 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         });
         if (effectiveLink?.creator) effectiveCreator = effectiveLink.creator;
       } else if (effectiveCreatorCode) {
+        const cleanLockedCode = String(effectiveCreatorCode).trim().replace(/^@/, '');
         effectiveCreator = await prisma.user.findFirst({
-          where: { creatorCode: { equals: effectiveCreatorCode, mode: 'insensitive' } },
+          where: {
+            OR: [
+              { creatorCode: { equals: cleanLockedCode, mode: 'insensitive' } },
+              { creatorCode: { equals: `@${cleanLockedCode}`, mode: 'insensitive' } },
+              { instagramConnection: { username: { equals: cleanLockedCode, mode: 'insensitive' } } },
+              { discountCodes: { some: { organizationId: organization.id, code: { equals: cleanLockedCode, mode: 'insensitive' } } } },
+            ],
+          },
         });
         if (effectiveCreator && !effectiveLink) {
           effectiveLink = await prisma.affiliateLink.findFirst({
             where: { creatorId: effectiveCreator.id, organizationId: organization.id, status: 'ACTIVE' },
+            select: { id: true, creatorId: true, commissionType: true, commissionRate: true, commissionAmount: true },
           });
         }
       }
@@ -1361,50 +1371,22 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       }).catch((err: any) => app.log.warn({ err }, 'Failed to record initial attribution lock audit'));
     }
 
-    // Check if creator's active deal in this store is strictly BARTER or FIXED (no sales commission)
-    let isBarterOrFixedOnly = false;
-    if (effectiveCreator && effectiveCreator.role === 'INFLUENCER') {
-      const nonCommissionAssignment = await prisma.campaignAssignment.findFirst({
-        where: {
-          influencerId: effectiveCreator.id,
-          status: 'ASSIGNED',
-          campaign: {
-            organizationId: organization.id,
-            compensationType: { in: ['BARTER', 'FIXED', 'barter', 'fixed'] },
-            deletedAt: null,
-          },
-        },
-      });
-      const hasCommissionDeal = await prisma.campaignAssignment.findFirst({
-        where: {
-          influencerId: effectiveCreator.id,
-          status: 'ASSIGNED',
-          campaign: {
-            organizationId: organization.id,
-            compensationType: { in: ['COMMISSION', 'HYBRID', 'commission', 'hybrid'] },
-            deletedAt: null,
-          },
-        },
-      });
-      if (nonCommissionAssignment && !hasCommissionDeal) {
-        isBarterOrFixedOnly = true;
-      }
-    }
-
     const isCancelledOrRefunded = Boolean(
       payload.cancelled_at ||
       String(financialStatus).toLowerCase() === 'refunded' ||
       String(financialStatus).toLowerCase() === 'voided'
     );
+
     const assignment = effectiveCreator ? await prisma.storeInfluencerAssignment.findUnique({
       where: { organizationId_influencerId: { organizationId: organization.id, influencerId: effectiveCreator.id } },
       select: { compensationMode: true, autoCommission: true },
     }) : null;
+    const isBarter = assignment?.compensationMode === 'BARTER';
     const isAutoCommission = (assignment as any)?.autoCommission ?? true;
-    const commissionStatus = isCancelledOrRefunded ? 'REVERSED' : (isAutoCommission ? 'APPROVED' : 'PENDING');
 
-    // Auto-create affiliate link if creator is matched but has no link yet and NOT on Barter/Fixed deal
-    if (effectiveCreator && !effectiveLink && !isSampleOrder && !isBarterOrFixedOnly) {
+    // Auto-create affiliate link if creator is matched but has no link yet and NOT on Barter deal
+    if (effectiveCreator && !effectiveLink && !isSampleOrder && !isBarter) {
+      const cleanCreatorSlug = (effectiveCreator.creatorCode || effectiveCreator.id.slice(-6)).toLowerCase().replace(/^@/, '');
       effectiveLink = await prisma.affiliateLink.create({
         data: {
           organizationId: organization.id,
@@ -1412,7 +1394,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           targetType: 'STORE',
           destinationPath: '/',
           commissionRate: 10,
-          slug: `link_${effectiveCreator.creatorCode || effectiveCreator.id.slice(-6)}_${Date.now().toString(36)}`,
+          slug: `link_${cleanCreatorSlug}_${Date.now().toString(36).slice(-4)}`,
         },
         select: { id: true, creatorId: true, commissionRate: true, commissionType: true, commissionAmount: true },
       });
@@ -1422,17 +1404,8 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
       });
     }
 
-    // If attributed and not an internal sample or Barter/Fixed deal, upsert commission
-    const hasCommission = effectiveLink?.commissionType === 'FIXED_AMOUNT'
-      ? Number(effectiveLink?.commissionAmount ?? 0) > 0
-      : Number(effectiveLink?.commissionRate ?? 0) > 0;
-
-    if (effectiveLink && effectiveCreator && !isSampleOrder && !isBarterOrFixedOnly && hasCommission) {
-      const orderAmount = subtotal > 0 ? subtotal : Number(total || 0);
-      const rate = Number(effectiveLink.commissionRate ?? 10);
-      const matchedUserId = effectiveLink.creatorId ?? effectiveCreator?.id;
-
-      // Fetch Store Referral Config for multi-product commission calculation policy and flat rupee rules
+    // Calculate commission using centralized engine
+    if (effectiveLink && effectiveCreator && !isSampleOrder) {
       const storeConfig = await prisma.storeReferralConfig.findUnique({
         where: { organizationId: organization.id },
         select: {
@@ -1443,20 +1416,12 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           fixedTokensPerOrder: true,
         },
       });
-      const mode = storeConfig?.multiProductCommissionMode ?? 'STORE_WIDE';
-      const fallbackRate = Number(storeConfig?.fallbackCommissionRate ?? 0);
-      const isFlatRupees = Boolean(storeConfig?.fixedTokensEnabled && !storeConfig?.percentageEnabled);
-      const isBoth = Boolean(storeConfig?.fixedTokensEnabled && storeConfig?.percentageEnabled);
-      const flatRateAmount = Number(storeConfig?.fixedTokensPerOrder ?? 50);
 
-      // Helper to extract canonical Shopify product ID
-      const canonicalId = (val: unknown) => String(val ?? '').split('/').pop();
-
-      // Gather assigned product IDs for this creator in this store
       const assignedProductRows = await prisma.productInfluencerAssignment.findMany({
-        where: { organizationId: organization.id, influencerId: matchedUserId },
+        where: { organizationId: organization.id, influencerId: effectiveCreator.id },
         select: { product: { select: { shopifyId: true } } },
       });
+      const canonicalId = (val: unknown) => String(val ?? '').split('/').pop() || '';
       const assignedProductSet = new Set<string>();
       for (const p of assignedProductRows) {
         const cid = canonicalId(p.product?.shopifyId);
@@ -1473,81 +1438,38 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
         }
       }
 
-      // Calculate line item totals
-      let assignedItemsTotal = 0;
-      let unassignedItemsTotal = 0;
-      let hasAssignedProductInCart = false;
-
-      // If no specific products assigned to creator, treat all store products as assigned
-      const hasSpecificAssignments = assignedProductSet.size > 0;
-
-      for (const item of lineItems) {
-        const itemProdId = canonicalId(item.product_id ?? item.productId ?? item.product?.id);
-        const price = Number(item.price ?? 0);
-        const quantity = Number(item.quantity ?? 1);
-        const itemTotal = price * quantity;
-
-        if (!hasSpecificAssignments || (itemProdId && assignedProductSet.has(itemProdId))) {
-          assignedItemsTotal += itemTotal;
-          hasAssignedProductInCart = true;
-        } else {
-          unassignedItemsTotal += itemTotal;
-        }
-      }
-
-      // Calculate final commission based on commissionType and policy
-      let amount = 0;
-      let effectiveCommissionType = effectiveLink.commissionType ?? 'PERCENTAGE';
-      if (effectiveLink.commissionType === 'FIXED_AMOUNT') {
-        amount = Number(effectiveLink.commissionAmount ?? 0);
-      } else if (isFlatRupees) {
-        amount = flatRateAmount;
-        effectiveCommissionType = 'FLAT_RUPEES';
-      } else {
-        let variableAmount = 0;
-        if (mode === 'ASSIGNED_PRODUCTS_ONLY') {
-          variableAmount = (assignedItemsTotal * rate) / 100;
-        } else if (mode === 'GATE_REQUIRED') {
-          variableAmount = hasAssignedProductInCart ? (orderAmount * rate) / 100 : 0;
-        } else if (mode === 'HYBRID_FALLBACK') {
-          const assignedComm = (assignedItemsTotal * rate) / 100;
-          const unassignedComm = (unassignedItemsTotal * fallbackRate) / 100;
-          variableAmount = assignedComm + unassignedComm;
-        } else {
-          // STORE_WIDE (Default)
-          variableAmount = (orderAmount * rate) / 100;
-        }
-        amount = isBoth ? flatRateAmount + variableAmount : variableAmount;
-        if (isBoth) effectiveCommissionType = 'BOTH';
-      }
+      const calc = calculateOrderCommission(
+        order,
+        effectiveLink,
+        storeConfig,
+        assignedProductSet,
+        isAutoCommission,
+        isBarter
+      );
 
       await prisma.affiliateCommission.upsert({
         where: { shopifyOrderId: order.id },
         create: {
           organizationId: organization.id,
           linkId: effectiveLink.id,
-          creatorId: matchedUserId ?? null,
+          creatorId: effectiveCreator.id,
           shopifyOrderId: order.id,
-          orderAmount,
-          commissionType: effectiveCommissionType,
-          commissionRate: effectiveLink.commissionType === 'FIXED_AMOUNT' ? 0 : (effectiveLink.commissionRate ?? 10),
-          amount: Math.round(amount * 100) / 100,
-          status: commissionStatus,
+          orderAmount: Number(order.total || 0),
+          commissionType: calc.commissionType,
+          commissionRate: calc.commissionRate,
+          amount: calc.amount,
+          status: calc.status,
         },
         update: {
           linkId: effectiveLink.id,
-          creatorId: matchedUserId ?? null,
-          orderAmount,
-          commissionType: effectiveCommissionType,
-          commissionRate: effectiveLink.commissionType === 'FIXED_AMOUNT' ? 0 : (effectiveLink.commissionRate ?? 10),
-          amount: Math.round(amount * 100) / 100,
-          status: commissionStatus,
+          creatorId: effectiveCreator.id,
+          orderAmount: Number(order.total || 0),
+          commissionType: calc.commissionType,
+          commissionRate: calc.commissionRate,
+          amount: calc.amount,
+          status: calc.status,
         },
       });
-
-      // Note: Initial webhook commissions are created as PENDING. 
-      // Customer points & earnings are credited only once the Store Admin approves the commission in the Store Portal.
-
 
       return reply.code(200).send({ synced: true, attributed: true, orderId: order.id });
     } else if (isCancelledOrRefunded) {

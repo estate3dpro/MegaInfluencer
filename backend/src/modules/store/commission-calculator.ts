@@ -283,6 +283,48 @@ export async function reconcileStoreRosterCommissions(
     },
   });
 
+  // Also include any influencers who have active affiliate links in this store but missing storeInfluencerAssignment
+  const existingInfIds = new Set(assignments.map((a: any) => a.influencerId).filter(Boolean));
+  const additionalLinks = await prisma.affiliateLink.findMany({
+    where: {
+      organizationId,
+      creatorId: { notIn: Array.from(existingInfIds) },
+    },
+    include: {
+      creator: {
+        select: {
+          id: true,
+          displayName: true,
+          creatorCode: true,
+          email: true,
+          instagramConnection: { select: { username: true, status: true } },
+          affiliateLinks: {
+            where: { organizationId },
+            select: { id: true, slug: true, commissionRate: true, commissionType: true, commissionAmount: true, status: true },
+          },
+          discountCodes: {
+            where: { organizationId },
+            select: { id: true, code: true },
+          },
+        },
+      },
+    },
+  });
+
+  for (const al of additionalLinks) {
+    if (al.creator && !existingInfIds.has(al.creator.id)) {
+      existingInfIds.add(al.creator.id);
+      assignments.push({
+        id: `virtual_${al.creator.id}`,
+        organizationId,
+        influencerId: al.creator.id,
+        compensationMode: 'COMMISSION',
+        autoCommission: true,
+        influencer: al.creator,
+      } as any);
+    }
+  }
+
   if (assignments.length === 0) return { reconciledCount: 0 };
 
   const codeToCreatorCtx = new Map<string, any>();
@@ -348,28 +390,36 @@ export async function reconcileStoreRosterCommissions(
       autoCommission,
     };
 
+    const registerKey = (rawKey: string | null | undefined) => {
+      if (!rawKey) return;
+      const clean = String(rawKey).trim().replace(/^@/, '').toLowerCase();
+      if (!clean) return;
+      codeToCreatorCtx.set(clean, ctx);
+      codeToCreatorCtx.set(`@${clean}`, ctx);
+    };
+
     if (code) {
-      codeToCreatorCtx.set(code.toLowerCase(), ctx);
+      registerKey(code);
       // Suffix aliasing: e.g. SARAH88_PRO -> also recognize SARAH88
       const baseCode = code.replace(/_pro$/i, '').trim();
       if (baseCode && baseCode.toLowerCase() !== code.toLowerCase()) {
-        codeToCreatorCtx.set(baseCode.toLowerCase(), ctx);
+        registerKey(baseCode);
       }
     }
 
     // Instagram username recognition
     if (inf.instagramConnection?.username) {
-      codeToCreatorCtx.set(inf.instagramConnection.username.toLowerCase(), ctx);
+      registerKey(inf.instagramConnection.username);
     }
 
     // Custom discount codes
     for (const d of inf.discountCodes ?? []) {
-      if (d.code) codeToCreatorCtx.set(d.code.toLowerCase(), ctx);
+      if (d.code) registerKey(d.code);
     }
 
     // Affiliate link slugs and IDs
     for (const l of inf.affiliateLinks ?? []) {
-      if (l.slug) codeToCreatorCtx.set(l.slug.toLowerCase(), ctx);
+      if (l.slug) registerKey(l.slug);
       linkIdToCreatorCtx.set(l.id, ctx);
     }
   }
@@ -399,7 +449,8 @@ export async function reconcileStoreRosterCommissions(
       matchedCtx = linkIdToCreatorCtx.get(order.affiliateLinkId);
     }
     if (!matchedCtx && order.creatorCode) {
-      matchedCtx = codeToCreatorCtx.get(order.creatorCode.toLowerCase());
+      const cleanOrderCode = String(order.creatorCode).trim().replace(/^@/, '').toLowerCase();
+      matchedCtx = codeToCreatorCtx.get(cleanOrderCode) || codeToCreatorCtx.get(`@${cleanOrderCode}`);
     }
 
     if (!matchedCtx) continue;

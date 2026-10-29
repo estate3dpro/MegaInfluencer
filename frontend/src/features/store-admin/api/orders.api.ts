@@ -204,3 +204,11 @@ export async function attributeStoreOrder(
   ).data;
 }
 
+export async function reconcileStoreOrders(forceRecalculate = false) {
+  return (
+    await apiClient.post<{ ok: boolean; reconciledCount: number; forceRecalculate: boolean }>( v
+      "/store/orders/reconcile",
+      { forceRecalculate }
+    )
+  ).data;
+}

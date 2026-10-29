@@ -67,7 +67,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getStoreProducts, getStoreProductSyncStatus, syncStoreProducts } from "../api/products.api";
-import { getStoreOrders, syncStoreOrders, updateOrderCommissionStatus } from "../api/orders.api";
+import { getStoreOrders, syncStoreOrders, updateOrderCommissionStatus, reconcileStoreOrders } from "../api/orders.api";
 import { getStoreCreators } from "../api/creators.api";
 import { PlatformBadge } from "@/components/app/PlatformBadge";
 import { getStoreCustomers, getStoreCustomerDetails } from "../api/customers.api";

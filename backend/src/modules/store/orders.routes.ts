@@ -5,6 +5,7 @@ import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { decryptToken } from '../instagram/instagram.crypto.js';
 import { resolveOrderPlatform } from '../../shared/order-platform.js';
+import { reconcileStoreRosterCommissions } from './commission-calculator.js';
 
 type Node = Record<string, any>;
 type Page = { items?: Node[]; pageInfo?: { hasNextPage: boolean; endCursor: string | null }; error?: string };
@@ -94,6 +95,13 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
   app.get('/store/orders', async (req) => {
     const a = requireRole(req, ['STORE_OWNER']);
     const s = await storeFor(app, a.userId);
+
+    // Auto-reconcile any attributed store orders that have missing commissions
+    try {
+      await reconcileStoreRosterCommissions(prisma, s.id);
+    } catch (err: any) {
+      app.log.warn({ err }, 'Failed to auto-reconcile store orders on fetch');
+    }
     const q = req.query as {
       page?: string;
       limit?: string;
@@ -405,6 +413,14 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
         totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     };
+  });
+
+  // POST /store/orders/reconcile - Force recalculate & reconcile all store orders
+  app.post('/store/orders/reconcile', async (req) => {
+    const a = requireRole(req, ['STORE_OWNER']);
+    const s = await storeFor(app, a.userId);
+    const result = await reconcileStoreRosterCommissions(prisma, s.id, { forceRecalculate: true });
+    return { ok: true, reconciledCount: result.reconciledCount };
   });
 
   // POST /store/orders/sync - Sync latest orders from Shopify & auto-track affiliate commissions

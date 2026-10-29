@@ -17,7 +17,8 @@
     "creator-codes:backfill": "tsx src/scripts/backfill-creator-codes.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "reconcile:commissions": "tsx src/scripts/reconcile-all-commissions.ts"
   },
   "engines": {
     "node": ">=20"

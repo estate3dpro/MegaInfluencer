@@ -735,6 +735,14 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/store/commissions', async (req) => {
     const actor = requireRole(req, ['STORE_OWNER']);
     const org = await organization(actor.userId);
+
+    // Auto-reconcile all roster commissions before fetching table
+    try {
+      await reconcileStoreRosterCommissions(prisma, org.id);
+    } catch (err: any) {
+      app.log.warn({ err }, 'Failed to reconcile commissions on fetch');
+    }
+
     const query = req.query as { status?: string; search?: string };
 
     const where: any = { organizationId: org.id };
