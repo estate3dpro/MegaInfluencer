@@ -852,7 +852,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
                   fixedTokensEnabled: true,
                   fixedTokensPerOrder: true,
                 },
-              });
+              }).catch(() => null);
 
               const isFlatRupees = Boolean(storeConfig?.fixedTokensEnabled && !storeConfig?.percentageEnabled);
               const isBoth = Boolean(storeConfig?.fixedTokensEnabled && storeConfig?.percentageEnabled);
@@ -1235,7 +1235,7 @@ export const storeOrdersRoutes: FastifyPluginAsync = async (app) => {
     const storeConfig = await prisma.storeReferralConfig.findUnique({
       where: { organizationId: s.id },
       select: { fixedTokensEnabled: true, percentageEnabled: true, fixedTokensPerOrder: true },
-    });
+    }).catch(() => null);
     const isFlatRupees = Boolean(storeConfig?.fixedTokensEnabled && !storeConfig?.percentageEnabled);
     const flatAmount = Number(storeConfig?.fixedTokensPerOrder ?? 50);
 

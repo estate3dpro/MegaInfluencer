@@ -247,17 +247,22 @@ export async function reconcileStoreRosterCommissions(
   organizationId: string,
   options: ReconcileRosterOptions = {}
 ): Promise<{ reconciledCount: number }> {
-  // 1. Fetch store referral policy
-  const storeConfig: StoreReferralPolicy | null = await prisma.storeReferralConfig.findUnique({
-    where: { organizationId },
-    select: {
-      multiProductCommissionMode: true,
-      fallbackCommissionRate: true,
-      fixedTokensEnabled: true,
-      percentageEnabled: true,
-      fixedTokensPerOrder: true,
-    },
-  });
+  // 1. Fetch store referral policy (safely fallback to null if StoreReferralConfig table does not exist)
+  let storeConfig: StoreReferralPolicy | null = null;
+  try {
+    storeConfig = await prisma.storeReferralConfig.findUnique({
+      where: { organizationId },
+      select: {
+        multiProductCommissionMode: true,
+        fallbackCommissionRate: true,
+        fixedTokensEnabled: true,
+        percentageEnabled: true,
+        fixedTokensPerOrder: true,
+      },
+    });
+  } catch {
+    storeConfig = null;
+  }
 
   // 2. Fetch all assigned influencers in this store
   const assignments = await prisma.storeInfluencerAssignment.findMany({

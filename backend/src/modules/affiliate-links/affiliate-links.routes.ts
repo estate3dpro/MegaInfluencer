@@ -1415,7 +1415,7 @@ export const affiliateShopifyWebhookRoutes: FastifyPluginAsync = async (app) => 
           percentageEnabled: true,
           fixedTokensPerOrder: true,
         },
-      });
+      }).catch(() => null);
 
       const assignedProductRows = await prisma.productInfluencerAssignment.findMany({
         where: { organizationId: organization.id, influencerId: effectiveCreator.id },

@@ -35,7 +35,8 @@ async function main() {
     }
 
     try {
-      const result = await reconcileStoreRosterCommissions(prisma, org.id, { forceRecalculate: false });
+      const force = process.argv.includes('--force') || process.argv.includes('-f');
+      const result = await reconcileStoreRosterCommissions(prisma, org.id, { forceRecalculate: force });
       console.log(`✅ Reconciliation result for ${org.name}: ${result.reconciledCount} orders reconciled/calculated!`);
     } catch (err: any) {
       console.error(`❌ Error reconciling commissions for ${org.name}:`, err.message);

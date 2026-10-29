@@ -1006,7 +1006,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           percentageEnabled: true,
           fixedTokensPerOrder: true,
         },
-      }),
+      }).catch(() => null),
       prisma.discountCode.findMany({
         where: { organizationId: org.id, creatorId },
         select: { code: true },
@@ -1256,7 +1256,7 @@ export const storeCreatorsRoutes: FastifyPluginAsync = async (app) => {
           percentageEnabled: true,
           fixedTokensPerOrder: true,
         },
-      }),
+      }).catch(() => null),
       prisma.discountCode.findMany({
         where: { organizationId: org.id, creatorId },
         select: { code: true },
