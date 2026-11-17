@@ -206,7 +206,7 @@ export async function attributeStoreOrder(
 
 export async function reconcileStoreOrders(forceRecalculate = false) {
   return (
-    await apiClient.post<{ ok: boolean; reconciledCount: number; forceRecalculate: boolean }>( v
+    await apiClient.post<{ ok: boolean; reconciledCount: number; forceRecalculate: boolean }>(
       "/store/orders/reconcile",
       { forceRecalculate }
     )

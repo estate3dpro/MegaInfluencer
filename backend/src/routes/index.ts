@@ -14,7 +14,8 @@ import { storeDashboardRoutes } from '../modules/store/dashboard.routes.js';
 import { storeAnalyticsRoutes } from '../modules/store/analytics.routes.js';
 import { storeReportsRoutes } from '../modules/store/reports.routes.js';
 import { identityRoutes } from '../modules/identity/identity.routes.js';
-import { influencerInstagramRoutes, instagramAuthRoutes, instagramWebhookRoutes } from '../modules/instagram/instagram.routes.js';
+import { influencerInstagramRoutes, instagramAuthRoutes } from '../modules/instagram/instagram.routes.js';
+import { externalInstagramRoutes, metaWebhookListenerRoutes } from '../modules/instagram-partner/instagram-partner.routes.js';
 import { instagramAutomationRoutes } from '../modules/instagram-automations/instagram-automations.routes.js';
 import { instagramInboxRoutes } from '../modules/instagram-inbox/instagram-inbox.routes.js';
 import { instagramDirectInboxRoutes } from '../modules/instagram-direct-inbox/instagram-direct-inbox.routes.js';
@@ -63,7 +64,8 @@ export function registerRoutes(app: FastifyInstance) {
   app.register(influencerOrdersRoutes, { prefix: '/api/v1' });
   app.register(influencerEarningsRoutes, { prefix: '/api/v1' });
   app.register(notificationsRoutes, { prefix: '/api/v1' });
+  app.register(externalInstagramRoutes, { prefix: '/api/v1' });
   app.register(affiliateTrackingRoutes);
-  app.register(instagramWebhookRoutes);
+  app.register(metaWebhookListenerRoutes);
   app.register(affiliateShopifyWebhookRoutes);
 }

@@ -32,6 +32,7 @@ import { Route as AdminDocsRouteImport } from './routes/admin/docs'
 import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
 import { Route as AdminHelpRouteImport } from './routes/admin/help'
 import { Route as AdminInfluencersRouteImport } from './routes/admin/influencers'
+import { Route as AdminInstagramPartnerRouteImport } from './routes/admin/instagram-partner'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin/integrations'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminOrdersRouteImport } from './routes/admin/orders'
@@ -81,6 +82,7 @@ import { Route as StoreAdminDocsRouteImport } from './routes/store-admin/docs'
 import { Route as StoreAdminHelpRouteImport } from './routes/store-admin/help'
 import { Route as StoreAdminInstagramChatRouteImport } from './routes/store-admin/instagram-chat'
 import { Route as StoreAdminInstagramInboxRouteImport } from './routes/store-admin/instagram-inbox'
+import { Route as StoreAdminInstagramPartnerRouteImport } from './routes/store-admin/instagram-partner'
 import { Route as StoreAdminIntegrationsRouteImport } from './routes/store-admin/integrations'
 import { Route as StoreAdminOrdersRouteImport } from './routes/store-admin/orders'
 import { Route as StoreAdminProductsRouteImport } from './routes/store-admin/products'
@@ -221,6 +223,11 @@ const AdminHelpRoute = AdminHelpRouteImport.update({
 const AdminInfluencersRoute = AdminInfluencersRouteImport.update({
   id: '/influencers',
   path: '/influencers',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminInstagramPartnerRoute = AdminInstagramPartnerRouteImport.update({
+  id: '/instagram-partner',
+  path: '/instagram-partner',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
@@ -473,6 +480,12 @@ const StoreAdminInstagramInboxRoute =
     path: '/instagram-inbox',
     getParentRoute: () => StoreAdminRoute,
   } as any)
+const StoreAdminInstagramPartnerRoute =
+  StoreAdminInstagramPartnerRouteImport.update({
+    id: '/instagram-partner',
+    path: '/instagram-partner',
+    getParentRoute: () => StoreAdminRoute,
+  } as any)
 const StoreAdminIntegrationsRoute = StoreAdminIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
@@ -639,6 +652,7 @@ export interface FileRoutesByFullPath {
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/help': typeof AdminHelpRoute
   '/admin/influencers': typeof AdminInfluencersRouteWithChildren
+  '/admin/instagram-partner': typeof AdminInstagramPartnerRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -686,6 +700,7 @@ export interface FileRoutesByFullPath {
   '/store-admin/help': typeof StoreAdminHelpRoute
   '/store-admin/instagram-chat': typeof StoreAdminInstagramChatRoute
   '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
+  '/store-admin/instagram-partner': typeof StoreAdminInstagramPartnerRoute
   '/store-admin/integrations': typeof StoreAdminIntegrationsRoute
   '/store-admin/orders': typeof StoreAdminOrdersRouteWithChildren
   '/store-admin/products': typeof StoreAdminProductsRouteWithChildren
@@ -735,6 +750,7 @@ export interface FileRoutesByTo {
   '/admin/docs': typeof AdminDocsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/help': typeof AdminHelpRoute
+  '/admin/instagram-partner': typeof AdminInstagramPartnerRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -777,6 +793,7 @@ export interface FileRoutesByTo {
   '/store-admin/help': typeof StoreAdminHelpRoute
   '/store-admin/instagram-chat': typeof StoreAdminInstagramChatRoute
   '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
+  '/store-admin/instagram-partner': typeof StoreAdminInstagramPartnerRoute
   '/store-admin/integrations': typeof StoreAdminIntegrationsRoute
   '/store-admin/reports': typeof StoreAdminReportsRoute
   '/store-admin/settings': typeof StoreAdminSettingsRoute
@@ -829,6 +846,7 @@ export interface FileRoutesById {
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/help': typeof AdminHelpRoute
   '/admin/influencers': typeof AdminInfluencersRouteWithChildren
+  '/admin/instagram-partner': typeof AdminInstagramPartnerRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -876,6 +894,7 @@ export interface FileRoutesById {
   '/store-admin/help': typeof StoreAdminHelpRoute
   '/store-admin/instagram-chat': typeof StoreAdminInstagramChatRoute
   '/store-admin/instagram-inbox': typeof StoreAdminInstagramInboxRoute
+  '/store-admin/instagram-partner': typeof StoreAdminInstagramPartnerRoute
   '/store-admin/integrations': typeof StoreAdminIntegrationsRoute
   '/store-admin/orders': typeof StoreAdminOrdersRouteWithChildren
   '/store-admin/products': typeof StoreAdminProductsRouteWithChildren
@@ -931,6 +950,7 @@ export interface FileRouteTypes {
     | '/admin/finance'
     | '/admin/help'
     | '/admin/influencers'
+    | '/admin/instagram-partner'
     | '/admin/integrations'
     | '/admin/login'
     | '/admin/orders'
@@ -978,6 +998,7 @@ export interface FileRouteTypes {
     | '/store-admin/help'
     | '/store-admin/instagram-chat'
     | '/store-admin/instagram-inbox'
+    | '/store-admin/instagram-partner'
     | '/store-admin/integrations'
     | '/store-admin/orders'
     | '/store-admin/products'
@@ -1027,6 +1048,7 @@ export interface FileRouteTypes {
     | '/admin/docs'
     | '/admin/finance'
     | '/admin/help'
+    | '/admin/instagram-partner'
     | '/admin/integrations'
     | '/admin/login'
     | '/admin/orders'
@@ -1069,6 +1091,7 @@ export interface FileRouteTypes {
     | '/store-admin/help'
     | '/store-admin/instagram-chat'
     | '/store-admin/instagram-inbox'
+    | '/store-admin/instagram-partner'
     | '/store-admin/integrations'
     | '/store-admin/reports'
     | '/store-admin/settings'
@@ -1120,6 +1143,7 @@ export interface FileRouteTypes {
     | '/admin/finance'
     | '/admin/help'
     | '/admin/influencers'
+    | '/admin/instagram-partner'
     | '/admin/integrations'
     | '/admin/login'
     | '/admin/orders'
@@ -1167,6 +1191,7 @@ export interface FileRouteTypes {
     | '/store-admin/help'
     | '/store-admin/instagram-chat'
     | '/store-admin/instagram-inbox'
+    | '/store-admin/instagram-partner'
     | '/store-admin/integrations'
     | '/store-admin/orders'
     | '/store-admin/products'
@@ -1375,6 +1400,13 @@ declare module '@tanstack/react-router' {
       path: '/influencers'
       fullPath: '/admin/influencers'
       preLoaderRoute: typeof AdminInfluencersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/instagram-partner': {
+      id: '/admin/instagram-partner'
+      path: '/instagram-partner'
+      fullPath: '/admin/instagram-partner'
+      preLoaderRoute: typeof AdminInstagramPartnerRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/integrations': {
@@ -1720,6 +1752,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StoreAdminInstagramInboxRouteImport
       parentRoute: typeof StoreAdminRoute
     }
+    '/store-admin/instagram-partner': {
+      id: '/store-admin/instagram-partner'
+      path: '/instagram-partner'
+      fullPath: '/store-admin/instagram-partner'
+      preLoaderRoute: typeof StoreAdminInstagramPartnerRouteImport
+      parentRoute: typeof StoreAdminRoute
+    }
     '/store-admin/integrations': {
       id: '/store-admin/integrations'
       path: '/integrations'
@@ -1931,6 +1970,7 @@ interface AdminRouteChildren {
   AdminFinanceRoute: typeof AdminFinanceRoute
   AdminHelpRoute: typeof AdminHelpRoute
   AdminInfluencersRoute: typeof AdminInfluencersRouteWithChildren
+  AdminInstagramPartnerRoute: typeof AdminInstagramPartnerRoute
   AdminIntegrationsRoute: typeof AdminIntegrationsRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
@@ -1959,6 +1999,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminFinanceRoute: AdminFinanceRoute,
   AdminHelpRoute: AdminHelpRoute,
   AdminInfluencersRoute: AdminInfluencersRouteWithChildren,
+  AdminInstagramPartnerRoute: AdminInstagramPartnerRoute,
   AdminIntegrationsRoute: AdminIntegrationsRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminOrdersRoute: AdminOrdersRoute,
@@ -2144,6 +2185,7 @@ interface StoreAdminRouteChildren {
   StoreAdminHelpRoute: typeof StoreAdminHelpRoute
   StoreAdminInstagramChatRoute: typeof StoreAdminInstagramChatRoute
   StoreAdminInstagramInboxRoute: typeof StoreAdminInstagramInboxRoute
+  StoreAdminInstagramPartnerRoute: typeof StoreAdminInstagramPartnerRoute
   StoreAdminIntegrationsRoute: typeof StoreAdminIntegrationsRoute
   StoreAdminOrdersRoute: typeof StoreAdminOrdersRouteWithChildren
   StoreAdminProductsRoute: typeof StoreAdminProductsRouteWithChildren
@@ -2170,6 +2212,7 @@ const StoreAdminRouteChildren: StoreAdminRouteChildren = {
   StoreAdminHelpRoute: StoreAdminHelpRoute,
   StoreAdminInstagramChatRoute: StoreAdminInstagramChatRoute,
   StoreAdminInstagramInboxRoute: StoreAdminInstagramInboxRoute,
+  StoreAdminInstagramPartnerRoute: StoreAdminInstagramPartnerRoute,
   StoreAdminIntegrationsRoute: StoreAdminIntegrationsRoute,
   StoreAdminOrdersRoute: StoreAdminOrdersRouteWithChildren,
   StoreAdminProductsRoute: StoreAdminProductsRouteWithChildren,
@@ -2201,13 +2244,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

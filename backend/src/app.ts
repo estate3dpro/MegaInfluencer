@@ -53,7 +53,7 @@ export function buildApp() {
 
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (request, body, done) => {
     const urlPath = request.url.split('?')[0].replace(/\/+$/, '');
-    if (['/webhooks/instagram', '/webhooks/shopify/orders'].includes(urlPath)) return done(null, body);
+    if (['/webhooks/instagram', '/api/webhooks/instagram', '/webhooks/shopify/orders'].includes(urlPath)) return done(null, body);
     try {
       done(null, JSON.parse(body.toString('utf8')));
     } catch (error) {

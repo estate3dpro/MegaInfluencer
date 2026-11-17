@@ -132,6 +132,7 @@ export const storeAdminNav: NavGroup[] = [
       { title: "Campaigns", url: "/store-admin/campaigns", icon: Megaphone },
       { title: "Affiliate", url: "/store-admin/affiliate", icon: Filter },
       { title: "Commissions", url: "/store-admin/commissions", icon: CircleDollarSign },
+      { title: "Instagram Partner Studio", url: "/store-admin/instagram-partner", icon: Instagram },
     ],
   },
   {
@@ -163,6 +164,7 @@ export const adminNav: NavGroup[] = [
       { title: "Stores", url: "/admin/stores", icon: StoreIcon },
       { title: "Campaigns", url: "/admin/campaigns", icon: Megaphone },
       { title: "Orders", url: "/admin/orders", icon: ShoppingCart },
+      { title: "Instagram Partner Studio", url: "/admin/instagram-partner", icon: Instagram },
     ],
   },
   {

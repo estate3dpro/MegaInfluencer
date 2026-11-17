@@ -333,18 +333,22 @@ model InstagramManualReply {
 
 model InstagramDirectConversation {
   id                     String                   @id @default(cuid())
-  influencerId           String
+  influencerId           String?
+  tenantId               String?
   instagramParticipantId String
   participantUsername    String?
   instagramAccountId     String
   lastMessageAt          DateTime                 @default(now())
-  influencer             User                     @relation("InstagramDirectConversationInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
+  windowExpiresAt        DateTime?
+  influencer             User?                    @relation("InstagramDirectConversationInfluencer", fields: [influencerId], references: [id], onDelete: Cascade)
   messages               InstagramDirectMessage[]
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
 
   @@unique([influencerId, instagramParticipantId])
   @@index([influencerId, lastMessageAt])
+  @@index([tenantId, lastMessageAt])
+  @@index([instagramAccountId, instagramParticipantId])
 }
 
 model InstagramDirectMessage {
@@ -354,6 +358,8 @@ model InstagramDirectMessage {
   senderUserId       String?
   direction          InstagramDirectMessageDirection
   messageText        String
+  mediaUrl           String?
+  mediaType          String?
   sentAt             DateTime
   conversation       InstagramDirectConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender             User?                           @relation("InstagramDirectMessageSender", fields: [senderUserId], references: [id], onDelete: SetNull)
@@ -993,4 +999,78 @@ model CustomerMilestoneClaim {
 
   @@unique([userId, milestoneId])
   @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// MegaChat Instagram Service Provider & Comment Automation Models
+// -----------------------------------------------------------------------------
+
+model InstagramAccount {
+  id                         String                 @id @default(uuid())
+  tenantOrUserId             String                 @unique // Partner tenant identifier or internal user ID
+  instagramBusinessAccountId String                 @unique
+  username                   String
+  profilePictureUrl          String?
+  accessToken                String                 // Encrypted Page Access Token
+  tokenExpiresAt             DateTime?
+  isActive                   Boolean                @default(true)
+  rules                      InstagramCommentRule[]
+  logs                       InstagramCommentLog[]
+  dailyStats                 InstagramDailyStat[]
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+}
+
+model InstagramCommentRule {
+  id                 String           @id @default(uuid())
+  instagramAccountId String
+  instagramAccount   InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  targetPostId       String           // Specific Instagram Media ID or "ALL_POSTS"
+  postCaption        String?          // Cached snippet for UI
+  postThumbnail      String?          // Cached image URL for UI
+  matchType          String           // "ANY", "EXACT", "CONTAINS", "REGEX"
+  keywords           String[]         // e.g. ["PRICE", "LINK", "BUY"]
+  publicReplies      String[]         // Pool of randomized replies: e.g. ["Sent you a DM! 📩", "Check your inbox! ✨"]
+  dmMessage          String           // Text sent to DM, supporting {{link}} interpolation
+  linkUrl            String?          // Target URL to send
+  isActive           Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([instagramAccountId, isActive])
+  @@index([targetPostId])
+}
+
+model InstagramCommentLog {
+  id                 String           @id @default(uuid())
+  instagramAccountId String
+  instagramAccount   InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  ruleId             String?
+  mediaId            String
+  commentId          String           @unique
+  commenterUsername  String
+  commentText        String
+  matchedKeyword     String?
+  publicReplyStatus  String           // "SUCCESS", "FAILED", "SKIPPED"
+  publicReplyText    String?
+  dmStatus           String           // "SUCCESS", "FAILED", "SKIPPED"
+  dmError            String?
+  createdAt          DateTime         @default(now())
+
+  @@index([instagramAccountId, createdAt])
+  @@index([ruleId])
+}
+
+model InstagramDailyStat {
+  id                 String           @id @default(uuid())
+  instagramAccountId String
+  instagramAccount   InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  date               String           // YYYY-MM-DD
+  totalComments      Int              @default(0)
+  matchedRules       Int              @default(0)
+  publicRepliesSent  Int              @default(0)
+  dmsSent            Int              @default(0)
+  failedActions      Int              @default(0)
+
+  @@unique([instagramAccountId, date])
 }

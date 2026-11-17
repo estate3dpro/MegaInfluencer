@@ -63,7 +63,7 @@ export async function listInstagramDirectConversations(app: FastifyInstance, act
 
 export async function sendDirectInboxMessage(app: FastifyInstance, actor: DirectActor, conversationId: string, message: string) {
   const conversation = await app.prisma.instagramDirectConversation.findUnique({ where: { id: conversationId }, include: { influencer: { include: { instagramConnection: true } } } });
-  if (!conversation) throw new AppError('INSTAGRAM_DM_CONVERSATION_NOT_FOUND', 'Instagram conversation not found.', 404);
+  if (!conversation || !conversation.influencerId || !conversation.influencer) throw new AppError('INSTAGRAM_DM_CONVERSATION_NOT_FOUND', 'Instagram conversation not found.', 404);
   await assertAccess(app, actor, conversation.influencerId);
   const connection = conversation.influencer.instagramConnection;
   if (!connection || connection.status !== 'ACTIVE') throw new AppError('INSTAGRAM_CONNECTION_INACTIVE', 'This creator’s Instagram connection is not active.', 409);
