@@ -1079,6 +1079,7 @@ export async function processPartnerDirectMessageWebhook(
         where: {
           OR: [
             { instagramUserId: accountId },
+            { webhookInstagramAccountId: accountId },
             { influencerId: accountId },
           ],
         },

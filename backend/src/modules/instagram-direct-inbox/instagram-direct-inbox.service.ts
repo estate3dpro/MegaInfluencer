@@ -227,11 +227,31 @@ export async function listInstagramDirectConversations(app: FastifyInstance, act
         ).map((row) => row.influencerId)
       : undefined;
 
+  let userAccountIds: string[] = [];
+  if (actor.role === 'INFLUENCER') {
+    const userConnection = await app.prisma.instagramConnection.findUnique({
+      where: { influencerId: actor.userId },
+      select: { instagramUserId: true, webhookInstagramAccountId: true },
+    });
+    const userPartnerAccounts = await app.prisma.instagramAccount.findMany({
+      where: { tenantOrUserId: actor.userId },
+      select: { instagramBusinessAccountId: true },
+    });
+    userAccountIds = [
+      ...(userConnection ? [userConnection.instagramUserId, userConnection.webhookInstagramAccountId].filter(Boolean) as string[] : []),
+      ...userPartnerAccounts.map((a) => a.instagramBusinessAccountId).filter(Boolean),
+    ];
+  }
+
   const conversations = await app.prisma.instagramDirectConversation.findMany({
     where:
       actor.role === 'INFLUENCER'
         ? {
-            OR: [{ influencerId: actor.userId }, { tenantId: actor.userId }],
+            OR: [
+              { influencerId: actor.userId },
+              { tenantId: actor.userId },
+              ...(userAccountIds.length > 0 ? [{ instagramAccountId: { in: userAccountIds } }] : []),
+            ],
           }
         : {
             OR: [{ influencerId: { in: ids } }, { tenantId: { in: ids } }],
@@ -267,7 +287,26 @@ export async function sendDirectInboxMessage(app: FastifyInstance, actor: Direct
   }
 
   if (actor.role === 'INFLUENCER') {
-    if (conversation.influencerId !== actor.userId && conversation.tenantId !== actor.userId) {
+    let userAccountIds: string[] = [];
+    const userConnection = await app.prisma.instagramConnection.findUnique({
+      where: { influencerId: actor.userId },
+      select: { instagramUserId: true, webhookInstagramAccountId: true },
+    });
+    const userPartnerAccounts = await app.prisma.instagramAccount.findMany({
+      where: { tenantOrUserId: actor.userId },
+      select: { instagramBusinessAccountId: true },
+    });
+    userAccountIds = [
+      ...(userConnection ? [userConnection.instagramUserId, userConnection.webhookInstagramAccountId].filter(Boolean) as string[] : []),
+      ...userPartnerAccounts.map((a) => a.instagramBusinessAccountId).filter(Boolean),
+    ];
+
+    const isAuthorized =
+      conversation.influencerId === actor.userId ||
+      conversation.tenantId === actor.userId ||
+      (userAccountIds.length > 0 && userAccountIds.includes(conversation.instagramAccountId));
+
+    if (!isAuthorized) {
       throw new ForbiddenError();
     }
   } else {
