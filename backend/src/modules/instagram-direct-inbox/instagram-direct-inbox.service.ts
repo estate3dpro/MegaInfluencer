@@ -168,7 +168,7 @@ export async function listInstagramDirectConversations(app: FastifyInstance, act
         ).map((row) => row.influencerId)
       : undefined;
 
-  return app.prisma.instagramDirectConversation.findMany({
+  const conversations = await app.prisma.instagramDirectConversation.findMany({
     where:
       actor.role === 'INFLUENCER'
         ? {
@@ -187,6 +187,15 @@ export async function listInstagramDirectConversations(app: FastifyInstance, act
       },
     },
   });
+
+  return conversations.map((conv) => ({
+    ...conv,
+    influencer: conv.influencer || {
+      id: conv.tenantId || actor.userId,
+      displayName: conv.participantUsername || 'Instagram Account',
+      instagramConnection: null,
+    },
+  }));
 }
 
 export async function sendDirectInboxMessage(app: FastifyInstance, actor: DirectActor, conversationId: string, message: string) {
