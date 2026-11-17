@@ -8,7 +8,12 @@ const messagingGraphUrl = 'https://graph.instagram.com/v23.0';
 
 type InstagramError = { error?: { message?: string; type?: string; code?: number } };
 
-export type InstagramUser = { id: string; username: string; name?: string };
+export type InstagramUser = {
+  id: string;
+  username: string;
+  name?: string;
+  legacy_instagram_user_id?: string;
+};
 export type InstagramMedia = {
   id: string;
   caption?: string;
@@ -23,6 +28,7 @@ export type InstagramProfile = {
   id: string;
   username: string;
   name?: string;
+  legacy_instagram_user_id?: string;
   media_count?: number;
   followers_count?: number;
   follows_count?: number;
@@ -82,7 +88,9 @@ export async function exchangeLongLivedToken(shortLivedToken: string) {
 
 export async function getInstagramUser(accessToken: string) {
   const url = new URL(`${graphUrl}/me`);
-  url.searchParams.set('fields', 'id,username,name');
+  // Instagram Login can return a modern API user ID while Instagram webhook
+  // entries use the account's legacy professional-account ID. Request both.
+  url.searchParams.set('fields', 'id,username,name,legacy_instagram_user_id');
   url.searchParams.set('access_token', accessToken);
   return parseResponse<InstagramUser>(await fetch(url));
 }
@@ -110,7 +118,7 @@ export async function getInstagramProfile(accessToken: string) {
 
   try {
     const profileUrl = new URL(`${graphUrl}/me`);
-    profileUrl.searchParams.set('fields', 'id,username,name,media_count');
+    profileUrl.searchParams.set('fields', 'id,username,name,media_count,legacy_instagram_user_id');
     profileUrl.searchParams.set('access_token', trimmedToken);
     const profile = await parseResponse<InstagramProfile>(
       await fetch(profileUrl, { signal: AbortSignal.timeout(1500) })
@@ -179,6 +187,23 @@ export async function sendInstagramDirectMessage(
     body: JSON.stringify({ recipient: { id: recipientId }, message: { text: message } }),
   });
   return parseResponse<{ recipient_id?: string; message_id?: string }>(response);
+}
+
+/** Look up a sender when Meta omitted its username from the webhook payload. */
+export async function getInstagramMessageSender(accessToken: string, messageId: string, expectedSenderId: string) {
+  try {
+    const url = new URL(`https://graph.facebook.com/v23.0/${encodeURIComponent(messageId)}`);
+    url.searchParams.set('fields', 'from{id,username,name}');
+    url.searchParams.set('access_token', accessToken.trim());
+    const response = await fetch(url, { signal: AbortSignal.timeout(1500) });
+    if (!response.ok) return null;
+    const body = await response.json() as { from?: { id?: string; username?: string; name?: string } };
+    if (!body.from?.id || body.from.id !== expectedSenderId) return null;
+    return { username: body.from.username?.trim() || null, name: body.from.name?.trim() || null };
+  } catch {
+    // Profile metadata is optional and must never delay or reject a webhook.
+    return null;
+  }
 }
 
 /** Subscribe an Instagram connected account to receive comment and messaging webhooks */

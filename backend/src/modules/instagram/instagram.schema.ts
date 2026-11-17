@@ -10,10 +10,6 @@ export const exchangeLoginTicketSchema = z.object({ code: z.string().min(20).max
 
 export const mediaQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(25) });
 
-export const webhookAccountIdSchema = z.object({
-  webhookInstagramAccountId: z.string().regex(/^\d{10,30}$/, 'Enter the numeric Instagram account ID from the Meta webhook.'),
-});
-
 export const webhookVerificationSchema = z.object({
   'hub.mode': z.string().optional(),
   'hub.verify_token': z.string().optional(),

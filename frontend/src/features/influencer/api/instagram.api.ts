@@ -45,11 +45,6 @@ export async function disconnectInstagram() {
   await apiClient.delete("/influencer/instagram/connection");
 }
 
-export async function setInstagramWebhookAccountId(webhookInstagramAccountId: string) {
-  const { data } = await apiClient.put("/influencer/instagram/webhook-account", { webhookInstagramAccountId });
-  return data;
-}
-
 export async function getInstagramPosts() {
   const { data } = await apiClient.get<{ items: InstagramMedia[] }>("/influencer/instagram/posts", {
     params: { limit: 50 },

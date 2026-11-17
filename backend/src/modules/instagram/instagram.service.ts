@@ -50,10 +50,11 @@ async function consumeOAuthState(app: FastifyInstance, stateValue: string) {
 async function saveConnection(
   app: FastifyInstance,
   influencerId: string,
-  instagramUser: { id: string; username: string; name?: string },
+  instagramUser: { id: string; username: string; name?: string; legacy_instagram_user_id?: string },
   accessToken: string,
   expiresIn?: number,
 ) {
+  const webhookInstagramAccountId = instagramUser.legacy_instagram_user_id ?? instagramUser.id;
   const previousConnection = await app.prisma.instagramConnection.findUnique({
     where: { influencerId },
     select: { instagramUserId: true, username: true },
@@ -67,6 +68,7 @@ async function saveConnection(
     create: {
       influencerId,
       instagramUserId: instagramUser.id,
+      webhookInstagramAccountId,
       username: instagramUser.username,
       displayName: instagramUser.name,
       encryptedAccessToken: encryptToken(accessToken),
@@ -75,13 +77,14 @@ async function saveConnection(
     },
     update: {
       instagramUserId: instagramUser.id,
+      webhookInstagramAccountId,
       username: instagramUser.username,
       displayName: instagramUser.name,
       encryptedAccessToken: encryptToken(accessToken),
       tokenExpiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : null,
       status: 'ACTIVE',
     },
-    select: { id: true, instagramUserId: true, username: true, displayName: true, tokenExpiresAt: true, status: true },
+    select: { id: true, instagramUserId: true, webhookInstagramAccountId: true, username: true, displayName: true, tokenExpiresAt: true, status: true },
   });
 
   // Automatically subscribe account to Meta webhook events
@@ -96,6 +99,7 @@ async function saveConnection(
     influencerId,
     connectionId: connection.id,
     instagramUserId: connection.instagramUserId,
+    webhookInstagramAccountId: connection.webhookInstagramAccountId,
     username: connection.username,
     previousInstagramUserId: previousConnection?.instagramUserId ?? null,
     previousUsername: previousConnection?.username ?? null,
@@ -114,6 +118,7 @@ export async function completeInstagramOAuth(app: FastifyInstance, input: { code
     flow: state.flow,
     influencerId: state.influencerId ?? null,
     instagramUserId: instagramUser.id,
+    legacyInstagramUserId: instagramUser.legacy_instagram_user_id ?? null,
     username: instagramUser.username,
     tokenHasExpiry: Boolean(longLived.expires_in),
   }, 'Instagram OAuth account resolved');
@@ -184,23 +189,6 @@ export async function getConnection(app: FastifyInstance, influencerId: string) 
   });
 }
 
-export async function setWebhookInstagramAccountId(app: FastifyInstance, influencerId: string, webhookInstagramAccountId: string) {
-  const connection = await app.prisma.instagramConnection.findUnique({ where: { influencerId }, select: { id: true } });
-  if (!connection) throw new AppError('INSTAGRAM_NOT_CONNECTED', 'Connect an Instagram account before configuring its inbox.', 409);
-  try {
-    return await app.prisma.instagramConnection.update({
-      where: { influencerId },
-      data: { webhookInstagramAccountId },
-      select: { id: true, instagramUserId: true, webhookInstagramAccountId: true, username: true, displayName: true, tokenExpiresAt: true, status: true, createdAt: true, updatedAt: true },
-    });
-  } catch (error) {
-    if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
-      throw new AppError('INSTAGRAM_WEBHOOK_ACCOUNT_ALREADY_LINKED', 'This Instagram messaging account is already linked to another creator.', 409);
-    }
-    throw error;
-  }
-}
-
 export async function disconnectInstagram(app: FastifyInstance, influencerId: string) {
   const deleted = await app.prisma.instagramConnection.deleteMany({ where: { influencerId } });
   app.log.info({ influencerId, connectionDeleted: deleted.count === 1 }, 'Instagram connection disconnected');
@@ -222,12 +210,22 @@ export async function getInstagramProfile(app: FastifyInstance, influencerId: st
     throw new AppError('INSTAGRAM_TOKEN_EXPIRED', 'Reconnect Instagram to refresh the expired token.', 409);
   }
   const profile = await fetchInstagramProfile(decryptToken(connection.encryptedAccessToken));
+  if (!profile) {
+    throw new AppError('INSTAGRAM_PROVIDER_ERROR', 'Instagram profile details could not be loaded. Please reconnect your account.', 502);
+  }
+  const discoveredWebhookAccountId = profile.legacy_instagram_user_id ?? connection.instagramUserId;
+  if (connection.webhookInstagramAccountId !== discoveredWebhookAccountId) {
+    await app.prisma.instagramConnection.update({
+      where: { influencerId },
+      data: { webhookInstagramAccountId: discoveredWebhookAccountId },
+    });
+  }
   const creator = await app.prisma.user.findUnique({ where: { id: influencerId }, select: { creatorCode: true } });
   return {
     creatorCode: creator?.creatorCode ?? null,
     connection: {
       instagramUserId: connection.instagramUserId,
-      webhookInstagramAccountId: connection.webhookInstagramAccountId,
+      webhookInstagramAccountId: discoveredWebhookAccountId,
       username: connection.username,
       displayName: connection.displayName,
       status: connection.status,

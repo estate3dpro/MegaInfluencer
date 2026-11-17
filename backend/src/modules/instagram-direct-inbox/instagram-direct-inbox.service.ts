@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { AppError, ForbiddenError } from '../../shared/errors/app-error.js';
 import type { AuthenticatedActor } from '../../shared/auth/authorization.js';
 import { decryptToken } from '../instagram/instagram.crypto.js';
-import { sendInstagramDirectMessage } from '../instagram/instagram.client.js';
+import { getInstagramMessageSender, sendInstagramDirectMessage } from '../instagram/instagram.client.js';
 
 type DirectActor = AuthenticatedActor & { role: 'INFLUENCER' | 'STORE_OWNER' };
 
@@ -76,7 +76,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
           { webhookInstagramAccountId: webhookAccountId },
         ],
       },
-      select: { influencerId: true, instagramUserId: true, webhookInstagramAccountId: true },
+      select: { influencerId: true, instagramUserId: true, webhookInstagramAccountId: true, encryptedAccessToken: true },
     }) ?? (recipientAccountIds.length > 0
       ? await app.prisma.instagramConnection.findFirst({
           where: {
@@ -85,7 +85,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
               { webhookInstagramAccountId: { in: recipientAccountIds } },
             ],
           },
-          select: { influencerId: true, instagramUserId: true, webhookInstagramAccountId: true },
+          select: { influencerId: true, instagramUserId: true, webhookInstagramAccountId: true, encryptedAccessToken: true },
         })
       : null);
 
@@ -147,6 +147,15 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
       );
 
       if (!text || !senderId || senderId === accountId) continue;
+      let participantUsername = event?.sender?.username ?? event?.from?.username ?? null;
+      if (!participantUsername && messageId && connection?.encryptedAccessToken) {
+        const sender = await getInstagramMessageSender(
+          decryptToken(connection.encryptedAccessToken),
+          messageId,
+          senderId,
+        );
+        participantUsername = sender?.username ?? null;
+      }
       const timestamp = Number(event?.timestamp ?? message?.timestamp);
       const sentAt = Number.isFinite(timestamp) ? new Date(timestamp > 10_000_000_000 ? timestamp : timestamp * 1000) : new Date();
       const windowExpiresAt = new Date(sentAt.getTime() + 24 * 60 * 60 * 1000);
@@ -168,7 +177,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
             influencerId,
             tenantId,
             instagramParticipantId: senderId,
-            participantUsername: event?.sender?.username ?? event?.from?.username ?? null,
+            participantUsername,
             instagramAccountId: accountId,
             lastMessageAt: sentAt,
             windowExpiresAt,
@@ -180,7 +189,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
           data: {
             influencerId: conversation.influencerId || influencerId,
             tenantId: conversation.tenantId || tenantId,
-            participantUsername: event?.sender?.username ?? event?.from?.username ?? conversation.participantUsername,
+            participantUsername: participantUsername ?? conversation.participantUsername,
             instagramAccountId: accountId,
             lastMessageAt: sentAt,
             windowExpiresAt,

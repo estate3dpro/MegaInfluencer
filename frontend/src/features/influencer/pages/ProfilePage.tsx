@@ -24,7 +24,6 @@ import { initials } from "@/lib/format";
 import {
   getInstagramProfile,
   disconnectInstagram,
-  setInstagramWebhookAccountId,
   startInstagramConnection,
 } from "@/features/influencer/api/instagram.api";
 import {
@@ -71,16 +70,6 @@ export function ProfilePage() {
       await queryClient.invalidateQueries({ queryKey: ["influencer", "instagram-connection"] });
     },
   });
-  const webhookAccountMutation = useMutation({
-    mutationFn: setInstagramWebhookAccountId,
-    onSuccess: async () => {
-      setWebhookAccountId("");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["influencer", "instagram-connection"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.instagram.profile }),
-      ]);
-    },
-  });
   const data = profileQuery.data;
   const profileName =
     data?.profile.name || connection?.displayName || user?.name || "Influencer";
@@ -100,7 +89,6 @@ export function ProfilePage() {
       : null;
 
   const [termsModalOpen, setTermsModalOpen] = useState(false);
-  const [webhookAccountId, setWebhookAccountId] = useState("");
 
   function handleConnectInstagram() {
     setTermsModalOpen(true);
@@ -217,7 +205,7 @@ export function ProfilePage() {
                 <Detail label="Instagram username" value={`@${data.connection.username}`} />
                 <Detail label="Creator code" value={data.creatorCode ?? "—"} mono />
                 <Detail label="Instagram account ID" value={data.connection.instagramUserId} mono />
-                <Detail label="Messaging webhook ID" value={data.connection.webhookInstagramAccountId ?? "Not configured"} mono />
+                <Detail label="Messaging account ID" value={data.connection.webhookInstagramAccountId ?? "Discovering automatically"} mono />
                 <Detail
                   label="Connection status"
                   value={
@@ -227,28 +215,6 @@ export function ProfilePage() {
                   }
                 />
                 <Detail label="Connected on" value={formatDate(data.connection.connectedAt)} />
-                <div className="sm:col-span-2 rounded-lg border bg-muted/30 p-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Configure Instagram inbox webhook ID</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Paste the numeric account ID shown as <code>entry.id</code> or <code>recipient.id</code> in the Meta messaging webhook. This can differ from the Instagram Login account ID.</p>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <Input
-                      value={webhookAccountId}
-                      onChange={(event) => setWebhookAccountId(event.target.value.replace(/\D/g, ""))}
-                      placeholder="e.g. 17841474577020302"
-                      inputMode="numeric"
-                      className="font-mono"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={!webhookAccountId || webhookAccountMutation.isPending}
-                      onClick={() => webhookAccountMutation.mutate(webhookAccountId)}
-                    >
-                      {webhookAccountMutation.isPending ? "Saving..." : "Save webhook ID"}
-                    </Button>
-                  </div>
-                  {webhookAccountMutation.error ? <p className="mt-2 text-xs text-destructive">{isApiError(webhookAccountMutation.error) ? webhookAccountMutation.error.message : "Unable to save the webhook account ID."}</p> : null}
-                </div>
               </CardContent>
             </Card>
             <Card>
