@@ -30,42 +30,81 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
 
   let saved = 0;
   for (const entry of entries) {
-    const accountId = typeof entry?.id === 'string' ? entry.id : undefined;
+    const webhookAccountId = typeof entry?.id === 'string' ? entry.id : undefined;
     const events = [
       ...(Array.isArray(entry?.messaging) ? entry.messaging : []),
       ...(Array.isArray(entry?.changes)
         ? entry.changes.filter((change: any) => change?.field === 'messages').map((change: any) => change.value)
         : []),
     ];
+    let accountId = webhookAccountId;
 
     app.log.info(
-      { accountId, eventCount: events.length, entrySnippet: entry },
+      { accountId: webhookAccountId, eventCount: events.length, entrySnippet: entry },
       `📩 [CREATOR DIRECT INBOX] Checking account ${accountId} with ${events.length} message event(s)`
     );
 
-    if (!accountId) continue;
+    if (!webhookAccountId) continue;
+
+    // Meta echoes messages sent by the Instagram account itself. They are not
+    // inbound DMs and must not be treated as unknown-account webhook events.
+    const inboundEvents = events.filter((event: any) => {
+      const message = event?.message ?? event;
+      return !message?.is_echo && !message?.is_self;
+    });
+    if (inboundEvents.length === 0) {
+      app.log.debug(
+        { webhookAccountId, eventCount: events.length },
+        '[DIRECT INBOX] Ignoring outgoing Instagram message echo(es).'
+      );
+      continue;
+    }
+
+    // Some Meta messaging subscriptions supply a page-scoped entry.id. For
+    // genuine inbound events recipient.id is the connected Instagram account.
+    const recipientAccountIds = [...new Set(inboundEvents
+      .map((event: any) => event?.recipient?.id ?? event?.to?.id)
+      .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0))];
+    const accountIds = [webhookAccountId, ...recipientAccountIds];
     let influencerId: string | null = null;
     let tenantId: string | null = null;
 
     const connection = await app.prisma.instagramConnection.findUnique({
-      where: { instagramUserId: accountId },
-      select: { influencerId: true },
-    });
+      where: { instagramUserId: webhookAccountId },
+      select: { influencerId: true, instagramUserId: true },
+    }) ?? (recipientAccountIds.length > 0
+      ? await app.prisma.instagramConnection.findFirst({
+          where: { instagramUserId: { in: recipientAccountIds } },
+          select: { influencerId: true, instagramUserId: true },
+        })
+      : null);
 
     if (connection) {
       influencerId = connection.influencerId;
       tenantId = connection.influencerId;
+      accountId = connection.instagramUserId;
     } else {
       const partnerAccount = await app.prisma.instagramAccount.findFirst({
         where: {
           OR: [
-            { instagramBusinessAccountId: accountId },
-            { tenantOrUserId: accountId },
+            { instagramBusinessAccountId: webhookAccountId },
+            { tenantOrUserId: webhookAccountId },
           ],
           isActive: true,
         },
-      });
+      }) ?? (recipientAccountIds.length > 0
+        ? await app.prisma.instagramAccount.findFirst({
+            where: {
+              OR: [
+                { instagramBusinessAccountId: { in: recipientAccountIds } },
+                { tenantOrUserId: { in: recipientAccountIds } },
+              ],
+              isActive: true,
+            },
+          })
+        : null);
       if (partnerAccount) {
+        accountId = partnerAccount.instagramBusinessAccountId;
         tenantId = partnerAccount.tenantOrUserId;
         const userRec = await app.prisma.user.findUnique({
           where: { id: partnerAccount.tenantOrUserId },
@@ -79,7 +118,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
 
     if (!influencerId && !tenantId) {
       app.log.warn(
-        { instagramAccountId: accountId, eventsCount: events.length },
+        { webhookAccountId, candidateAccountIds: accountIds, eventsCount: inboundEvents.length },
         `⚠️ [DIRECT INBOX] Account ${accountId} not found in either InstagramConnection or InstagramAccount; skipping.`
       );
       continue;
@@ -87,6 +126,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
 
     for (const event of events) {
       const message = event?.message ?? event;
+      if (message?.is_echo || message?.is_self) continue;
       const text = typeof message?.text === 'string' ? message.text.trim() : '';
       const messageId = typeof message?.mid === 'string' ? message.mid : typeof message?.id === 'string' ? message.id : undefined;
       const senderId = typeof event?.sender?.id === 'string' ? event.sender.id : typeof event?.from?.id === 'string' ? event.from.id : undefined;
