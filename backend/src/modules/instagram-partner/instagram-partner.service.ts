@@ -746,13 +746,18 @@ export async function listPartnerConversations(
   const limit = Math.max(1, Math.min(Number(options.limit) || 25, 100));
   const skip = (page - 1) * limit;
 
-  const where: any = { tenantId };
+  const tenantFilter = [{ tenantId }, { influencerId: tenantId }];
+  const where: any = {};
+
   if (options.search?.trim()) {
-    where.OR = [
+    const searchFilter = [
       { participantUsername: { contains: options.search.trim(), mode: 'insensitive' } },
       { instagramParticipantId: { contains: options.search.trim() } },
       { messages: { some: { messageText: { contains: options.search.trim(), mode: 'insensitive' } } } },
     ];
+    where.AND = [{ OR: tenantFilter }, { OR: searchFilter }];
+  } else {
+    where.OR = tenantFilter;
   }
 
   const [total, conversations] = await Promise.all([
@@ -821,7 +826,7 @@ export async function getPartnerConversationMessages(
     where: { id: conversationId },
   });
 
-  if (!conversation || conversation.tenantId !== tenantId) {
+  if (!conversation || (conversation.tenantId !== tenantId && conversation.influencerId !== tenantId)) {
     throw new AppError('CONVERSATION_NOT_FOUND', 'Instagram conversation not found for this tenant.', 404);
   }
 
@@ -889,7 +894,7 @@ export async function sendPartnerDirectMessage(
     where: { id: conversationId },
   });
 
-  if (!conversation || conversation.tenantId !== tenantId) {
+  if (!conversation || (conversation.tenantId !== tenantId && conversation.influencerId !== tenantId)) {
     throw new AppError('CONVERSATION_NOT_FOUND', 'Instagram conversation not found for this tenant.', 404);
   }
 
@@ -1066,12 +1071,30 @@ export async function processPartnerDirectMessageWebhook(
       },
     });
 
+    let tenantOrUserId = account?.tenantOrUserId;
+    let businessAccountId = account?.instagramBusinessAccountId || accountId;
+
+    if (!account) {
+      const connection = await app.prisma.instagramConnection.findFirst({
+        where: {
+          OR: [
+            { instagramUserId: accountId },
+            { influencerId: accountId },
+          ],
+        },
+      });
+      if (connection) {
+        tenantOrUserId = connection.influencerId;
+        businessAccountId = connection.instagramUserId;
+      }
+    }
+
     app.log.info(
-      { accountId, foundPartnerAccount: account?.username || null },
-      `📬 [PARTNER DIRECT INBOX] Looking up partner account for entry id: ${accountId} (found: ${account?.username || 'none'})`
+      { accountId, foundPartnerAccount: account?.username || null, mappedTenantOrUser: tenantOrUserId },
+      `📬 [PARTNER DIRECT INBOX] Looking up partner account for entry id: ${accountId} (tenant: ${tenantOrUserId || 'none'})`
     );
 
-    if (!account) continue;
+    if (!tenantOrUserId) continue;
 
     const events = [
       ...(Array.isArray(entry?.messaging) ? entry.messaging : []),
@@ -1102,12 +1125,12 @@ export async function processPartnerDirectMessageWebhook(
           : undefined;
 
       app.log.info(
-        { senderId, messageId, text, account: account.username },
+        { senderId, messageId, text, account: account?.username || tenantOrUserId },
         `📬 [PARTNER DIRECT INBOX] Received message from ${senderId}: "${text}"`
       );
 
       // Skip if sender is the business account itself or no content
-      if (!senderId || senderId === account.instagramBusinessAccountId || (!text && !mediaUrl)) {
+      if (!senderId || senderId === businessAccountId || (!text && !mediaUrl)) {
         continue;
       }
 
@@ -1120,16 +1143,26 @@ export async function processPartnerDirectMessageWebhook(
 
       let conversation = await app.prisma.instagramDirectConversation.findFirst({
         where: {
-          tenantId: account.tenantOrUserId,
           instagramParticipantId: senderId,
+          OR: [
+            { tenantId: tenantOrUserId },
+            { influencerId: tenantOrUserId },
+            { instagramAccountId: businessAccountId },
+          ],
         },
+      });
+
+      const userRec = await app.prisma.user.findUnique({
+        where: { id: tenantOrUserId },
+        select: { id: true },
       });
 
       if (!conversation) {
         conversation = await app.prisma.instagramDirectConversation.create({
           data: {
-            tenantId: account.tenantOrUserId,
-            instagramAccountId: account.instagramBusinessAccountId,
+            tenantId: tenantOrUserId,
+            influencerId: userRec ? userRec.id : null,
+            instagramAccountId: businessAccountId,
             instagramParticipantId: senderId,
             participantUsername: senderUsername,
             lastMessageAt: sentAt,
@@ -1140,6 +1173,8 @@ export async function processPartnerDirectMessageWebhook(
         await app.prisma.instagramDirectConversation.update({
           where: { id: conversation.id },
           data: {
+            tenantId: conversation.tenantId || tenantOrUserId,
+            influencerId: conversation.influencerId || (userRec ? userRec.id : null),
             participantUsername: senderUsername ?? conversation.participantUsername,
             lastMessageAt: sentAt,
             windowExpiresAt,
