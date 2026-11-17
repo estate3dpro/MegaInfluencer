@@ -46,7 +46,7 @@ import {
   type PartnerConversation,
 } from "../api/instagram-partner.api";
 
-export function InstagramPartnerStudioPage({ role = "store-admin" }: { role?: "store-admin" | "admin" }) {
+export function InstagramPartnerStudioPage({ role = "store-admin" }: { role?: "store-admin" | "admin" | "influencer" }) {
   const queryClient = useQueryClient();
   const [tenantId, setTenantId] = useState("brand_partner_demo");
   const [activeTab, setActiveTab] = useState("chat");

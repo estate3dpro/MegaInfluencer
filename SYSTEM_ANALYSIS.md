@@ -264,7 +264,7 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 #### Route Structure (`frontend/src/routes/`)
 - **`admin/*`**: Platform super-admin views (`admin/dashboard`, `admin/influencers`, `admin/stores`, `admin/attribution`, `admin/commissions`, `admin/finance`, `admin/system`, `admin/instagram-partner`).
 - **`store-admin/*`**: Merchant views (`store-admin/dashboard`, `store-admin/products`, `store-admin/campaigns`, `store-admin/orders`, `store-admin/creators`, `store-admin/customer-referrals`, `store-admin/instagram-automation`, `store-admin/instagram-partner`).
-- **`influencer/*`**: Creator views (`influencer/dashboard`, `influencer/campaigns`, `influencer/links`, `influencer/products`, `influencer/earnings`, `influencer/instagram-automation`).
+- **`influencer/*`**: Creator views (`influencer/dashboard`, `influencer/campaigns`, `influencer/links`, `influencer/products`, `influencer/earnings`, `influencer/instagram-automation`, `influencer/instagram-chat`, `influencer/instagram-partner`).
 - **Public Routes**: `/login`, `/register`, `/contact`, `/r/$slug` (affiliate redirect target), `/terms-of-service`, `/privacy-policy`, `/data-deletion`.
 
 ---

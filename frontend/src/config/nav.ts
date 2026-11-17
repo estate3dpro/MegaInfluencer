@@ -84,6 +84,8 @@ export const influencerNav: NavGroup[] = [
     items: [
       { title: "Discover", url: "/influencer/discover", icon: Compass },
       { title: "Instagram Automation", url: "/influencer/instagram-automation", icon: Instagram },
+      { title: "Instagram Direct Chat", url: "/influencer/instagram-chat", icon: MessageCircle },
+      { title: "Instagram Partner Studio", url: "/influencer/instagram-partner", icon: Instagram },
     ],
   },
   {

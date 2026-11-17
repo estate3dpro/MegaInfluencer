@@ -57,6 +57,7 @@ import { Route as InfluencerHelpRouteImport } from './routes/influencer/help'
 import { Route as InfluencerInstagramAutomationRouteImport } from './routes/influencer/instagram-automation'
 import { Route as InfluencerInstagramChatRouteImport } from './routes/influencer/instagram-chat'
 import { Route as InfluencerInstagramInboxRouteImport } from './routes/influencer/instagram-inbox'
+import { Route as InfluencerInstagramPartnerRouteImport } from './routes/influencer/instagram-partner'
 import { Route as InfluencerLinksRouteImport } from './routes/influencer/links'
 import { Route as InfluencerNotificationsRouteImport } from './routes/influencer/notifications'
 import { Route as InfluencerOrdersRouteImport } from './routes/influencer/orders'
@@ -350,6 +351,12 @@ const InfluencerInstagramInboxRoute =
   InfluencerInstagramInboxRouteImport.update({
     id: '/instagram-inbox',
     path: '/instagram-inbox',
+    getParentRoute: () => InfluencerRoute,
+  } as any)
+const InfluencerInstagramPartnerRoute =
+  InfluencerInstagramPartnerRouteImport.update({
+    id: '/instagram-partner',
+    path: '/instagram-partner',
     getParentRoute: () => InfluencerRoute,
   } as any)
 const InfluencerLinksRoute = InfluencerLinksRouteImport.update({
@@ -676,6 +683,7 @@ export interface FileRoutesByFullPath {
   '/influencer/instagram-automation': typeof InfluencerInstagramAutomationRouteWithChildren
   '/influencer/instagram-chat': typeof InfluencerInstagramChatRoute
   '/influencer/instagram-inbox': typeof InfluencerInstagramInboxRoute
+  '/influencer/instagram-partner': typeof InfluencerInstagramPartnerRoute
   '/influencer/links': typeof InfluencerLinksRoute
   '/influencer/notifications': typeof InfluencerNotificationsRoute
   '/influencer/orders': typeof InfluencerOrdersRoute
@@ -772,6 +780,7 @@ export interface FileRoutesByTo {
   '/influencer/help': typeof InfluencerHelpRoute
   '/influencer/instagram-chat': typeof InfluencerInstagramChatRoute
   '/influencer/instagram-inbox': typeof InfluencerInstagramInboxRoute
+  '/influencer/instagram-partner': typeof InfluencerInstagramPartnerRoute
   '/influencer/links': typeof InfluencerLinksRoute
   '/influencer/notifications': typeof InfluencerNotificationsRoute
   '/influencer/orders': typeof InfluencerOrdersRoute
@@ -870,6 +879,7 @@ export interface FileRoutesById {
   '/influencer/instagram-automation': typeof InfluencerInstagramAutomationRouteWithChildren
   '/influencer/instagram-chat': typeof InfluencerInstagramChatRoute
   '/influencer/instagram-inbox': typeof InfluencerInstagramInboxRoute
+  '/influencer/instagram-partner': typeof InfluencerInstagramPartnerRoute
   '/influencer/links': typeof InfluencerLinksRoute
   '/influencer/notifications': typeof InfluencerNotificationsRoute
   '/influencer/orders': typeof InfluencerOrdersRoute
@@ -974,6 +984,7 @@ export interface FileRouteTypes {
     | '/influencer/instagram-automation'
     | '/influencer/instagram-chat'
     | '/influencer/instagram-inbox'
+    | '/influencer/instagram-partner'
     | '/influencer/links'
     | '/influencer/notifications'
     | '/influencer/orders'
@@ -1070,6 +1081,7 @@ export interface FileRouteTypes {
     | '/influencer/help'
     | '/influencer/instagram-chat'
     | '/influencer/instagram-inbox'
+    | '/influencer/instagram-partner'
     | '/influencer/links'
     | '/influencer/notifications'
     | '/influencer/orders'
@@ -1167,6 +1179,7 @@ export interface FileRouteTypes {
     | '/influencer/instagram-automation'
     | '/influencer/instagram-chat'
     | '/influencer/instagram-inbox'
+    | '/influencer/instagram-partner'
     | '/influencer/links'
     | '/influencer/notifications'
     | '/influencer/orders'
@@ -1575,6 +1588,13 @@ declare module '@tanstack/react-router' {
       path: '/instagram-inbox'
       fullPath: '/influencer/instagram-inbox'
       preLoaderRoute: typeof InfluencerInstagramInboxRouteImport
+      parentRoute: typeof InfluencerRoute
+    }
+    '/influencer/instagram-partner': {
+      id: '/influencer/instagram-partner'
+      path: '/instagram-partner'
+      fullPath: '/influencer/instagram-partner'
+      preLoaderRoute: typeof InfluencerInstagramPartnerRouteImport
       parentRoute: typeof InfluencerRoute
     }
     '/influencer/links': {
@@ -2063,6 +2083,7 @@ interface InfluencerRouteChildren {
   InfluencerInstagramAutomationRoute: typeof InfluencerInstagramAutomationRouteWithChildren
   InfluencerInstagramChatRoute: typeof InfluencerInstagramChatRoute
   InfluencerInstagramInboxRoute: typeof InfluencerInstagramInboxRoute
+  InfluencerInstagramPartnerRoute: typeof InfluencerInstagramPartnerRoute
   InfluencerLinksRoute: typeof InfluencerLinksRoute
   InfluencerNotificationsRoute: typeof InfluencerNotificationsRoute
   InfluencerOrdersRoute: typeof InfluencerOrdersRoute
@@ -2086,6 +2107,7 @@ const InfluencerRouteChildren: InfluencerRouteChildren = {
     InfluencerInstagramAutomationRouteWithChildren,
   InfluencerInstagramChatRoute: InfluencerInstagramChatRoute,
   InfluencerInstagramInboxRoute: InfluencerInstagramInboxRoute,
+  InfluencerInstagramPartnerRoute: InfluencerInstagramPartnerRoute,
   InfluencerLinksRoute: InfluencerLinksRoute,
   InfluencerNotificationsRoute: InfluencerNotificationsRoute,
   InfluencerOrdersRoute: InfluencerOrdersRoute,
