@@ -425,7 +425,7 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 | | `POST /api/v1/external/instagram/conversations/:conversationId/messages` | `x-api-key` | Send outbound direct message reply via Meta Graph API v21.0. |
 | | `POST /api/v1/external/instagram/messages/send` | `x-api-key` | Send direct message to Instagram recipient ID directly. |
 | **Meta Webhooks** | `GET /api/webhooks/instagram` | Public (Token) | Meta webhook verification handshake (`hub.challenge`). |
-| | `POST /api/webhooks/instagram` | Public (HMAC) | Ingest real-time comment webhooks with HMAC-SHA256 signature verification. |
+| | `POST /api/webhooks/instagram` | Public (HMAC) | Ingest real-time comment and DM webhooks with HMAC-SHA256 signature verification, immediate 200 OK (<50ms), and detailed formatted JSON payload debug logs. |
 
 ---
 

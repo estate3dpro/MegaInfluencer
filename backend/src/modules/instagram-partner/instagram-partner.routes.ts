@@ -407,6 +407,17 @@ export const metaWebhookListenerRoutes: FastifyPluginAsync = async (app) => {
 
     const entries = Array.isArray(payload?.entry) ? payload.entry : [];
 
+    // Print full webhook payload clearly in server logs
+    request.log.info(
+      {
+        webhookEvent: 'INCOMING_META_WEBHOOK',
+        object: payload?.object,
+        entryCount: entries.length,
+        rawPayload: payload,
+      },
+      `📥 [META WEBHOOK RECEIVED] (${entries.length} entry/entries):\n${JSON.stringify(payload, null, 2)}`
+    );
+
     const processEntries = async () => {
       for (const entry of entries) {
         const businessAccountId = entry.id;

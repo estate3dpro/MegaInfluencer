@@ -22,18 +22,52 @@ async function assertAccess(app: FastifyInstance, actor: DirectActor, influencer
 export async function processInstagramDirectMessages(app: FastifyInstance, payload: unknown) {
   if (!payload || typeof payload !== 'object' || (payload as any).object !== 'instagram') return 0;
   const entries = Array.isArray((payload as any).entry) ? (payload as any).entry : [];
+
+  app.log.info(
+    { totalEntries: entries.length, rawPayload: payload },
+    `📩 [CREATOR DIRECT INBOX] Ingesting DM webhook: ${entries.length} entry/entries received`
+  );
+
   let saved = 0;
   for (const entry of entries) {
     const accountId = typeof entry?.id === 'string' ? entry.id : undefined;
-    const events = [...(Array.isArray(entry?.messaging) ? entry.messaging : []), ...(Array.isArray(entry?.changes) ? entry.changes.filter((change: any) => change?.field === 'messages').map((change: any) => change.value) : [])];
+    const events = [
+      ...(Array.isArray(entry?.messaging) ? entry.messaging : []),
+      ...(Array.isArray(entry?.changes)
+        ? entry.changes.filter((change: any) => change?.field === 'messages').map((change: any) => change.value)
+        : []),
+    ];
+
+    app.log.info(
+      { accountId, eventCount: events.length, entrySnippet: entry },
+      `📩 [CREATOR DIRECT INBOX] Checking account ${accountId} with ${events.length} message event(s)`
+    );
+
     if (!accountId) continue;
-    const connection = await app.prisma.instagramConnection.findUnique({ where: { instagramUserId: accountId }, select: { influencerId: true } });
-    if (!connection) { app.log.warn({ instagramAccountId: accountId }, 'Instagram direct message skipped: account is not connected'); continue; }
+    const connection = await app.prisma.instagramConnection.findUnique({
+      where: { instagramUserId: accountId },
+      select: { influencerId: true },
+    });
+
+    if (!connection) {
+      app.log.warn(
+        { instagramAccountId: accountId, eventsCount: events.length },
+        `⚠️ [CREATOR DIRECT INBOX] Account ${accountId} not found in InstagramConnection (creator table); checking Partner table...`
+      );
+      continue;
+    }
+
     for (const event of events) {
       const message = event?.message ?? event;
       const text = typeof message?.text === 'string' ? message.text.trim() : '';
       const messageId = typeof message?.mid === 'string' ? message.mid : typeof message?.id === 'string' ? message.id : undefined;
       const senderId = typeof event?.sender?.id === 'string' ? event.sender.id : typeof event?.from?.id === 'string' ? event.from.id : undefined;
+
+      app.log.info(
+        { senderId, messageId, text, accountId },
+        `📩 [CREATOR DIRECT INBOX] Received message from ${senderId}: "${text}"`
+      );
+
       if (!text || !senderId || senderId === accountId) continue;
       const timestamp = Number(event?.timestamp ?? message?.timestamp);
       const sentAt = Number.isFinite(timestamp) ? new Date(timestamp > 10_000_000_000 ? timestamp : timestamp * 1000) : new Date();

@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth-store";
 import {
   connectPartnerAccount,
   deletePartnerRule,
@@ -48,7 +49,8 @@ import {
 
 export function InstagramPartnerStudioPage({ role = "store-admin" }: { role?: "store-admin" | "admin" | "influencer" }) {
   const queryClient = useQueryClient();
-  const [tenantId, setTenantId] = useState("brand_partner_demo");
+  const currentUser = useAuthStore((s) => s.user);
+  const [tenantId, setTenantId] = useState(currentUser?.id || "brand_partner_demo");
   const [activeTab, setActiveTab] = useState("chat");
 
   // Status query
@@ -255,6 +257,28 @@ export function InstagramPartnerStudioPage({ role = "store-admin" }: { role?: "s
                 className="h-8 w-44 font-mono text-xs"
                 placeholder="tenant_id"
               />
+              {currentUser?.id && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs px-2"
+                  onClick={() => setTenantId(currentUser.id)}
+                  title={`Use logged-in user ID (${currentUser.id})`}
+                >
+                  My ID
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs px-2"
+                onClick={() => setTenantId("brand_partner_demo")}
+                title="Use Demo Tenant"
+              >
+                Demo
+              </Button>
             </div>
             <Button
               variant="outline"

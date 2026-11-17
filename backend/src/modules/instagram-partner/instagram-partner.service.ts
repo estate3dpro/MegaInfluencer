@@ -1065,6 +1065,12 @@ export async function processPartnerDirectMessageWebhook(
         isActive: true,
       },
     });
+
+    app.log.info(
+      { accountId, foundPartnerAccount: account?.username || null },
+      `📬 [PARTNER DIRECT INBOX] Looking up partner account for entry id: ${accountId} (found: ${account?.username || 'none'})`
+    );
+
     if (!account) continue;
 
     const events = [
@@ -1094,6 +1100,11 @@ export async function processPartnerDirectMessageWebhook(
           : typeof event?.from?.id === 'string'
           ? event.from.id
           : undefined;
+
+      app.log.info(
+        { senderId, messageId, text, account: account.username },
+        `📬 [PARTNER DIRECT INBOX] Received message from ${senderId}: "${text}"`
+      );
 
       // Skip if sender is the business account itself or no content
       if (!senderId || senderId === account.instagramBusinessAccountId || (!text && !mediaUrl)) {
