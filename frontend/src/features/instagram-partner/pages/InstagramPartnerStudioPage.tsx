@@ -53,6 +53,13 @@ export function InstagramPartnerStudioPage({ role = "store-admin" }: { role?: "s
   const [tenantId, setTenantId] = useState(currentUser?.id || "brand_partner_demo");
   const [activeTab, setActiveTab] = useState("chat");
 
+  // Keep tenantId synchronized with logged-in user when auth hydrates
+  useEffect(() => {
+    if (currentUser?.id && (tenantId === "brand_partner_demo" || !tenantId)) {
+      setTenantId(currentUser.id);
+    }
+  }, [currentUser?.id]);
+
   // Status query
   const statusQuery = useQuery({
     queryKey: ["partner-status", tenantId],

@@ -229,12 +229,39 @@ export async function listInstagramDirectConversations(app: FastifyInstance, act
 
   let userAccountIds: string[] = [];
   if (actor.role === 'INFLUENCER') {
+    // If a partner account or conversations were created with demo/placeholder tenant, bridge to active creator
+    try {
+      await app.prisma.instagramAccount.updateMany({
+        where: { tenantOrUserId: 'brand_partner_demo' },
+        data: { tenantOrUserId: actor.userId },
+      });
+      await app.prisma.instagramDirectConversation.updateMany({
+        where: {
+          OR: [
+            { tenantId: 'brand_partner_demo' },
+            { influencerId: null, tenantId: null },
+          ],
+        },
+        data: {
+          influencerId: actor.userId,
+          tenantId: actor.userId,
+        },
+      });
+    } catch {
+      // Non-critical background bridge
+    }
+
     const userConnection = await app.prisma.instagramConnection.findUnique({
       where: { influencerId: actor.userId },
       select: { instagramUserId: true, webhookInstagramAccountId: true },
     });
     const userPartnerAccounts = await app.prisma.instagramAccount.findMany({
-      where: { tenantOrUserId: actor.userId },
+      where: {
+        OR: [
+          { tenantOrUserId: actor.userId },
+          { tenantOrUserId: 'brand_partner_demo' },
+        ],
+      },
       select: { instagramBusinessAccountId: true },
     });
     userAccountIds = [
@@ -250,6 +277,7 @@ export async function listInstagramDirectConversations(app: FastifyInstance, act
             OR: [
               { influencerId: actor.userId },
               { tenantId: actor.userId },
+              { tenantId: 'brand_partner_demo' },
               ...(userAccountIds.length > 0 ? [{ instagramAccountId: { in: userAccountIds } }] : []),
             ],
           }
