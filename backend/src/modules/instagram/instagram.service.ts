@@ -211,7 +211,20 @@ export async function getInstagramProfile(app: FastifyInstance, influencerId: st
   }
   const profile = await fetchInstagramProfile(decryptToken(connection.encryptedAccessToken));
   if (!profile) {
-    throw new AppError('INSTAGRAM_PROVIDER_ERROR', 'Instagram profile details could not be loaded. Please reconnect your account.', 502);
+    app.log.warn({ influencerId, instagramUserId: connection.instagramUserId }, 'Instagram profile lookup failed; using saved connection details');
+    return {
+      creatorCode: (await app.prisma.user.findUnique({ where: { id: influencerId }, select: { creatorCode: true } }))?.creatorCode ?? null,
+      connection: {
+        instagramUserId: connection.instagramUserId,
+        webhookInstagramAccountId: connection.webhookInstagramAccountId,
+        username: connection.username,
+        displayName: connection.displayName,
+        status: connection.status,
+        connectedAt: connection.createdAt,
+        tokenExpiresAt: connection.tokenExpiresAt,
+      },
+      profile: { id: connection.instagramUserId, username: connection.username, name: connection.displayName ?? undefined },
+    };
   }
   const discoveredWebhookAccountId = profile.legacy_instagram_user_id ?? connection.instagramUserId;
   if (connection.webhookInstagramAccountId !== discoveredWebhookAccountId) {

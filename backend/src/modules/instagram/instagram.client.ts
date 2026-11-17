@@ -92,7 +92,14 @@ export async function getInstagramUser(accessToken: string) {
   // entries use the account's legacy professional-account ID. Request both.
   url.searchParams.set('fields', 'id,username,name,legacy_instagram_user_id');
   url.searchParams.set('access_token', accessToken);
-  return parseResponse<InstagramUser>(await fetch(url));
+  try {
+    return await parseResponse<InstagramUser>(await fetch(url));
+  } catch {
+    // The legacy field is not available for every Meta app/API version. Do
+    // not let that optional enrichment prevent a user from connecting.
+    url.searchParams.set('fields', 'id,username,name');
+    return parseResponse<InstagramUser>(await fetch(url));
+  }
 }
 
 export async function getInstagramMedia(accessToken: string, limit: number) {
@@ -120,9 +127,19 @@ export async function getInstagramProfile(accessToken: string) {
     const profileUrl = new URL(`${graphUrl}/me`);
     profileUrl.searchParams.set('fields', 'id,username,name,media_count,legacy_instagram_user_id');
     profileUrl.searchParams.set('access_token', trimmedToken);
-    const profile = await parseResponse<InstagramProfile>(
-      await fetch(profileUrl, { signal: AbortSignal.timeout(1500) })
-    );
+    let profile: InstagramProfile;
+    try {
+      profile = await parseResponse<InstagramProfile>(
+        await fetch(profileUrl, { signal: AbortSignal.timeout(1500) })
+      );
+    } catch {
+      // Keep the Profile page available when Meta does not expose the legacy
+      // account field for this app/token.
+      profileUrl.searchParams.set('fields', 'id,username,name,media_count');
+      profile = await parseResponse<InstagramProfile>(
+        await fetch(profileUrl, { signal: AbortSignal.timeout(1500) })
+      );
+    }
 
     // Follower/following counts are only available to eligible Meta app/account
     // combinations. Keep the profile usable when Meta does not grant these fields.
