@@ -109,14 +109,15 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 - **`InstagramCommentRule`**: Automation rules (`targetPostId`: specific ID or `ALL_POSTS`, `matchType`: ANY, EXACT, CONTAINS, REGEX, `keywords`, `publicReplies` random pool, `dmMessage` with `{{link}}`, `linkUrl`).
 - **`InstagramCommentLog`**: Execution logs (`commentId` unique constraint for deduplication, `commenterUsername`, `commentText`, `matchedKeyword`, `publicReplyStatus`, `dmStatus`, `dmError`).
 - **`InstagramDailyStat`**: Aggregated performance metrics (`date`, `totalComments`, `matchedRules`, `publicRepliesSent`, `dmsSent`, `failedActions`).
-- **`InstagramConnection`**: Creator OAuth connection holding encrypted long-lived Instagram Graph tokens.
+- **`InstagramConnection`**: Creator OAuth connection holding encrypted long-lived Instagram Graph tokens. Includes `webhookInstagramAccountId String? @unique` to bridge Meta's page-scoped ID (`entry.id`) with the creator's Instagram Business Account.
 - **`InstagramOAuthState`**: CSRF protection for Instagram OAuth handshakes.
 - **`InstagramLoginTicket`**: Single-use exchange ticket for social logins.
 - **`InstagramWebhookDelivery`**: Webhook payload ledger deduplicating events by SHA-256 payload hash.
 - **`InstagramAutomation`**: Post-level comment-to-DM triggers (keywords, exact vs whole-word match, fallback message, any-comment toggle).
 - **`InstagramAutomationDelivery`**: Audit log of sent automated DMs with delivery status, attempt key, and error logs.
 - **`InstagramCommentConversation` & `InstagramManualReply`**: Comment inbox for reading and replying to Instagram comments.
-- **`InstagramDirectConversation` & `InstagramDirectMessage`**: Direct Message (DM) chat inbox with 2-way communication.
+- **`InstagramDirectConversation`**: Direct Message (DM) chat inbox with 2-way communication. Features dual-linking architecture (`tenantId String?`, `influencerId String?`), `windowExpiresAt DateTime?` for tracking Meta's 24-hour interaction window, and compound indices `[tenantId, updatedAt]` and `[influencerId, updatedAt]`.
+- **`InstagramDirectMessage`**: Individual messages within a DM conversation. Stores `direction` (INBOUND/OUTBOUND), `messageId` (Meta `mid`), `text`, `mediaUrl`, `mediaType` (IMAGE/VIDEO/AUDIO/FILE), and `status` (PENDING, SENT, DELIVERED, FAILED).
 
 ### 3.6 Customer Loyalty & Referral Engine Models
 - **`StoreReferralConfig`**: Master configuration for customer referral programs:
@@ -193,10 +194,10 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 - **`modules/influencer-dashboard/`**, **`influencer-analytics/`**, **`influencer-earnings/`**, **`influencer-orders/`**, **`influencer-products/`**, **`influencer-stores/`**:
   - Dedicated creator-facing endpoints for performance KPIs, commissions history, assigned product catalog, and store partnerships.
 - **`modules/instagram/`**:
-  - `instagram.client.ts`: HTTP client communicating with Meta / Instagram Graph API.
+  - `instagram.client.ts`: HTTP client communicating with Meta / Instagram Graph API v21.0. Supports legacy Instagram user ID queries and `getInstagramMessageSender` for recovering usernames when omitted by Meta.
   - `instagram.crypto.ts`: AES-256-GCM encryption/decryption for Instagram access tokens.
   - `instagram.routes.ts`: OAuth redirect callback, webhook challenge verification, and event reception.
-  - `instagram.service.ts`: Token exchange and connection management.
+  - `instagram.service.ts`: Token exchange and connection management. Stores `webhookInstagramAccountId` on `InstagramConnection` during connection and profile refresh to enable seamless webhook routing.
 - **`modules/instagram-automations/`**:
   - `instagram-automations.routes.ts`: Creator endpoints to create/update post triggers and keyword rules.
   - `instagram-automations.service.ts`: Rule storage and matching logic.
@@ -204,12 +205,16 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 - **`modules/instagram-inbox/`**:
   - `instagram-inbox.routes.ts` & `service.ts`: Reads comment threads and submits manual replies.
 - **`modules/instagram-direct-inbox/`**:
-  - `instagram-direct-inbox.routes.ts` & `service.ts`: Reads direct message conversations and sends outbound DMs.
+  - `instagram-direct-inbox.routes.ts` & `service.ts`: Reads direct message conversations and sends outbound DMs. Features:
+    - Outgoing message echo filter (`!message?.is_echo && !message?.is_self`) to prevent self-messages from creating duplicate unread counters or loops.
+    - Resolves account from `recipient.id` or `to.id` when `entry.id` is page-scoped.
+    - Bridges creator (`InstagramConnection`) and partner (`InstagramAccount`) lookups so conversations route seamlessly across both tables.
+    - Safe fallback handling in `listInstagramDirectConversations` preventing crashes when `influencer` is null.
 - **`modules/instagram-partner/` (MegaChat External Partner Service Provider)**:
-  - `meta-graph.client.ts`: Meta Instagram Graph API v21.0 client (public comment replies, private 1-time DM replies, media post fetching, OAuth dialog URLs, code exchange, rate limit handling).
-  - `instagram-partner.service.ts`: Core partner service handling connection status, account linking, rule CRUD, analytics calculations, log pagination, and the real-time webhook comment automation matching engine.
-  - `instagram-partner.routes.ts`: `x-api-key` authenticated partner endpoints under `/api/v1/external/instagram/*` and Meta inbound webhook listener routes (`/api/webhooks/instagram`).
-  - `instagram-partner.test.ts`: Complete unit and integration test suite covering partner auth, rules CRUD, webhook HMAC validation, and analytics.
+  - `meta-graph.client.ts`: Meta Instagram Graph API v21.0 client. Supports public comment replies, private 1-time DM replies, media post fetching, OAuth dialog URLs with approved permissions (`instagram_business_manage_comments`, `instagram_manage_messages`, `instagram_basic`, `instagram_business_basic`), code exchange, rate limit handling, and outbound direct messages with `HUMAN_AGENT` messaging tag and media payloads.
+  - `instagram-partner.service.ts`: Core partner service handling connection status, account linking, rule CRUD, analytics calculations, log pagination, and the real-time webhook comment automation matching engine. Bridges `tenantId` and `influencerId` with `{ OR: [{ tenantId }, { influencerId: tenantId }] }` query resolution.
+  - `instagram-partner.routes.ts`: `x-api-key` authenticated partner endpoints under `/api/v1/external/instagram/*`, simulation endpoints (`/simulate/comment`, `/simulate/message`), and dual Meta webhook listener routes (`/api/webhooks/instagram` and `/webhooks/instagram`). Includes multi-secret HMAC-SHA256 signature verification (`META_APP_SECRET`, `FACEBOOK_APP_SECRET`, `INSTAGRAM_APP_SECRET`) with `timingSafeEqual`, immediate HTTP 200 return (<50ms) with asynchronous `setImmediate` event delegation, and formatted JSON payload debug logs.
+  - `instagram-partner.test.ts`: Complete unit and integration test suite (23 tests) covering partner auth, rules CRUD, webhook HMAC validation, permission checks, and analytics.
 - **`modules/customer/`**:
   - `customer.routes.ts`, `service.ts`, `schema.ts`: Customer advocate portal API (profile, points, milestone claims, reward redemptions).
 - **`modules/contact-inquiries/`**:
@@ -255,11 +260,16 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
   - Landing page sections: Hero, Features carousel, Creator storefront preview, Brands showcase, Testimonials, FAQ, Contact form.
 - **`features/notifications/`**:
   - In-app notification bell, list popover, and unread badge.
+- **`features/instagram-direct-inbox/`**:
+  - `pages/InstagramDirectInboxPage.tsx`: Creator direct messaging inbox with thread list, search, message bubbles, and real-time status. Updated with safe optional chaining on `item.influencer?.displayName` to prevent crashes when threads originate from partner accounts or lack an attached influencer.
+  - `api/instagram-direct-inbox.api.ts`: Typed API client for conversation fetching and message sending with nullable `influencer` typing.
 - **`features/instagram-partner/`**:
-  - `pages/InstagramPartnerStudioPage.tsx`: Full-featured interactive studio and testing laboratory for Instagram partner accounts. Includes two-way direct message chat with live 24h window timer, comment rule builder with trigger simulator, inbound DM simulator, analytics stat cards, and real-time execution logs.
+  - `pages/InstagramPartnerStudioPage.tsx`: Full-featured interactive studio and testing laboratory for Instagram partner accounts. Includes two-way direct message chat with live 24h window timer, comment rule builder with trigger simulator, inbound DM simulator, analytics stat cards, and real-time execution logs. Supported across Store Admin, Platform Admin, and Influencer roles, with one-click "My ID" and "Demo" toggle buttons.
   - `api/instagram-partner.api.ts`: Typed API client connecting to `/api/v1/external/instagram/*` and simulation endpoints using partner `x-api-key`.
 - **`features/chat/`**:
   - Unified chat UI components.
+- **Navigation Configuration**:
+  - `frontend/src/config/nav.ts`: Navigation bar definitions for Store Admin, Admin, and Influencer portals, including route links to `/admin/instagram-partner`, `/store-admin/instagram-partner`, and `/influencer/instagram-partner`.
 
 #### Route Structure (`frontend/src/routes/`)
 - **`admin/*`**: Platform super-admin views (`admin/dashboard`, `admin/influencers`, `admin/stores`, `admin/attribution`, `admin/commissions`, `admin/finance`, `admin/system`, `admin/instagram-partner`).
@@ -352,11 +362,12 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 6. **Redemption**: Advocate claims vouchers or payout requests in `CustomerRewardClaim`.
 
 ### 5.4 MegaChat External Partner Integration & Comment Automation Engine
-1. **Meta OAuth & Token Setup**: Partner requests connect URL (`GET /api/v1/external/instagram/connect-url`). User authenticates with Meta, granting `instagram_manage_comments` and `instagram_manage_messages`. Code is exchanged (`POST /api/v1/external/instagram/connect-account`) and Page Access Token is stored with AES-256-GCM encryption in `InstagramAccount`.
+1. **Meta OAuth & Token Setup**: Partner requests connect URL (`GET /api/v1/external/instagram/connect-url`). User authenticates with Meta, granting approved permissions (`instagram_business_manage_comments`, `instagram_manage_messages`, `instagram_basic`, `instagram_business_basic`). Code is exchanged (`POST /api/v1/external/instagram/connect-account`) and Page Access Token is stored with AES-256-GCM encryption in `InstagramAccount`.
 2. **Rule Configuration**: Partner defines comment automation rules (`POST /api/v1/external/instagram/rules`) with `targetPostId` (specific media ID or `ALL_POSTS`), `matchType` (`ANY`, `EXACT`, `CONTAINS`, `REGEX`), `keywords`, a pool of randomized `publicReplies`, and a `dmMessage` supporting variable interpolation (`{{link}}`, `{{username}}`).
 3. **Real-time Webhook Receiver**:
-   - Meta delivers comment events to `POST /api/webhooks/instagram` with HMAC-SHA256 signature (`X-Hub-Signature-256`).
-   - Server verifies signature, returns `200 OK` immediately, and initiates background processing.
+   - Meta delivers comment events to `POST /api/webhooks/instagram` or `POST /webhooks/instagram` with HMAC-SHA256 signature (`X-Hub-Signature-256`).
+   - Server verifies signature against configured secrets (`META_APP_SECRET`, `FACEBOOK_APP_SECRET`, `INSTAGRAM_APP_SECRET`) using timing-safe comparisons.
+   - Responds with `200 OK` immediately (<50ms) to satisfy Meta's 5-second webhook SLA, delegating processing to background tasks via `setImmediate`.
 4. **Protection Guards**:
    - **Infinite Loop Guard**: Filters out comments made by the business account itself (`commenterId === account.instagramBusinessAccountId` or matching username).
    - **Duplicate Guard**: Checks unique `commentId` in `InstagramCommentLog` to guarantee idempotent execution.
@@ -366,6 +377,19 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 6. **Analytics & Logging**:
    - Creates `InstagramCommentLog` entry recording public/DM delivery status and errors.
    - Upserts `InstagramDailyStat` for the date, tracking comments, matches, DMs, and error counts.
+
+### 5.5 Two-Way Direct Messaging & 24-Hour Messaging Window
+1. **Inbound Webhook Delivery**: When an Instagram user sends a DM, Meta dispatches an event (`entry[].messaging[]`).
+2. **Echo & Self-Message Suppression**: Discards outgoing echo messages (`!message?.is_echo && !message?.is_self`) to prevent self-triggering loops.
+3. **Dual Account Bridge**: Resolves the target account across both `InstagramAccount` (Partner tenants) and `InstagramConnection` (Internal creators) using Page ID (`entry.id`) and recipient ID fallback (`recipient.id` / `to.id`).
+4. **Conversation & Window Tracking**:
+   - Locates or creates `InstagramDirectConversation`, linking both `tenantId` and `influencerId`.
+   - Sets `windowExpiresAt = eventTimestamp + 24 hours` to enforce Meta's standard 24-hour messaging window.
+   - Records incoming message in `InstagramDirectMessage` deduplicated by `mid`.
+5. **Outbound Messaging**:
+   - Within the 24-hour window: Dispatches direct message via `POST https://graph.facebook.com/v21.0/me/messages`.
+   - Outside the 24-hour window: Dispatches message with the Meta `HUMAN_AGENT` messaging tag (7-day window) or prompts operator that window has elapsed.
+   - Supports text messages as well as media attachments (`image`, `video`, `audio`, `file`).
 
 ---
 
@@ -424,8 +448,12 @@ Located at `backend/prisma/schema.prisma`, backed by PostgreSQL.
 | | `GET /api/v1/external/instagram/conversations/:conversationId/messages` | `x-api-key` | Fetch paginated chat history for conversation thread. |
 | | `POST /api/v1/external/instagram/conversations/:conversationId/messages` | `x-api-key` | Send outbound direct message reply via Meta Graph API v21.0. |
 | | `POST /api/v1/external/instagram/messages/send` | `x-api-key` | Send direct message to Instagram recipient ID directly. |
+| | `POST /api/v1/external/instagram/simulate/comment` | `x-api-key` | Test simulator to trigger comment automation rules without real Instagram events. |
+| | `POST /api/v1/external/instagram/simulate/message` | `x-api-key` | Test simulator to trigger direct messaging flow with test payloads. |
 | **Meta Webhooks** | `GET /api/webhooks/instagram` | Public (Token) | Meta webhook verification handshake (`hub.challenge`). |
-| | `POST /api/webhooks/instagram` | Public (HMAC) | Ingest real-time comment and DM webhooks with HMAC-SHA256 signature verification, immediate 200 OK (<50ms), and detailed formatted JSON payload debug logs. |
+| | `POST /api/webhooks/instagram` | Public (HMAC) | Ingest real-time comment and DM webhooks with multi-secret HMAC-SHA256 signature verification, immediate 200 OK (<50ms), and formatted JSON debug logging. |
+| | `GET /webhooks/instagram` | Public (Token) | Root alias for Meta webhook verification handshake. |
+| | `POST /webhooks/instagram` | Public (HMAC) | Root alias for Meta real-time comment and DM webhook ingestion. |
 
 ---
 
