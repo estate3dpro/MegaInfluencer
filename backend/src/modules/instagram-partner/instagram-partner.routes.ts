@@ -52,24 +52,38 @@ function requirePartnerApiKey(request: FastifyRequest) {
 // -----------------------------------------------------------------------------
 
 export function verifyMetaWebhookSignature(rawBody: Buffer, signatureHeader?: string): boolean {
-  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) {
-    return false;
-  }
-  const appSecret = config.metaAppSecret || config.instagramAppSecret;
-  if (!appSecret) {
+  if (!signatureHeader || !signatureHeader.toLowerCase().startsWith('sha256=')) {
     return false;
   }
 
-  const signatureHex = signatureHeader.slice('sha256='.length);
-  const expectedHmac = createHmac('sha256', appSecret).update(rawBody).digest('hex');
+  const candidateSecrets = [
+    ...new Set([
+      config.metaAppSecret,
+      process.env.META_APP_SECRET,
+      config.instagramAppSecret,
+      process.env.INSTAGRAM_APP_SECRET,
+      process.env.FACEBOOK_APP_SECRET,
+    ]
+      .map((s) => s?.trim())
+      .filter((s): s is string => Boolean(s))),
+  ];
+
+  if (candidateSecrets.length === 0) {
+    return false;
+  }
+
+  const signatureHex = signatureHeader.slice('sha256='.length).trim();
+  if (!/^[a-f0-9]{64}$/i.test(signatureHex)) {
+    return false;
+  }
 
   const sigBuffer = Buffer.from(signatureHex, 'hex');
-  const expBuffer = Buffer.from(expectedHmac, 'hex');
 
-  if (sigBuffer.length !== expBuffer.length) {
-    return false;
-  }
-  return timingSafeEqual(sigBuffer, expBuffer);
+  return candidateSecrets.some((secret) => {
+    const expectedHmac = createHmac('sha256', secret).update(rawBody).digest('hex');
+    const expBuffer = Buffer.from(expectedHmac, 'hex');
+    return sigBuffer.length === expBuffer.length && timingSafeEqual(sigBuffer, expBuffer);
+  });
 }
 
 // -----------------------------------------------------------------------------
