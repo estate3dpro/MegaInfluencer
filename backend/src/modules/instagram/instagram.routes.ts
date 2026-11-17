@@ -3,8 +3,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { requireRole } from '../../shared/auth/authorization.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { parseOrThrow } from '../../shared/validation/pagination.js';
-import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, forwardWebhookToLocal, getConnection, getInstagramProfile, listInstagramMedia, recordWebhookDelivery, verifyWebhookSignature } from './instagram.service.js';
-import { mediaQuerySchema, oauthCallbackQuerySchema, webhookVerificationSchema } from './instagram.schema.js';
+import { beginInstagramOAuth, completeInstagramOAuth, disconnectInstagram, forwardWebhookToLocal, getConnection, getInstagramProfile, listInstagramMedia, recordWebhookDelivery, setWebhookInstagramAccountId, verifyWebhookSignature } from './instagram.service.js';
+import { mediaQuerySchema, oauthCallbackQuerySchema, webhookAccountIdSchema, webhookVerificationSchema } from './instagram.schema.js';
 import { config } from '../../config/env.js';
 import { processInstagramCommentAutomations } from '../instagram-automations/instagram-comment-automation.service.js';
 import { processInstagramDirectMessages } from '../instagram-direct-inbox/instagram-direct-inbox.service.js';
@@ -45,6 +45,12 @@ export const influencerInstagramRoutes: FastifyPluginAsync = async (app) => {
   app.get('/influencer/instagram/connection', async (request) => {
     const actor = requireRole(request, ['INFLUENCER']);
     return { connection: await getConnection(app, actor.userId) };
+  });
+
+  app.put('/influencer/instagram/webhook-account', async (request) => {
+    const actor = requireRole(request, ['INFLUENCER']);
+    const { webhookInstagramAccountId } = parseOrThrow(webhookAccountIdSchema, request.body);
+    return { connection: await setWebhookInstagramAccountId(app, actor.userId, webhookInstagramAccountId) };
   });
 
   app.delete('/influencer/instagram/connection', async (request, reply) => {

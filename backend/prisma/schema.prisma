@@ -184,6 +184,7 @@ model InstagramConnection {
   influencerId         String                    @unique
   influencer           User                      @relation(fields: [influencerId], references: [id], onDelete: Cascade)
   instagramUserId      String                    @unique
+  webhookInstagramAccountId String?              @unique
   username             String
   displayName          String?
   encryptedAccessToken String

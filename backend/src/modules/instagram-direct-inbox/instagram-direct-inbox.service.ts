@@ -69,20 +69,30 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
     let influencerId: string | null = null;
     let tenantId: string | null = null;
 
-    const connection = await app.prisma.instagramConnection.findUnique({
-      where: { instagramUserId: webhookAccountId },
-      select: { influencerId: true, instagramUserId: true },
+    const connection = await app.prisma.instagramConnection.findFirst({
+      where: {
+        OR: [
+          { instagramUserId: webhookAccountId },
+          { webhookInstagramAccountId: webhookAccountId },
+        ],
+      },
+      select: { influencerId: true, instagramUserId: true, webhookInstagramAccountId: true },
     }) ?? (recipientAccountIds.length > 0
       ? await app.prisma.instagramConnection.findFirst({
-          where: { instagramUserId: { in: recipientAccountIds } },
-          select: { influencerId: true, instagramUserId: true },
+          where: {
+            OR: [
+              { instagramUserId: { in: recipientAccountIds } },
+              { webhookInstagramAccountId: { in: recipientAccountIds } },
+            ],
+          },
+          select: { influencerId: true, instagramUserId: true, webhookInstagramAccountId: true },
         })
       : null);
 
     if (connection) {
       influencerId = connection.influencerId;
       tenantId = connection.influencerId;
-      accountId = connection.instagramUserId;
+      accountId = connection.webhookInstagramAccountId ?? connection.instagramUserId;
     } else {
       const partnerAccount = await app.prisma.instagramAccount.findFirst({
         where: {

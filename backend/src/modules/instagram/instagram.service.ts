@@ -180,8 +180,25 @@ export async function exchangeInstagramLoginTicket(app: FastifyInstance, code: s
 export async function getConnection(app: FastifyInstance, influencerId: string) {
   return app.prisma.instagramConnection.findUnique({
     where: { influencerId },
-    select: { id: true, instagramUserId: true, username: true, displayName: true, tokenExpiresAt: true, status: true, createdAt: true, updatedAt: true },
+    select: { id: true, instagramUserId: true, webhookInstagramAccountId: true, username: true, displayName: true, tokenExpiresAt: true, status: true, createdAt: true, updatedAt: true },
   });
+}
+
+export async function setWebhookInstagramAccountId(app: FastifyInstance, influencerId: string, webhookInstagramAccountId: string) {
+  const connection = await app.prisma.instagramConnection.findUnique({ where: { influencerId }, select: { id: true } });
+  if (!connection) throw new AppError('INSTAGRAM_NOT_CONNECTED', 'Connect an Instagram account before configuring its inbox.', 409);
+  try {
+    return await app.prisma.instagramConnection.update({
+      where: { influencerId },
+      data: { webhookInstagramAccountId },
+      select: { id: true, instagramUserId: true, webhookInstagramAccountId: true, username: true, displayName: true, tokenExpiresAt: true, status: true, createdAt: true, updatedAt: true },
+    });
+  } catch (error) {
+    if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
+      throw new AppError('INSTAGRAM_WEBHOOK_ACCOUNT_ALREADY_LINKED', 'This Instagram messaging account is already linked to another creator.', 409);
+    }
+    throw error;
+  }
 }
 
 export async function disconnectInstagram(app: FastifyInstance, influencerId: string) {
@@ -210,6 +227,7 @@ export async function getInstagramProfile(app: FastifyInstance, influencerId: st
     creatorCode: creator?.creatorCode ?? null,
     connection: {
       instagramUserId: connection.instagramUserId,
+      webhookInstagramAccountId: connection.webhookInstagramAccountId,
       username: connection.username,
       displayName: connection.displayName,
       status: connection.status,

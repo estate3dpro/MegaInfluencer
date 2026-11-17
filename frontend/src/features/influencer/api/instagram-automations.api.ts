@@ -35,6 +35,7 @@ export type CreateInstagramAutomationInput = {
 export type InstagramConnection = {
   id: string;
   instagramUserId: string;
+  webhookInstagramAccountId: string | null;
   username: string;
   displayName: string | null;
   tokenExpiresAt: string | null;

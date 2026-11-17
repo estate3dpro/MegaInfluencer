@@ -4,6 +4,7 @@ export type InstagramProfileResponse = {
   creatorCode: string | null;
   connection: {
     instagramUserId: string;
+    webhookInstagramAccountId: string | null;
     username: string;
     displayName: string | null;
     status: "ACTIVE" | "EXPIRED" | "REVOKED";
@@ -42,6 +43,11 @@ export async function startInstagramConnection() {
 
 export async function disconnectInstagram() {
   await apiClient.delete("/influencer/instagram/connection");
+}
+
+export async function setInstagramWebhookAccountId(webhookInstagramAccountId: string) {
+  const { data } = await apiClient.put("/influencer/instagram/webhook-account", { webhookInstagramAccountId });
+  return data;
 }
 
 export async function getInstagramPosts() {
