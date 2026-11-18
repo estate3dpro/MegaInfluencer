@@ -209,18 +209,35 @@ export async function sendInstagramDirectMessage(
 /** Look up a sender when Meta omitted its username from the webhook payload. */
 export async function getInstagramMessageSender(accessToken: string, messageId: string, expectedSenderId: string) {
   try {
-    const url = new URL(`https://graph.facebook.com/v23.0/${encodeURIComponent(messageId)}`);
-    url.searchParams.set('fields', 'from{id,username,name}');
+    // Primary: Query the user's IGSID node directly on Graph API v21.0
+    const url = new URL(`https://graph.facebook.com/v21.0/${encodeURIComponent(expectedSenderId)}`);
+    url.searchParams.set('fields', 'name,username,profile_pic');
     url.searchParams.set('access_token', accessToken.trim());
-    const response = await fetch(url, { signal: AbortSignal.timeout(1500) });
-    if (!response.ok) return null;
-    const body = await response.json() as { from?: { id?: string; username?: string; name?: string } };
-    if (!body.from?.id || body.from.id !== expectedSenderId) return null;
-    return { username: body.from.username?.trim() || null, name: body.from.name?.trim() || null };
+    const response = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (response.ok) {
+      const body = (await response.json()) as { id?: string; username?: string; name?: string };
+      if (body.username || body.name) {
+        return { username: body.username?.trim() || null, name: body.name?.trim() || null };
+      }
+    }
+
+    // Secondary fallback: query message node if available
+    if (messageId) {
+      const msgUrl = new URL(`https://graph.facebook.com/v21.0/${encodeURIComponent(messageId)}`);
+      msgUrl.searchParams.set('fields', 'from{id,username,name}');
+      msgUrl.searchParams.set('access_token', accessToken.trim());
+      const msgResponse = await fetch(msgUrl, { signal: AbortSignal.timeout(2000) });
+      if (msgResponse.ok) {
+        const body = (await msgResponse.json()) as { from?: { id?: string; username?: string; name?: string } };
+        if (body.from?.username || body.from?.name) {
+          return { username: body.from.username?.trim() || null, name: body.from.name?.trim() || null };
+        }
+      }
+    }
   } catch {
     // Profile metadata is optional and must never delay or reject a webhook.
-    return null;
   }
+  return null;
 }
 
 /** Subscribe an Instagram connected account to receive comment and messaging webhooks */

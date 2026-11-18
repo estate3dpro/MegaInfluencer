@@ -364,3 +364,48 @@ export async function sendMetaDirectMessage(
   return await handleMetaResponse<{ recipient_id?: string; message_id?: string }>(res, 'Send direct message');
 }
 
+export interface MetaUserProfile {
+  id?: string;
+  name?: string;
+  username?: string;
+  profile_pic?: string;
+}
+
+/**
+ * Resolves an Instagram participant's public profile (username, name, profile_pic)
+ * given their Instagram Scoped User ID (IGSID) and page access token.
+ * GET https://graph.facebook.com/v21.0/{IGSID}?fields=name,username,profile_pic
+ */
+export async function getInstagramUserProfile(
+  pageAccessToken: string,
+  igsid: string
+): Promise<MetaUserProfile | null> {
+  if (!pageAccessToken || !igsid) return null;
+
+  try {
+    const url = new URL(`${GRAPH_BASE_URL}/${encodeURIComponent(igsid)}`);
+    url.searchParams.set('fields', 'name,username,profile_pic');
+    url.searchParams.set('access_token', pageAccessToken.trim());
+
+    const res = await fetch(url, { signal: AbortSignal.timeout(3500) });
+    if (res.ok) {
+      const data = (await res.json()) as MetaUserProfile;
+      if (data.username || data.name) return data;
+    }
+
+    // Secondary fallback with just username and name
+    const fallbackUrl = new URL(`${GRAPH_BASE_URL}/${encodeURIComponent(igsid)}`);
+    fallbackUrl.searchParams.set('fields', 'username,name');
+    fallbackUrl.searchParams.set('access_token', pageAccessToken.trim());
+    const fallbackRes = await fetch(fallbackUrl, { signal: AbortSignal.timeout(3000) });
+    if (fallbackRes.ok) {
+      const data = (await fallbackRes.json()) as MetaUserProfile;
+      if (data.username || data.name) return data;
+    }
+  } catch {
+    // Non-blocking: profile lookup failure should never interrupt message flow
+  }
+
+  return null;
+}
+

@@ -9,6 +9,7 @@ import {
   postPublicCommentReply,
   sendPrivateCommentReply,
   sendMetaDirectMessage,
+  getInstagramUserProfile,
 } from './meta-graph.client.js';
 
 export interface UpsertRuleInput {
@@ -787,6 +788,35 @@ export async function listPartnerConversations(
     }),
   ]);
 
+  // Background resolution for any conversations missing an actual Instagram username
+  const missingUsernames = conversations.filter((c) => !c.participantUsername && c.instagramParticipantId);
+  if (missingUsernames.length > 0) {
+    void (async () => {
+      try {
+        const partnerAcc = await app.prisma.instagramAccount.findFirst({
+          where: { OR: [{ tenantOrUserId: tenantId }, { isActive: true }] },
+          select: { accessToken: true },
+        });
+        if (partnerAcc?.accessToken) {
+          const token = decryptToken(partnerAcc.accessToken);
+          for (const conv of missingUsernames) {
+            const profile = await getInstagramUserProfile(token, conv.instagramParticipantId);
+            const resolved = profile?.username || profile?.name;
+            if (resolved) {
+              await app.prisma.instagramDirectConversation.update({
+                where: { id: conv.id },
+                data: { participantUsername: resolved },
+              }).catch(() => {});
+              conv.participantUsername = resolved;
+            }
+          }
+        }
+      } catch {
+        // Non-blocking background resolution
+      }
+    })();
+  }
+
   const now = new Date();
   const items = conversations.map((conv) => {
     const isWindowOpen = conv.windowExpiresAt ? conv.windowExpiresAt > now : false;
@@ -1135,7 +1165,15 @@ export async function processPartnerDirectMessageWebhook(
         continue;
       }
 
-      const senderUsername = event?.sender?.username ?? event?.from?.username ?? null;
+      let senderUsername = event?.sender?.username ?? event?.from?.username ?? null;
+      if (!senderUsername && account?.accessToken) {
+        try {
+          const profile = await getInstagramUserProfile(decryptToken(account.accessToken), senderId);
+          senderUsername = profile?.username || profile?.name || null;
+        } catch {
+          // Non-blocking username resolution
+        }
+      }
       const timestamp = Number(event?.timestamp ?? message?.timestamp);
       const sentAt = Number.isFinite(timestamp)
         ? new Date(timestamp > 10_000_000_000 ? timestamp : timestamp * 1000)

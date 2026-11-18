@@ -509,7 +509,7 @@ export function InstagramPartnerStudioPage({ role = "store-admin" }: { role?: "s
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <p className="truncate text-sm font-semibold text-foreground">
-                              {item.participantUsername ? `@${item.participantUsername}` : "Instagram Customer"}
+                              {item.participantUsername ? `@${item.participantUsername}` : `User #${item.participantId.slice(-4)}`}
                             </p>
                             <span className="text-[10px] text-muted-foreground">
                               {new Date(item.lastMessageAt).toLocaleDateString()}
@@ -559,7 +559,7 @@ export function InstagramPartnerStudioPage({ role = "store-admin" }: { role?: "s
                           <p className="font-semibold text-foreground">
                             {selectedConv.participantUsername
                               ? `@${selectedConv.participantUsername}`
-                              : "Instagram Customer"}
+                              : `User #${selectedConv.participantId.slice(-4)}`}
                           </p>
                           <Badge
                             variant="outline"

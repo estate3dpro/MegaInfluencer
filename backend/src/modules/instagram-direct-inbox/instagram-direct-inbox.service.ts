@@ -68,6 +68,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
     const accountIds = [webhookAccountId, ...recipientAccountIds];
     let influencerId: string | null = null;
     let tenantId: string | null = null;
+    let partnerAccount: { accessToken: string; instagramBusinessAccountId: string; tenantOrUserId: string } | null = null;
 
     const connection = await app.prisma.instagramConnection.findFirst({
       where: {
@@ -94,7 +95,7 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
       tenantId = connection.influencerId;
       accountId = connection.webhookInstagramAccountId ?? connection.instagramUserId;
     } else {
-      const partnerAccount = await app.prisma.instagramAccount.findFirst({
+      partnerAccount = await app.prisma.instagramAccount.findFirst({
         where: {
           OR: [
             { instagramBusinessAccountId: webhookAccountId },
@@ -148,13 +149,18 @@ export async function processInstagramDirectMessages(app: FastifyInstance, paylo
 
       if (!text || !senderId || senderId === accountId) continue;
       let participantUsername = event?.sender?.username ?? event?.from?.username ?? null;
-      if (!participantUsername && messageId && connection?.encryptedAccessToken) {
-        const sender = await getInstagramMessageSender(
-          decryptToken(connection.encryptedAccessToken),
-          messageId,
-          senderId,
-        );
-        participantUsername = sender?.username ?? null;
+      const rawToken = connection?.encryptedAccessToken || partnerAccount?.accessToken;
+      if (!participantUsername && rawToken) {
+        try {
+          const sender = await getInstagramMessageSender(
+            decryptToken(rawToken),
+            messageId || '',
+            senderId,
+          );
+          participantUsername = sender?.username || sender?.name || null;
+        } catch {
+          // Non-blocking username resolution
+        }
       }
       const timestamp = Number(event?.timestamp ?? message?.timestamp);
       const sentAt = Number.isFinite(timestamp) ? new Date(timestamp > 10_000_000_000 ? timestamp : timestamp * 1000) : new Date();
@@ -294,6 +300,43 @@ export async function listInstagramDirectConversations(app: FastifyInstance, act
       },
     },
   });
+
+  // Asynchronously resolve missing usernames for conversations
+  const missingUsernames = conversations.filter((c) => !c.participantUsername && c.instagramParticipantId);
+  if (missingUsernames.length > 0) {
+    void (async () => {
+      try {
+        const userConn = await app.prisma.instagramConnection.findFirst({
+          where: { influencerId: actor.userId, encryptedAccessToken: { not: '' } },
+          select: { encryptedAccessToken: true },
+        });
+        const partnerAcc = !userConn
+          ? await app.prisma.instagramAccount.findFirst({
+              where: { isActive: true },
+              select: { accessToken: true },
+            })
+          : null;
+
+        const rawToken = userConn?.encryptedAccessToken || partnerAcc?.accessToken;
+        if (!rawToken) return;
+        const token = decryptToken(rawToken);
+
+        for (const conv of missingUsernames) {
+          const sender = await getInstagramMessageSender(token, '', conv.instagramParticipantId);
+          const resolved = sender?.username || sender?.name;
+          if (resolved) {
+            await app.prisma.instagramDirectConversation.update({
+              where: { id: conv.id },
+              data: { participantUsername: resolved },
+            }).catch(() => {});
+            conv.participantUsername = resolved;
+          }
+        }
+      } catch {
+        // Non-blocking background resolution
+      }
+    })();
+  }
 
   return conversations.map((conv) => ({
     ...conv,
